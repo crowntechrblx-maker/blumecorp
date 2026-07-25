@@ -1,10 +1,12 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { kv } from "../../lib/kv.js";
-import { put } from "@vercel/blob";
+import { put, del } from "@vercel/blob";
 import crypto from "node:crypto";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
-import { MIME_EXT, parseDataUrl } from "../../lib/roblox.js";
+import { MIME_EXT, parseDataUrl, isPlatformAdmin } from "../../lib/roblox.js";
+import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
+import { appendAuditLog } from "../../lib/audit.js";
 
 interface PostEntry {
   id: string;
@@ -16,6 +18,8 @@ interface PostEntry {
   createdAt: number;
 }
 
+// DELETE is routed through this same file (via ?id=) rather than a separate
+// [id].ts file, to stay within Vercel's Hobby-plan 12-function limit.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cookies = parseCookies(req);
   const session = decodeSession(cookies.wb_session);
@@ -36,6 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       imageUrl: p.imageUrl ?? null,
       createdAt: p.createdAt,
       isMine: session ? p.authorId === session.userId : false,
+      canDelete: session ? p.authorId === session.userId || (isPlatformAdmin(session.userId) && !!session.adminMode) : false,
     }));
     res.status(200).json(payload);
     return;
@@ -57,6 +62,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       if (text.length > 2000) {
         res.status(400).send("Post text is too long (max 2000 characters).");
+        return;
+      }
+      if (containsBlockedLanguage(text)) {
+        res.status(400).send(MODERATION_REJECTION_MESSAGE);
         return;
       }
 
@@ -97,6 +106,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       entries.push(entry);
       await kv.set("posts", entries);
 
+      await appendAuditLog({
+        type: "instagram_post",
+        username: session.username,
+        detail: text ? `Posted: "${text.slice(0, 140)}"` : "Posted an image",
+      });
+
       res.status(200).json({
         id: entry.id,
         authorUsername: entry.authorUsername,
@@ -105,10 +120,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         imageUrl: entry.imageUrl,
         createdAt: entry.createdAt,
         isMine: true,
+        canDelete: true,
       });
     } catch (err) {
       res.status(500).send("Post failed: " + (err as Error).message);
     }
+    return;
+  }
+
+  if (req.method === "DELETE") {
+    if (!session) {
+      res.status(401).send("You must be signed in to delete a post.");
+      return;
+    }
+    const id = (req.query.id as string) || "";
+    const entries = (await kv.get<PostEntry[]>("posts")) || [];
+    const index = entries.findIndex((p) => p.id === id);
+    if (index === -1) {
+      res.status(404).send("Post not found.");
+      return;
+    }
+
+    const post = entries[index];
+    const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
+    if (post.authorId !== session.userId && !isAdminOverride) {
+      res.status(403).send("You can only delete your own posts.");
+      return;
+    }
+
+    if (post.imageUrl) {
+      try {
+        await del(post.imageUrl);
+      } catch {
+        // Ignore blob delete failures; the metadata removal below still succeeds.
+      }
+    }
+
+    entries.splice(index, 1);
+    await kv.set("posts", entries);
+
+    await appendAuditLog({
+      type: "instagram_post_deleted",
+      username: session.username,
+      detail: isAdminOverride && post.authorId !== session.userId
+        ? `Admin-deleted a post by ${post.authorUsername}`
+        : "Deleted their own post",
+    });
+
+    res.status(204).end();
     return;
   }
 

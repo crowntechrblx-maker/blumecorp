@@ -3,6 +3,8 @@ import { parseCookies, setCookie } from "../../lib/cookies.js";
 import { encodeSession } from "../../lib/session.js";
 import { getRobloxAvatarUrl } from "../../lib/roblox.js";
 import { kv } from "../../lib/kv.js";
+import { isBanned } from "../../lib/bans.js";
+import { appendAuditLog } from "../../lib/audit.js";
 
 interface KnownUser {
   userId: string;
@@ -68,6 +70,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       nickname?: string;
     };
 
+    if (await isBanned(profile.sub)) {
+      res.status(403).send("This Roblox account has been banned from Westbridge OS.");
+      return;
+    }
+
     const avatarUrl = await getRobloxAvatarUrl(profile.sub);
 
     const session = {
@@ -75,9 +82,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       username: profile.preferred_username,
       displayName: profile.nickname || profile.preferred_username,
       avatarUrl,
+      adminMode: false,
     };
 
     await upsertKnownUser({ userId: profile.sub, username: profile.preferred_username, avatarUrl });
+    await appendAuditLog({
+      type: "login",
+      username: profile.preferred_username,
+      detail: "Signed in via Roblox OAuth",
+    });
 
     setCookie(res, "wb_session", encodeSession(session), { maxAge: 60 * 60 * 24 * 30 });
     setCookie(res, "wb_oauth_verifier", "", { maxAge: 0 });

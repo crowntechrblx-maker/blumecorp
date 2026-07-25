@@ -14,7 +14,7 @@ type WindowsMap = Partial<Record<AppId, WindowState>>;
 let zCounter = 10;
 
 function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, banned, toggleAdminMode } = useAuth();
   const { wallpaperUrl } = useWallpaper();
   const [windows, setWindows] = useState<WindowsMap>({});
   const [activeApp, setActiveApp] = useState<AppId | null>(null);
@@ -113,21 +113,40 @@ function App() {
     return <div className="boot-screen" />;
   }
 
+  if (banned) {
+    return (
+      <div className="banned-screen">
+        <div className="banned-card">
+          <h1>You've been banned</h1>
+          <p>Your access to Westbridge OS has been revoked by an administrator.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return <RobloxLogin />;
   }
 
+  const visibleApps = APPS.filter((app) => app.id !== "settings" || user.isAdmin);
+
   return (
     <div className="desktop-root" style={{ backgroundImage: `url(${wallpaperUrl})` }}>
-      <MenuBar activeAppName={activeAppName} username={user.username} />
+      <MenuBar
+        activeAppName={activeAppName}
+        username={user.username}
+        isAdmin={user.isAdmin}
+        adminMode={user.adminMode}
+        onToggleAdminMode={toggleAdminMode}
+      />
 
       <div className="desktop-icons">
-        {APPS.map((app) => (
+        {visibleApps.map((app) => (
           <DesktopIcon key={app.id} app={app} onOpen={() => openApp(app.id)} />
         ))}
       </div>
 
-      {APPS.map((app) => {
+      {visibleApps.map((app) => {
         const state = windows[app.id];
         if (!state) return null;
         return (
@@ -137,6 +156,8 @@ function App() {
             state={state}
             username={user.username}
             avatarUrl={user.avatarUrl}
+            isAdmin={user.isAdmin}
+            adminMode={user.adminMode}
             onClose={() => closeApp(app.id)}
             onFocus={() => focusApp(app.id)}
             onMinimize={() => minimizeApp(app.id)}

@@ -4,6 +4,8 @@ import { kv } from "../../lib/kv.js";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
 import { isBlumeSuperUser } from "../../lib/roblox.js";
+import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
+import { appendAuditLog } from "../../lib/audit.js";
 
 interface BlumeBlogPost {
   id: string;
@@ -57,6 +59,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(400).send("Excerpt is too long (max 600 characters).");
         return;
       }
+      if (containsBlockedLanguage(title) || containsBlockedLanguage(excerpt)) {
+        res.status(400).send(MODERATION_REJECTION_MESSAGE);
+        return;
+      }
       const entry: BlumeBlogPost = {
         id: crypto.randomBytes(12).toString("hex"),
         title,
@@ -68,6 +74,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const posts = (await kv.get<BlumeBlogPost[]>("blumeBlogPosts")) || [];
       posts.push(entry);
       await kv.set("blumeBlogPosts", posts);
+      await appendAuditLog({
+        type: "blume_blog_post",
+        username: session.username,
+        detail: `Published blog post "${title}"`,
+      });
       res.status(200).json(entry);
     } catch (err) {
       res.status(500).send("Failed to publish post: " + (err as Error).message);
@@ -92,6 +103,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const posts = (await kv.get<BlumeBlogPost[]>("blumeBlogPosts")) || [];
     const next = posts.filter((p) => p.id !== id);
     await kv.set("blumeBlogPosts", next);
+    await appendAuditLog({
+      type: "blume_blog_post_deleted",
+      username: session.username,
+      detail: `Deleted blog post ${id}`,
+    });
     res.status(200).json({ ok: true });
     return;
   }

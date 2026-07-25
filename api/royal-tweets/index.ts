@@ -4,6 +4,7 @@ import { kv } from "../../lib/kv.js";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
 import { isRobloxGroupMember, ROYAL_FAMILY_GROUP_ID } from "../../lib/roblox.js";
+import { appendAuditLog } from "../../lib/audit.js";
 
 interface RoyalTweetEntry {
   id: string;
@@ -61,6 +62,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const entries = (await kv.get<RoyalTweetEntry[]>("royalTweets")) || [];
       entries.push(entry);
       await kv.set("royalTweets", entries);
+      await appendAuditLog({
+        type: "royal_tweet_added",
+        username: session.username,
+        detail: `Added post ${url}`,
+      });
       res.status(200).json(entry);
     } catch (err) {
       res.status(500).send("Failed to add post: " + (err as Error).message);

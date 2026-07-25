@@ -10,6 +10,7 @@ interface Post {
   imageUrl: string | null;
   createdAt: number;
   isMine: boolean;
+  canDelete: boolean;
 }
 
 function timeAgo(ts: number) {
@@ -22,7 +23,13 @@ function timeAgo(ts: number) {
   return `${Math.floor(hours / 24)}d`;
 }
 
-export function InstagramApp({ username }: { username: string }) {
+export function InstagramApp({
+  username,
+}: {
+  username: string;
+  isAdmin?: boolean;
+  adminMode?: boolean;
+}) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [search, setSearch] = useState("");
   const [composing, setComposing] = useState(false);
@@ -87,7 +94,7 @@ export function InstagramApp({ username }: { username: string }) {
   async function handleDeletePost(id: string) {
     setDeletingIds((prev) => new Set(prev).add(id));
     try {
-      const res = await fetch(`/api/posts/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/posts?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!res.ok && res.status !== 204) throw new Error(await res.text());
       setPosts((prev) => prev.filter((p) => p.id !== id));
     } catch (err) {
@@ -151,12 +158,12 @@ export function InstagramApp({ username }: { username: string }) {
               <Avatar url={post.authorAvatarUrl} size={30} />
               <strong>{post.authorUsername}</strong>
               <span className="ig-post-time">{timeAgo(post.createdAt)}</span>
-              {post.isMine && (
+              {post.canDelete && (
                 <button
                   className="ig-post-delete"
                   onClick={() => handleDeletePost(post.id)}
                   disabled={deletingIds.has(post.id)}
-                  title="Delete post"
+                  title={post.isMine ? "Delete post" : "Admin delete"}
                 >
                   Delete
                 </button>

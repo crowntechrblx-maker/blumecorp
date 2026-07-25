@@ -13,6 +13,7 @@ interface Message {
   text: string;
   createdAt: number;
   isMine: boolean;
+  canDelete: boolean;
 }
 
 export function MessagesApp({
@@ -21,6 +22,8 @@ export function MessagesApp({
 }: {
   username: string;
   avatarUrl: string | null;
+  isAdmin?: boolean;
+  adminMode?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<UserResult[]>([]);
@@ -64,6 +67,15 @@ export function MessagesApp({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
+
+  async function handleDeleteMessage(id: string) {
+    try {
+      await fetch(`/api/messages?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+    } catch {
+      setError("Couldn't delete message.");
+    }
+  }
 
   async function handleSend() {
     if (!active || !draft.trim()) return;
@@ -135,6 +147,15 @@ export function MessagesApp({
                       <span className="bubble-tick" title="Delivered">
                         ✓✓
                       </span>
+                    )}
+                    {m.canDelete && (
+                      <button
+                        className="bubble-delete"
+                        onClick={() => handleDeleteMessage(m.id)}
+                        title={m.isMine ? "Delete message" : "Admin delete"}
+                      >
+                        ✕
+                      </button>
                     )}
                   </div>
                 ))}

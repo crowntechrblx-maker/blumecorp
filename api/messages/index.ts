@@ -3,6 +3,9 @@ import crypto from "node:crypto";
 import { kv } from "../../lib/kv.js";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
+import { isPlatformAdmin } from "../../lib/roblox.js";
+import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
+import { appendAuditLog } from "../../lib/audit.js";
 
 interface KnownUser {
   userId: string;
@@ -39,6 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     const key = conversationKey(session.username, withUser);
+    const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
     const messages = ((await kv.get<MessageEntry[]>("messages")) || [])
       .filter((m) => m.conversationKey === key)
       .sort((a, b) => a.createdAt - b.createdAt);
@@ -49,6 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         text: m.text,
         createdAt: m.createdAt,
         isMine: m.fromUsername.toLowerCase() === session.username.toLowerCase(),
+        canDelete: m.fromUsername.toLowerCase() === session.username.toLowerCase() || isAdminOverride,
       }))
     );
     return;
@@ -71,6 +76,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(400).send("Message is too long (max 2000 characters).");
         return;
       }
+      if (containsBlockedLanguage(text)) {
+        res.status(400).send(MODERATION_REJECTION_MESSAGE);
+        return;
+      }
 
       const knownUsers = (await kv.get<KnownUser[]>("users")) || [];
       const recipient = knownUsers.find((u) => u.username.toLowerCase() === to.toLowerCase());
@@ -91,16 +100,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       entries.push(entry);
       await kv.set("messages", entries);
 
+      await appendAuditLog({
+        type: "message_sent",
+        username: session.username,
+        detail: `To ${recipient.username}: "${text.slice(0, 140)}"`,
+      });
+
       res.status(200).json({
         id: entry.id,
         from: entry.fromUsername,
         text: entry.text,
         createdAt: entry.createdAt,
         isMine: true,
+        canDelete: true,
       });
     } catch (err) {
       res.status(500).send("Send failed: " + (err as Error).message);
     }
+    return;
+  }
+
+  if (req.method === "DELETE") {
+    if (!session) {
+      res.status(401).send("You must be signed in.");
+      return;
+    }
+    const id = (req.query.id as string) || "";
+    const entries = (await kv.get<MessageEntry[]>("messages")) || [];
+    const index = entries.findIndex((m) => m.id === id);
+    if (index === -1) {
+      res.status(404).send("Message not found.");
+      return;
+    }
+    const message = entries[index];
+    const isOwner = message.fromUsername.toLowerCase() === session.username.toLowerCase();
+    const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
+    if (!isOwner && !isAdminOverride) {
+      res.status(403).send("You can only delete your own messages.");
+      return;
+    }
+    entries.splice(index, 1);
+    await kv.set("messages", entries);
+
+    await appendAuditLog({
+      type: "message_deleted",
+      username: session.username,
+      detail: isAdminOverride && !isOwner
+        ? `Admin-deleted a message from ${message.fromUsername} to ${message.toUsername}`
+        : "Deleted their own message",
+    });
+
+    res.status(204).end();
     return;
   }
 

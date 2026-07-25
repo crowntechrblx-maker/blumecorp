@@ -17,6 +17,8 @@ interface WindowProps {
   state: WindowState;
   username: string;
   avatarUrl: string | null;
+  isAdmin: boolean;
+  adminMode: boolean;
   onClose: () => void;
   onFocus: () => void;
   onMinimize: () => void;
@@ -35,6 +37,8 @@ export function Window({
   state,
   username,
   avatarUrl,
+  isAdmin,
+  adminMode,
   onClose,
   onFocus,
   onMinimize,
@@ -118,6 +122,8 @@ export function Window({
           id={app.id}
           username={username}
           avatarUrl={avatarUrl}
+          isAdmin={isAdmin}
+          adminMode={adminMode}
           onMaximize={onMaximize}
         />
       </div>

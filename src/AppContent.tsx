@@ -5,6 +5,7 @@ import { InstagramApp } from "./InstagramApp";
 import { MessagesApp } from "./MessagesApp";
 import { RoyalFamilyApp } from "./RoyalFamilyApp";
 import { BlumeApp } from "./BlumeApp";
+import { SettingsApp } from "./SettingsApp";
 
 function TflContent() {
   const lines = [
@@ -281,11 +282,15 @@ export function AppContent({
   id,
   username,
   avatarUrl,
+  isAdmin,
+  adminMode,
   onMaximize,
 }: {
   id: AppId;
   username: string;
   avatarUrl: string | null;
+  isAdmin: boolean;
+  adminMode: boolean;
   onMaximize?: () => void;
 }) {
   switch (id) {
@@ -304,11 +309,20 @@ export function AppContent({
     case "blume":
       return <BlumeApp username={username} onMaximize={onMaximize} />;
     case "instagram":
-      return <InstagramApp username={username} />;
+      return <InstagramApp username={username} isAdmin={isAdmin} adminMode={adminMode} />;
     case "messages":
-      return <MessagesApp username={username} avatarUrl={avatarUrl} />;
+      return (
+        <MessagesApp
+          username={username}
+          avatarUrl={avatarUrl}
+          isAdmin={isAdmin}
+          adminMode={adminMode}
+        />
+      );
     case "backgrounds":
       return <BackgroundsApp />;
+    case "settings":
+      return <SettingsApp />;
     default:
       return <div className="app-content">Coming soon</div>;
   }

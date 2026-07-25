@@ -8,7 +8,8 @@ export type AppId =
   | "blume"
   | "instagram"
   | "messages"
-  | "backgrounds";
+  | "backgrounds"
+  | "settings";
 
 export interface AppDef {
   id: AppId;
@@ -88,5 +89,12 @@ export const APPS: AppDef[] = [
     icon: "",
     color: "#ff0000",
     defaultSize: { width: 600, height: 560 },
+  },
+  {
+    id: "settings",
+    name: "Settings",
+    icon: "",
+    color: "#ff0000",
+    defaultSize: { width: 720, height: 600 },
   },
 ];

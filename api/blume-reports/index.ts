@@ -4,6 +4,8 @@ import { kv } from "../../lib/kv.js";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
 import { isBlumeAuthorized } from "../../lib/roblox.js";
+import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
+import { appendAuditLog } from "../../lib/audit.js";
 
 interface BlumeReport {
   id: string;
@@ -57,6 +59,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(400).send("Report is too long (max 5000 characters).");
         return;
       }
+      if (containsBlockedLanguage(title) || containsBlockedLanguage(content)) {
+        res.status(400).send(MODERATION_REJECTION_MESSAGE);
+        return;
+      }
       const entry: BlumeReport = {
         id: crypto.randomBytes(12).toString("hex"),
         title,
@@ -67,6 +73,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const reports = (await kv.get<BlumeReport[]>("blumeReports")) || [];
       reports.push(entry);
       await kv.set("blumeReports", reports);
+      await appendAuditLog({
+        type: "blume_report",
+        username: session.username,
+        detail: `Filed report "${title}"`,
+      });
       res.status(200).json(entry);
     } catch (err) {
       res.status(500).send("Failed to save report: " + (err as Error).message);
@@ -91,6 +102,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const reports = (await kv.get<BlumeReport[]>("blumeReports")) || [];
     const next = reports.filter((r) => r.id !== id);
     await kv.set("blumeReports", next);
+    await appendAuditLog({
+      type: "blume_report_deleted",
+      username: session.username,
+      detail: `Deleted report ${id}`,
+    });
     res.status(200).json({ ok: true });
     return;
   }

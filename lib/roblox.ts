@@ -46,10 +46,10 @@ export async function isRobloxGroupMember(userId: string, groupId: number): Prom
   }
 }
 
-// Blume clearance: any of these Roblox groups, or either of the two
+// Blume clearance: any of these Roblox groups, or one of the three
 // explicitly-allowed user IDs, unlocks the Blume dashboard.
 export const BLUME_GROUP_IDS = [154853936, 142915989, 685466511, 187507831];
-export const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759"];
+export const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759", "2322187718"];
 
 export async function isBlumeAuthorized(userId: string): Promise<boolean> {
   if (BLUME_ALLOWED_USER_IDS.includes(userId)) return true;
@@ -59,8 +59,63 @@ export async function isBlumeAuthorized(userId: string): Promise<boolean> {
   return checks.some(Boolean);
 }
 
-// Publishing to the public Blume blog is restricted to the two named
+// Publishing to the public Blume blog is restricted to the named
 // operators, not the wider group-authorized dashboard access.
 export function isBlumeSuperUser(userId: string): boolean {
   return BLUME_ALLOWED_USER_IDS.includes(userId);
+}
+
+// Site-wide platform admins: same three people, but this grants access to
+// the Settings app, the audit log, banning, and Admin Mode across the whole
+// of Westbridge OS (not just Blume).
+export const PLATFORM_ADMIN_USER_IDS = ["181869610", "4963562759", "2322187718"];
+
+export function isPlatformAdmin(userId: string): boolean {
+  return PLATFORM_ADMIN_USER_IDS.includes(userId);
+}
+
+// Every Roblox community this app knows about, used to warn an admin before
+// they ban someone who belongs to one of them.
+export const ALL_KNOWN_GROUPS: { id: number; label: string }[] = [
+  { id: ROYAL_FAMILY_GROUP_ID, label: "PS Royal Households of the United Kingdom" },
+  ...BLUME_GROUP_IDS.map((id) => ({ id, label: `Blume-authorized group ${id}` })),
+];
+
+const groupNameCache = new Map<number, string | null>();
+
+export async function getRobloxGroupName(groupId: number): Promise<string | null> {
+  if (groupNameCache.has(groupId)) return groupNameCache.get(groupId)!;
+  try {
+    const res = await fetch(`https://groups.roblox.com/v1/groups/${groupId}`);
+    if (!res.ok) {
+      groupNameCache.set(groupId, null);
+      return null;
+    }
+    const data = (await res.json()) as { name?: string };
+    const name = data.name || null;
+    groupNameCache.set(groupId, name);
+    return name;
+  } catch {
+    groupNameCache.set(groupId, null);
+    return null;
+  }
+}
+
+// Returns the display names of every known group the given user belongs to
+// (fetching the real Roblox group name rather than relying on a hardcoded
+// label), for the ban-confirmation warning.
+export async function getMemberGroupNames(userId: string): Promise<string[]> {
+  const memberships = await Promise.all(
+    ALL_KNOWN_GROUPS.map(async (g) => ({
+      group: g,
+      isMember: await isRobloxGroupMember(userId, g.id),
+    }))
+  );
+  const names: string[] = [];
+  for (const m of memberships) {
+    if (!m.isMember) continue;
+    const realName = await getRobloxGroupName(m.group.id);
+    names.push(realName || m.group.label);
+  }
+  return names;
 }

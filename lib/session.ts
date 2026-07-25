@@ -5,6 +5,9 @@ export interface SessionData {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  // Only ever true for a platform admin who has explicitly flipped Admin
+  // Mode on in the top bar; absent/false for everyone else.
+  adminMode?: boolean;
 }
 
 function getSecret(): string {

@@ -9,6 +9,7 @@ interface RobloxSession {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  adminMode?: boolean;
 }
 
 interface WallpaperEntry {
@@ -80,10 +81,10 @@ interface BlumeReportEntry {
   createdAt: number;
 }
 
-// Blume clearance: any of these Roblox groups, or either of the two
+// Blume clearance: any of these Roblox groups, or one of the three
 // explicitly-allowed user IDs, unlocks the Blume dashboard.
 const BLUME_GROUP_IDS = [154853936, 142915989, 685466511, 187507831];
-const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759"];
+const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759", "2322187718"];
 
 async function isBlumeAuthorized(userId: string): Promise<boolean> {
   if (BLUME_ALLOWED_USER_IDS.includes(userId)) return true;
@@ -96,6 +97,120 @@ async function isBlumeAuthorized(userId: string): Promise<boolean> {
 function isBlumeSuperUser(userId: string): boolean {
   return BLUME_ALLOWED_USER_IDS.includes(userId);
 }
+
+// Site-wide platform admins: same three people, but this grants access to
+// the Settings app, the audit log, banning, and Admin Mode across the whole
+// of Westbridge OS (not just Blume).
+const PLATFORM_ADMIN_USER_IDS = ["181869610", "4963562759", "2322187718"];
+
+function isPlatformAdmin(userId: string): boolean {
+  return PLATFORM_ADMIN_USER_IDS.includes(userId);
+}
+
+const ALL_KNOWN_GROUPS: { id: number; label: string }[] = [
+  { id: ROYAL_FAMILY_GROUP_ID, label: "PS Royal Households of the United Kingdom" },
+  ...BLUME_GROUP_IDS.map((id) => ({ id, label: `Blume-authorized group ${id}` })),
+];
+
+const groupNameCache = new Map<number, string | null>();
+
+async function getRobloxGroupName(groupId: number): Promise<string | null> {
+  if (groupNameCache.has(groupId)) return groupNameCache.get(groupId)!;
+  try {
+    const res = await fetch(`https://groups.roblox.com/v1/groups/${groupId}`);
+    if (!res.ok) {
+      groupNameCache.set(groupId, null);
+      return null;
+    }
+    const data = (await res.json()) as { name?: string };
+    const name = data.name || null;
+    groupNameCache.set(groupId, name);
+    return name;
+  } catch {
+    groupNameCache.set(groupId, null);
+    return null;
+  }
+}
+
+async function getMemberGroupNames(userId: string): Promise<string[]> {
+  const memberships = await Promise.all(
+    ALL_KNOWN_GROUPS.map(async (g) => ({
+      group: g,
+      isMember: await isRobloxGroupMember(userId, g.id),
+    }))
+  );
+  const names: string[] = [];
+  for (const m of memberships) {
+    if (!m.isMember) continue;
+    const realName = await getRobloxGroupName(m.group.id);
+    names.push(realName || m.group.label);
+  }
+  return names;
+}
+
+// Blocks profanity, slurs, and other derogatory language from any
+// user-submitted free text. Word-list match with common leetspeak
+// substitutions normalized first.
+const BLOCKED_TERMS = [
+  "nigger",
+  "nigga",
+  "chink",
+  "spic",
+  "kike",
+  "wetback",
+  "gook",
+  "coon",
+  "beaner",
+  "paki",
+  "raghead",
+  "towelhead",
+  "tranny",
+  "faggot",
+  "fag",
+  "dyke",
+  "retard",
+  "retarded",
+  "cripple",
+  "cunt",
+  "whore",
+  "slut",
+  "fuck",
+  "shit",
+  "bitch",
+  "asshole",
+  "bastard",
+  "dick",
+  "piss",
+  "cock",
+  "pussy",
+  "twat",
+  "wanker",
+  "motherfucker",
+];
+
+function normalizeForModeration(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/0/g, "o")
+    .replace(/1/g, "i")
+    .replace(/3/g, "e")
+    .replace(/4/g, "a")
+    .replace(/5/g, "s")
+    .replace(/7/g, "t")
+    .replace(/@/g, "a")
+    .replace(/\$/g, "s")
+    .replace(/[^a-z]/g, "");
+}
+
+function containsBlockedLanguage(text: string): boolean {
+  if (!text) return false;
+  const normalized = normalizeForModeration(text);
+  if (!normalized) return false;
+  return BLOCKED_TERMS.some((term) => normalized.includes(term));
+}
+
+const MODERATION_REJECTION_MESSAGE =
+  "That contains language that isn't allowed here — please rephrase.";
 
 interface BlumeBlogPost {
   id: string;
@@ -183,6 +298,89 @@ function upsertKnownUser(user: { userId: string; username: string; avatarUrl: st
   saveUsersDb(users);
 }
 
+function findKnownUser(query: string): KnownUser | null {
+  const raw = query.trim();
+  if (!raw) return null;
+  const users = loadUsersDb();
+  return (
+    users.find((u) => u.userId === raw) ||
+    users.find((u) => u.username.toLowerCase() === raw.toLowerCase()) ||
+    null
+  );
+}
+
+interface BanEntry {
+  userId: string;
+  username: string;
+  bannedByUsername: string;
+  createdAt: number;
+}
+
+const BANS_DB = path.resolve(process.cwd(), "bans-data.json");
+
+function loadBansDb(): BanEntry[] {
+  try {
+    return JSON.parse(fs.readFileSync(BANS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveBansDb(entries: BanEntry[]) {
+  fs.writeFileSync(BANS_DB, JSON.stringify(entries, null, 2));
+}
+
+function isBanned(userId: string): boolean {
+  return loadBansDb().some((b) => b.userId === userId);
+}
+
+function addBan(entry: BanEntry) {
+  const bans = loadBansDb();
+  if (bans.some((b) => b.userId === entry.userId)) return;
+  bans.push(entry);
+  saveBansDb(bans);
+}
+
+function removeBan(userId: string) {
+  saveBansDb(loadBansDb().filter((b) => b.userId !== userId));
+}
+
+interface AuditEntry {
+  id: string;
+  type: string;
+  username: string;
+  detail: string;
+  createdAt: number;
+}
+
+const AUDIT_DB = path.resolve(process.cwd(), "audit-log-data.json");
+const MAX_AUDIT_ENTRIES = 1000;
+
+function loadAuditDb(): AuditEntry[] {
+  try {
+    return JSON.parse(fs.readFileSync(AUDIT_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveAuditDb(entries: AuditEntry[]) {
+  fs.writeFileSync(AUDIT_DB, JSON.stringify(entries, null, 2));
+}
+
+function appendAuditLog(entry: { type: string; username: string; detail: string }) {
+  const entries = loadAuditDb();
+  entries.push({ id: crypto.randomBytes(8).toString("hex"), createdAt: Date.now(), ...entry });
+  if (entries.length > MAX_AUDIT_ENTRIES) {
+    entries.splice(0, entries.length - MAX_AUDIT_ENTRIES);
+  }
+  saveAuditDb(entries);
+}
+
+function getAuditLog(limit = 300): AuditEntry[] {
+  return loadAuditDb().slice(-limit).reverse();
+}
+
 function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, RobloxSession>): Plugin {
   const CLIENT_ID = env.ROBLOX_CLIENT_ID;
   const CLIENT_SECRET = env.ROBLOX_CLIENT_SECRET;
@@ -260,6 +458,12 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
               nickname?: string;
             };
 
+            if (isBanned(profile.sub)) {
+              res.statusCode = 403;
+              res.end("This Roblox account has been banned from Westbridge OS.");
+              return;
+            }
+
             const avatarUrl = await getRobloxAvatarUrl(profile.sub);
 
             const sessionId = b64url(crypto.randomBytes(24));
@@ -268,12 +472,18 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
               username: profile.preferred_username,
               displayName: profile.nickname || profile.preferred_username,
               avatarUrl,
+              adminMode: false,
             });
 
             upsertKnownUser({
               userId: profile.sub,
               username: profile.preferred_username,
               avatarUrl,
+            });
+            appendAuditLog({
+              type: "login",
+              username: profile.preferred_username,
+              detail: "Signed in via Roblox OAuth",
             });
 
             res.setHeader(
@@ -294,7 +504,24 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
           const cookies = parseCookies(req);
           const session = sessions.get(cookies.wb_session);
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify(session || null));
+          if (!session) {
+            res.end(JSON.stringify(null));
+            return;
+          }
+          // Enforced here (polled periodically by the client) so a ban takes
+          // effect for someone already using the site, not just on next login.
+          if (isBanned(session.userId)) {
+            sessions.delete(cookies.wb_session);
+            res.end(JSON.stringify({ banned: true }));
+            return;
+          }
+          res.end(
+            JSON.stringify({
+              ...session,
+              isAdmin: isPlatformAdmin(session.userId),
+              adminMode: !!session.adminMode,
+            })
+          );
           return;
         }
 
@@ -475,6 +702,7 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
           if (search) {
             posts = posts.filter((p) => p.authorUsername.toLowerCase().includes(search));
           }
+          const isAdminOverride = !!(session && isPlatformAdmin(session.userId) && session.adminMode);
           const payload = posts.map((p) => ({
             id: p.id,
             authorUsername: p.authorUsername,
@@ -483,6 +711,7 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             imageUrl: p.imageFilename ? `/posts/uploads/${p.imageFilename}` : null,
             createdAt: p.createdAt,
             isMine: session ? p.authorId === session.userId : false,
+            canDelete: session ? p.authorId === session.userId || isAdminOverride : false,
           }));
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(payload));
@@ -508,6 +737,11 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             if (text.length > 2000) {
               res.statusCode = 400;
               res.end("Post text is too long (max 2000 characters).");
+              return;
+            }
+            if (containsBlockedLanguage(text)) {
+              res.statusCode = 400;
+              res.end(MODERATION_REJECTION_MESSAGE);
               return;
             }
 
@@ -548,6 +782,11 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             };
             entries.push(entry);
             savePostsDb(entries);
+            appendAuditLog({
+              type: "instagram_post",
+              username: session.username,
+              detail: text ? `Posted: "${text.slice(0, 140)}"` : "Posted an image",
+            });
 
             res.setHeader("Content-Type", "application/json");
             res.end(
@@ -559,6 +798,7 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 imageUrl: entry.imageFilename ? `/posts/uploads/${entry.imageFilename}` : null,
                 createdAt: entry.createdAt,
                 isMine: true,
+                canDelete: true,
               })
             );
           } catch (err) {
@@ -568,14 +808,13 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
           return;
         }
 
-        const deleteMatch = /^\/api\/posts\/([a-zA-Z0-9]+)$/.exec(url.pathname);
-        if (deleteMatch && req.method === "DELETE") {
+        if (url.pathname === "/api/posts" && req.method === "DELETE") {
           if (!session) {
             res.statusCode = 401;
             res.end("You must be signed in to delete a post.");
             return;
           }
-          const postId = deleteMatch[1];
+          const postId = url.searchParams.get("id") || "";
           const entries = loadPostsDb();
           const index = entries.findIndex((p) => p.id === postId);
           if (index === -1) {
@@ -584,7 +823,8 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const post = entries[index];
-          if (post.authorId !== session.userId) {
+          const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
+          if (post.authorId !== session.userId && !isAdminOverride) {
             res.statusCode = 403;
             res.end("You can only delete your own posts.");
             return;
@@ -595,6 +835,14 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
           }
           entries.splice(index, 1);
           savePostsDb(entries);
+          appendAuditLog({
+            type: "instagram_post_deleted",
+            username: session.username,
+            detail:
+              isAdminOverride && post.authorId !== session.userId
+                ? `Admin-deleted a post by ${post.authorUsername}`
+                : "Deleted their own post",
+          });
           res.statusCode = 204;
           res.end();
           return;
@@ -668,6 +916,7 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const key = conversationKey(session.username, withUser);
+          const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
           const messages = loadMessagesDb()
             .filter((m) => m.conversationKey === key)
             .sort((a, b) => a.createdAt - b.createdAt);
@@ -680,6 +929,9 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 text: m.text,
                 createdAt: m.createdAt,
                 isMine: m.fromUsername.toLowerCase() === session.username.toLowerCase(),
+                canDelete:
+                  m.fromUsername.toLowerCase() === session.username.toLowerCase() ||
+                  isAdminOverride,
               }))
             )
           );
@@ -706,6 +958,11 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
               res.end("Message is too long (max 2000 characters).");
               return;
             }
+            if (containsBlockedLanguage(text)) {
+              res.statusCode = 400;
+              res.end(MODERATION_REJECTION_MESSAGE);
+              return;
+            }
             const knownUsers = loadUsersDb();
             const recipient = knownUsers.find(
               (u) => u.username.toLowerCase() === to.toLowerCase()
@@ -727,6 +984,11 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
             const entries = loadMessagesDb();
             entries.push(entry);
             saveMessagesDb(entries);
+            appendAuditLog({
+              type: "message_sent",
+              username: session.username,
+              detail: `To ${recipient.username}: "${text.slice(0, 140)}"`,
+            });
 
             res.setHeader("Content-Type", "application/json");
             res.end(
@@ -736,12 +998,50 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 text: entry.text,
                 createdAt: entry.createdAt,
                 isMine: true,
+                canDelete: true,
               })
             );
           } catch (err) {
             res.statusCode = 500;
             res.end("Send failed: " + (err as Error).message);
           }
+          return;
+        }
+
+        if (url.pathname === "/api/messages" && req.method === "DELETE") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          const id = url.searchParams.get("id") || "";
+          const entries = loadMessagesDb();
+          const index = entries.findIndex((m) => m.id === id);
+          if (index === -1) {
+            res.statusCode = 404;
+            res.end("Message not found.");
+            return;
+          }
+          const message = entries[index];
+          const isOwner = message.fromUsername.toLowerCase() === session.username.toLowerCase();
+          const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
+          if (!isOwner && !isAdminOverride) {
+            res.statusCode = 403;
+            res.end("You can only delete your own messages.");
+            return;
+          }
+          entries.splice(index, 1);
+          saveMessagesDb(entries);
+          appendAuditLog({
+            type: "message_deleted",
+            username: session.username,
+            detail:
+              isAdminOverride && !isOwner
+                ? `Admin-deleted a message from ${message.fromUsername} to ${message.toUsername}`
+                : "Deleted their own message",
+          });
+          res.statusCode = 204;
+          res.end();
           return;
         }
 
@@ -824,6 +1124,11 @@ function royalTweetsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             const entries = loadRoyalTweetsDb();
             entries.push(entry);
             saveRoyalTweetsDb(entries);
+            appendAuditLog({
+              type: "royal_tweet_added",
+              username: session.username,
+              detail: tweetUrl,
+            });
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify(entry));
           } catch (err) {
@@ -910,6 +1215,11 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
               res.end("Report is too long (max 5000 characters).");
               return;
             }
+            if (containsBlockedLanguage(title) || containsBlockedLanguage(content)) {
+              res.statusCode = 400;
+              res.end(MODERATION_REJECTION_MESSAGE);
+              return;
+            }
             const entry: BlumeReportEntry = {
               id: crypto.randomBytes(12).toString("hex"),
               title,
@@ -920,6 +1230,11 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             const entries = loadBlumeReportsDb();
             entries.push(entry);
             saveBlumeReportsDb(entries);
+            appendAuditLog({
+              type: "blume_report",
+              username: session.username,
+              detail: title,
+            });
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify(entry));
           } catch (err) {
@@ -946,8 +1261,14 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             res.end("Missing report id.");
             return;
           }
+          const target = loadBlumeReportsDb().find((r) => r.id === id);
           const entries = loadBlumeReportsDb().filter((r) => r.id !== id);
           saveBlumeReportsDb(entries);
+          appendAuditLog({
+            type: "blume_report_deleted",
+            username: session.username,
+            detail: target?.title || id,
+          });
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ ok: true }));
           return;
@@ -1026,6 +1347,11 @@ function blumeBlogPlugin(sessions: Map<string, RobloxSession>): Plugin {
               res.end("Excerpt is too long (max 600 characters).");
               return;
             }
+            if (containsBlockedLanguage(title) || containsBlockedLanguage(excerpt)) {
+              res.statusCode = 400;
+              res.end(MODERATION_REJECTION_MESSAGE);
+              return;
+            }
             const entry: BlumeBlogPost = {
               id: crypto.randomBytes(12).toString("hex"),
               title,
@@ -1037,6 +1363,11 @@ function blumeBlogPlugin(sessions: Map<string, RobloxSession>): Plugin {
             const posts = loadBlumeBlogDb();
             posts.push(entry);
             saveBlumeBlogDb(posts);
+            appendAuditLog({
+              type: "blume_blog_post",
+              username: session.username,
+              detail: title,
+            });
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify(entry));
           } catch (err) {
@@ -1063,14 +1394,139 @@ function blumeBlogPlugin(sessions: Map<string, RobloxSession>): Plugin {
             res.end("Missing post id.");
             return;
           }
+          const target = loadBlumeBlogDb().find((p) => p.id === id);
           const posts = loadBlumeBlogDb().filter((p) => p.id !== id);
           saveBlumeBlogDb(posts);
+          appendAuditLog({
+            type: "blume_blog_post_deleted",
+            username: session.username,
+            detail: target?.title || id,
+          });
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ ok: true }));
           return;
         }
 
         next();
+      });
+    },
+  };
+}
+
+function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "admin-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/admin") {
+          next();
+          return;
+        }
+
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        if (!session) {
+          res.statusCode = 401;
+          res.end("You must be signed in.");
+          return;
+        }
+        if (!isPlatformAdmin(session.userId)) {
+          res.statusCode = 403;
+          res.end("You do not have admin access.");
+          return;
+        }
+
+        if (req.method === "GET") {
+          const checkTarget = url.searchParams.get("checkTarget") || "";
+          if (checkTarget) {
+            const target = findKnownUser(checkTarget);
+            if (!target) {
+              res.setHeader("Content-Type", "application/json");
+              res.statusCode = 404;
+              res.end(JSON.stringify({ found: false }));
+              return;
+            }
+            const isProtected = isPlatformAdmin(target.userId);
+            const groupNames = isProtected ? [] : await getMemberGroupNames(target.userId);
+            res.setHeader("Content-Type", "application/json");
+            res.end(
+              JSON.stringify({
+                found: true,
+                userId: target.userId,
+                username: target.username,
+                avatarUrl: target.avatarUrl,
+                isProtected,
+                groupNames,
+              })
+            );
+            return;
+          }
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              isAdmin: true,
+              adminMode: !!session.adminMode,
+              auditLog: getAuditLog(300),
+              bans: loadBansDb(),
+            })
+          );
+          return;
+        }
+
+        if (req.method === "POST") {
+          try {
+            const body = await readJsonBody(req);
+            const action = (body.action || "").toString();
+            if (action === "toggleAdminMode") {
+              session.adminMode = !session.adminMode;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ adminMode: session.adminMode }));
+              return;
+            }
+            if (action === "ban" || action === "unban") {
+              const targetQuery = (body.target || "").toString().trim();
+              if (!targetQuery) {
+                res.statusCode = 400;
+                res.end("Missing target username or user ID.");
+                return;
+              }
+              const target = findKnownUser(targetQuery);
+              if (!target) {
+                res.statusCode = 404;
+                res.end("No one matching that username or user ID has signed into Westbridge OS.");
+                return;
+              }
+              if (action === "ban") {
+                if (isPlatformAdmin(target.userId)) {
+                  res.statusCode = 403;
+                  res.end("Platform admins can't be banned.");
+                  return;
+                }
+                addBan({
+                  userId: target.userId,
+                  username: target.username,
+                  bannedByUsername: session.username,
+                  createdAt: Date.now(),
+                });
+              } else {
+                removeBan(target.userId);
+              }
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ bans: loadBansDb() }));
+              return;
+            }
+            res.statusCode = 400;
+            res.end("Unknown action.");
+          } catch (err) {
+            res.statusCode = 500;
+            res.end("Admin action failed: " + (err as Error).message);
+          }
+          return;
+        }
+
+        res.statusCode = 405;
+        res.end("Method not allowed");
       });
     },
   };
@@ -1090,6 +1546,7 @@ export default defineConfig(({ mode }) => {
       royalTweetsPlugin(sessions),
       blumeReportsPlugin(sessions),
       blumeBlogPlugin(sessions),
+      adminPlugin(sessions),
     ],
   };
 });
