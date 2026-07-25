@@ -713,6 +713,29 @@
   border-radius: 50%;
   background: radial-gradient(circle, #fff 0%, transparent 70%);
 }
+/* Cycling hero photo background, once images are added to HERO_IMAGES. */
+.blume-hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.blume-hero-bg-image {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  transition: opacity 1.2s ease;
+}
+.blume-hero-tint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(4, 20, 42, 0.55) 0%,
+    rgba(7, 32, 59, 0.6) 55%,
+    rgba(11, 44, 77, 0.68) 100%
+  );
+}
 .blume-hero-content {
   position: relative;
   z-index: 1;
@@ -785,9 +808,9 @@
   }
 }
 
-/* Marquee — animation is added via a separate class once fonts have
-   finished loading (see fontsReady in BlumeApp.tsx), so a mid-flight font
-   swap can't change the track's width and make the loop visibly jump. */
+/* Marquee — driven by rAF in JS (measured against the real rendered width
+   every frame) rather than a CSS keyframe, so it can't gap or jump when
+   fonts finish loading and the text's true width shifts. */
 .blume-marquee {
   background: var(--blume-navy-2);
   padding: 16px 0;
@@ -804,9 +827,12 @@
   font-size: 12.5px;
   font-weight: 500;
   letter-spacing: 0.04em;
+  will-change: transform;
 }
-.blume-marquee-track.blume-marquee-animate {
-  animation: blumeMarquee 32s linear infinite;
+.blume-marquee-set {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 .blume-marquee-item {
   padding: 0 20px;
@@ -820,16 +846,8 @@
   transform: translateY(-50%);
   color: var(--blume-mist-dim);
 }
-.blume-marquee-item:first-child::before {
+.blume-marquee-set:first-child .blume-marquee-item:first-child::before {
   content: none;
-}
-@keyframes blumeMarquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
 }
 
 /* Shared sections */
@@ -1334,10 +1352,16 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 14px;
   padding: 10px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.blume-active-strip .blume-active-list {
   overflow-x: auto;
+}
+.blume-logout-btn {
+  flex-shrink: 0;
 }
 .blume-active-label {
   font-size: 10px;

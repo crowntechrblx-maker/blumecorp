@@ -92,6 +92,24 @@ const APPROACH = [
 
 const REQUEST_ACCESS_URL = "https://discord.gg/ye7FsHsCTM";
 
+// Drop uploaded hero images in public/blume/hero/ and list their paths here
+// (e.g. "/blume/hero/1.jpg") to cycle them behind the hero headline. Leave
+// empty to keep the plain navy gradient.
+const HERO_IMAGES: string[] = [];
+const HERO_CYCLE_MS = 5000;
+
+function useHeroCycle(count: number, intervalMs: number) {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (count < 2) return;
+    const id = window.setInterval(() => {
+      setIndex((i) => (i + 1) % count);
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [count, intervalMs]);
+  return index;
+}
+
 function useReveal<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -124,6 +142,63 @@ function Reveal({ children, className = "" }: { children: ReactNode; className?:
   );
 }
 
+// Driven by rAF and measured against the real rendered width every frame,
+// rather than a CSS keyframe tied to a percentage of the element's width —
+// that's what left a gap once the custom font finished loading and the
+// track's actual width shifted out from under a fixed-percentage animation.
+function BlumeMarquee() {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const setRef = useRef<HTMLDivElement | null>(null);
+  const offsetRef = useRef(0);
+
+  useEffect(() => {
+    const SPEED = 36; // px per second
+    let lastTime: number | null = null;
+    let raf = 0;
+
+    function tick(time: number) {
+      const setEl = setRef.current;
+      const trackEl = trackRef.current;
+      if (setEl && trackEl) {
+        const setWidth = setEl.getBoundingClientRect().width;
+        if (setWidth > 0 && lastTime !== null) {
+          const dt = (time - lastTime) / 1000;
+          offsetRef.current -= SPEED * dt;
+          if (offsetRef.current <= -setWidth) {
+            offsetRef.current += setWidth;
+          }
+          trackEl.style.transform = `translateX(${offsetRef.current}px)`;
+        }
+      }
+      lastTime = time;
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <section className="blume-marquee">
+      <div className="blume-marquee-track" ref={trackRef}>
+        <div className="blume-marquee-set" ref={setRef}>
+          {INDUSTRIES.map((ind) => (
+            <span className="blume-marquee-item" key={ind.title}>
+              {ind.title}
+            </span>
+          ))}
+        </div>
+        <div className="blume-marquee-set" aria-hidden="true">
+          {INDUSTRIES.map((ind) => (
+            <span className="blume-marquee-item" key={ind.title}>
+              {ind.title}
+            </span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function BlumeApp({
   username,
   onMaximize,
@@ -133,7 +208,7 @@ export function BlumeApp({
 }) {
   const [canAccess, setCanAccess] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
-  const [fontsReady, setFontsReady] = useState(false);
+  const heroIndex = useHeroCycle(HERO_IMAGES.length, HERO_CYCLE_MS);
 
   const [reports, setReports] = useState<BlumeReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
@@ -172,14 +247,6 @@ export function BlumeApp({
   useEffect(() => {
     loadAccess();
     loadBlog();
-    // Don't start the marquee animation until the custom fonts have finished
-    // loading — otherwise the mid-flight font swap changes the track's
-    // width and the animation visibly jumps/gaps.
-    if (typeof document !== "undefined" && "fonts" in document) {
-      document.fonts.ready.then(() => setFontsReady(true));
-    } else {
-      setFontsReady(true);
-    }
   }, []);
 
   function handleLogin() {
@@ -254,33 +321,43 @@ export function BlumeApp({
 
   return (
     <div className="blume-app">
-      {!loggedIn && <div className="blume-grain" aria-hidden="true" />}
+      {!loggedIn && (
+        <>
+          <div className="blume-grain" aria-hidden="true" />
+          <header className="blume-navbar">
+            <div className="blume-nav-inner">
+              <span className="blume-brand">
+                <span className="blume-brand-mark" />
+                <span className="blume-brand-name">Blume</span>
+              </span>
 
-      <header className="blume-navbar">
-        <div className="blume-nav-inner">
-          <span className="blume-brand">
-            <span className="blume-brand-mark" />
-            <span className="blume-brand-name">Blume</span>
-          </span>
-
-          <div className="blume-nav-actions">
-            {!loggedIn && canAccess && (
-              <button className="blume-btn-login" onClick={handleLogin}>
-                LOGIN
-              </button>
-            )}
-            {loggedIn && (
-              <button className="blume-btn-login blume-btn-login-ghost" onClick={handleLogout}>
-                LOGOUT
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
+              <div className="blume-nav-actions">
+                {canAccess && (
+                  <button className="blume-btn-login" onClick={handleLogin}>
+                    LOGIN
+                  </button>
+                )}
+              </div>
+            </div>
+          </header>
+        </>
+      )}
 
       {!loggedIn && (
         <div className="blume-scroll" ref={scrollRef}>
           <section className="blume-hero">
+            {HERO_IMAGES.length > 0 && (
+              <div className="blume-hero-bg" aria-hidden="true">
+                {HERO_IMAGES.map((src, i) => (
+                  <div
+                    key={src}
+                    className="blume-hero-bg-image"
+                    style={{ backgroundImage: `url(${src})`, opacity: i === heroIndex ? 1 : 0 }}
+                  />
+                ))}
+                <div className="blume-hero-tint" />
+              </div>
+            )}
             <div className="blume-hero-mark" aria-hidden="true" />
             <div className="blume-hero-content">
               <h1>
@@ -303,17 +380,7 @@ export function BlumeApp({
             </div>
           </section>
 
-          <section className="blume-marquee">
-            <div className={`blume-marquee-track ${fontsReady ? "blume-marquee-animate" : ""}`}>
-              {[0, 1].map((rep) =>
-                INDUSTRIES.map((ind) => (
-                  <span className="blume-marquee-item" key={`${rep}-${ind.title}`}>
-                    {ind.title}
-                  </span>
-                ))
-              )}
-            </div>
-          </section>
+          <BlumeMarquee />
 
           <section className="blume-platform" id="blume-platform">
             <Reveal className="blume-section-head">
@@ -571,6 +638,9 @@ export function BlumeApp({
                 </div>
               ))}
             </div>
+            <button className="blume-btn-login blume-btn-login-ghost blume-logout-btn" onClick={handleLogout}>
+              LOGOUT
+            </button>
           </div>
 
           <div className="blume-columns">
