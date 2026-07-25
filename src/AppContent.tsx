@@ -125,20 +125,7 @@ function RoyalFamilyContent() {
 }
 
 function BlumeContent() {
-  return (
-    <div className="app-content blume">
-      <h2>Blume</h2>
-      <div className="blume-products">
-        {["Meltdown", "Rose Facial Oil", "Bright Eyed", "Matcha Cleanser"].map((p) => (
-          <div className="blume-card" key={p}>
-            <div className="blume-swatch" />
-            <span>{p}</span>
-          </div>
-        ))}
-      </div>
-      <button className="cta">Shop now</button>
-    </div>
-  );
+  return <div className="app-content blume" />;
 }
 
 function MessagesContent({

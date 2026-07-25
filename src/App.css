@@ -59,6 +59,7 @@
 
 .desktop-icon {
   width: 84px;
+  height: 88px;
   background: transparent;
   border: none;
   display: flex;
@@ -67,6 +68,7 @@
   gap: 4px;
   padding: 6px;
   border-radius: 8px;
+  box-sizing: border-box;
 }
 .desktop-icon:hover,
 .desktop-icon:focus {
@@ -88,6 +90,11 @@
   text-align: center;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
   line-height: 1.2;
+  height: 28px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 /* Dock */
@@ -335,7 +342,7 @@
   font-size: 18px;
 }
 .stat span {
-  font-size: 11px;
+  font-size: 11.5px;
   color: #666;
 }
 
@@ -721,7 +728,7 @@
   left: 4px;
   background: rgba(0, 0, 0, 0.65);
   color: #fff;
-  font-size: 9.5px;
+  font-size: 10px;
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -731,7 +738,7 @@
   left: 4px;
   background: rgba(0, 0, 0, 0.65);
   color: #fff;
-  font-size: 9.5px;
+  font-size: 10px;
   padding: 2px 6px;
   border-radius: 4px;
   max-width: calc(100% - 8px);
