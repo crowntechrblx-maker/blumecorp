@@ -10,6 +10,15 @@ interface KnownUser {
   lastSeen: number;
 }
 
+interface MessageEntry {
+  id: string;
+  conversationKey: string;
+  fromUsername: string;
+  toUsername: string;
+  text: string;
+  createdAt: number;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cookies = parseCookies(req);
   const session = decodeSession(cookies.wb_session);
@@ -20,10 +29,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const search = ((req.query.search as string) || "").trim().toLowerCase();
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  // Track the most recent message exchanged with each person so the sidebar
+  // can surface whoever you're actively talking to at the top, like a normal
+  // inbox — not just whoever happened to sign in most recently.
+  const messages = (await kv.get<MessageEntry[]>("messages")) || [];
+  const lastMessageAt = new Map<string, number>();
+  const me = session.username.toLowerCase();
+  for (const m of messages) {
+    const from = m.fromUsername.toLowerCase();
+    const to = m.toUsername.toLowerCase();
+    if (from !== me && to !== me) continue;
+    const other = from === me ? to : from;
+    const existing = lastMessageAt.get(other) || 0;
+    if (m.createdAt > existing) lastMessageAt.set(other, m.createdAt);
+  }
+
   const users = ((await kv.get<KnownUser[]>("users")) || [])
-    .filter((u) => u.username.toLowerCase() !== session.username.toLowerCase())
+    .filter((u) => u.username.toLowerCase() !== me)
     .filter((u) => u.lastSeen >= sevenDaysAgo)
-    .sort((a, b) => b.lastSeen - a.lastSeen);
+    .sort((a, b) => {
+      const aRecent = lastMessageAt.get(a.username.toLowerCase()) || 0;
+      const bRecent = lastMessageAt.get(b.username.toLowerCase()) || 0;
+      if (aRecent !== bRecent) return bRecent - aRecent;
+      return b.lastSeen - a.lastSeen;
+    });
   const filtered = search ? users.filter((u) => u.username.toLowerCase().includes(search)) : users;
 
   res

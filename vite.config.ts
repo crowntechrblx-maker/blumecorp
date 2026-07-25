@@ -515,11 +515,22 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
             res.end(JSON.stringify({ banned: true }));
             return;
           }
+          const myMessages = loadMessagesDb().filter(
+            (m) => m.toUsername.toLowerCase() === session.username.toLowerCase()
+          );
+          const latest = myMessages.sort((a, b) => b.createdAt - a.createdAt)[0] || null;
           res.end(
             JSON.stringify({
               ...session,
               isAdmin: isPlatformAdmin(session.userId),
               adminMode: !!session.adminMode,
+              latestIncomingMessage: latest
+                ? {
+                    id: latest.id,
+                    fromUsername: latest.fromUsername,
+                    createdAt: latest.createdAt,
+                  }
+                : null,
             })
           );
           return;
@@ -885,10 +896,25 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
           }
           const search = (url.searchParams.get("search") || "").trim().toLowerCase();
           const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          const me = session.username.toLowerCase();
+          const lastMessageAt = new Map<string, number>();
+          for (const m of loadMessagesDb()) {
+            const from = m.fromUsername.toLowerCase();
+            const to = m.toUsername.toLowerCase();
+            if (from !== me && to !== me) continue;
+            const other = from === me ? to : from;
+            const existing = lastMessageAt.get(other) || 0;
+            if (m.createdAt > existing) lastMessageAt.set(other, m.createdAt);
+          }
           const users = loadUsersDb()
-            .filter((u) => u.username.toLowerCase() !== session.username.toLowerCase())
+            .filter((u) => u.username.toLowerCase() !== me)
             .filter((u) => u.lastSeen >= sevenDaysAgo)
-            .sort((a, b) => b.lastSeen - a.lastSeen);
+            .sort((a, b) => {
+              const aRecent = lastMessageAt.get(a.username.toLowerCase()) || 0;
+              const bRecent = lastMessageAt.get(b.username.toLowerCase()) || 0;
+              if (aRecent !== bRecent) return bRecent - aRecent;
+              return b.lastSeen - a.lastSeen;
+            });
           const filtered = search
             ? users.filter((u) => u.username.toLowerCase().includes(search))
             : users;

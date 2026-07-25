@@ -3,6 +3,16 @@ import { parseCookies, setCookie } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
 import { isPlatformAdmin } from "../../lib/roblox.js";
 import { isBanned } from "../../lib/bans.js";
+import { kv } from "../../lib/kv.js";
+
+interface MessageEntry {
+  id: string;
+  conversationKey: string;
+  fromUsername: string;
+  toUsername: string;
+  text: string;
+  createdAt: number;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cookies = parseCookies(req);
@@ -21,9 +31,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Piggybacks the "did I just get messaged?" check on this already-polled
+  // endpoint instead of adding a dedicated one, since Vercel Hobby caps
+  // serverless functions at 12.
+  const messages = (await kv.get<MessageEntry[]>("messages")) || [];
+  const myMessages = messages.filter(
+    (m) => m.toUsername.toLowerCase() === session.username.toLowerCase()
+  );
+  const latest = myMessages.sort((a, b) => b.createdAt - a.createdAt)[0] || null;
+
   res.status(200).json({
     ...session,
     isAdmin: isPlatformAdmin(session.userId),
     adminMode: !!session.adminMode,
+    latestIncomingMessage: latest
+      ? { id: latest.id, fromUsername: latest.fromUsername, createdAt: latest.createdAt }
+      : null,
   });
 }

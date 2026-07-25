@@ -7,6 +7,7 @@ import { Window, type WindowState } from "./Window";
 import { useAuth } from "./AuthContext";
 import { useWallpaper } from "./WallpaperContext";
 import { RobloxLogin } from "./RobloxLogin";
+import { MessageToast } from "./MessageToast";
 import "./App.css";
 
 type WindowsMap = Partial<Record<AppId, WindowState>>;
@@ -132,6 +133,7 @@ function App() {
 
   return (
     <div className="desktop-root" style={{ backgroundImage: `url(${wallpaperUrl})` }}>
+      <MessageToast />
       <MenuBar
         activeAppName={activeAppName}
         username={user.username}

@@ -34,17 +34,31 @@ export function MessagesApp({
   const [sending, setSending] = useState(false);
   const { error, fading, setError } = useFadingError();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rosterPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const threadRef = useRef<HTMLDivElement | null>(null);
+
+  function loadRoster(term: string) {
+    fetch(`/api/users?search=${encodeURIComponent(term)}`)
+      .then((r) => r.json())
+      .then(setResults)
+      .catch(() => setResults([]));
+  }
 
   useEffect(() => {
     const term = search.trim();
-    const handle = setTimeout(() => {
-      fetch(`/api/users?search=${encodeURIComponent(term)}`)
-        .then((r) => r.json())
-        .then(setResults)
-        .catch(() => setResults([]));
-    }, 200);
+    const handle = setTimeout(() => loadRoster(term), 200);
     return () => clearTimeout(handle);
   }, [search]);
+
+  useEffect(() => {
+    // Keeps the sidebar ordering fresh (whoever last messaged you jumps to
+    // the top) even while you aren't actively watching a conversation.
+    rosterPollRef.current = setInterval(() => loadRoster(search.trim()), 5000);
+    return () => {
+      if (rosterPollRef.current) clearInterval(rosterPollRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function loadMessages(withUsername: string) {
     fetch(`/api/messages?with=${encodeURIComponent(withUsername)}`)
@@ -69,6 +83,13 @@ export function MessagesApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
+  // Always land on the newest message instead of leaving the scroll
+  // position wherever it happened to be — no one wants to scroll for it.
+  useEffect(() => {
+    const el = threadRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, active]);
+
   async function handleDeleteMessage(id: string) {
     try {
       await fetch(`/api/messages?id=${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -91,6 +112,7 @@ export function MessagesApp({
       if (!res.ok) throw new Error(await res.text());
       setDraft("");
       loadMessages(active.username);
+      loadRoster(search.trim());
     } catch (err) {
       setError((err as Error).message || "Couldn't send message.");
     } finally {
@@ -140,7 +162,7 @@ export function MessagesApp({
           {!active && <p className="messages-empty-hint">Select someone to start chatting.</p>}
           {active && (
             <>
-              <div className="message-thread">
+              <div className="message-thread" ref={threadRef}>
                 {messages.map((m) => (
                   <div key={m.id} className={`bubble ${m.isMine ? "outgoing" : "incoming"}`}>
                     <span className="bubble-text">{m.text}</span>
