@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+*.bak
 
 # Runtime-uploaded backgrounds and their metadata (user-generated, not source)
 public/wallpapers/uploads/*
