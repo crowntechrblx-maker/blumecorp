@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { parseCookies, setCookie } from "../lib/cookies.js";
-import { encodeSession } from "../lib/session.js";
-import { getRobloxAvatarUrl } from "../lib/roblox.js";
-import { kv } from "../lib/kv.js";
+import { parseCookies, setCookie } from "../../lib/cookies.js";
+import { encodeSession } from "../../lib/session.js";
+import { getRobloxAvatarUrl } from "../../lib/roblox.js";
+import { kv } from "../../lib/kv.js";
 
 interface KnownUser {
   userId: string;

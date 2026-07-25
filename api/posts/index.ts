@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { kv } from "../lib/kv.js";
+import { kv } from "../../lib/kv.js";
 import { put } from "@vercel/blob";
 import crypto from "node:crypto";
-import { parseCookies } from "../lib/cookies.js";
-import { decodeSession } from "../lib/session.js";
-import { MIME_EXT, parseDataUrl } from "../lib/roblox.js";
+import { parseCookies } from "../../lib/cookies.js";
+import { decodeSession } from "../../lib/session.js";
+import { MIME_EXT, parseDataUrl } from "../../lib/roblox.js";
 
 interface PostEntry {
   id: string;

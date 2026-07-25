@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { parseCookies } from "../lib/cookies.js";
-import { decodeSession } from "../lib/session.js";
+import { parseCookies } from "../../lib/cookies.js";
+import { decodeSession } from "../../lib/session.js";
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
   const cookies = parseCookies(req);

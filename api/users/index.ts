@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { kv } from "../lib/kv.js";
-import { parseCookies } from "../lib/cookies.js";
-import { decodeSession } from "../lib/session.js";
+import { kv } from "../../lib/kv.js";
+import { parseCookies } from "../../lib/cookies.js";
+import { decodeSession } from "../../lib/session.js";
 
 interface KnownUser {
   userId: string;
