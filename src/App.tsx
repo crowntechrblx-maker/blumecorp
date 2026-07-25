@@ -93,8 +93,15 @@ function App() {
         y: Math.max(32, (window.innerHeight - height) / 2 - 10),
         width,
         height,
+        animating: true,
       },
     }));
+    window.setTimeout(() => {
+      setWindows((prev) => {
+        if (!prev[id]) return prev;
+        return { ...prev, [id]: { ...prev[id]!, animating: false } };
+      });
+    }, 600);
   }
 
   const activeAppName = activeApp

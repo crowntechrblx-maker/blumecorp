@@ -58,3 +58,9 @@ export async function isBlumeAuthorized(userId: string): Promise<boolean> {
   );
   return checks.some(Boolean);
 }
+
+// Publishing to the public Blume blog is restricted to the two named
+// operators, not the wider group-authorized dashboard access.
+export function isBlumeSuperUser(userId: string): boolean {
+  return BLUME_ALLOWED_USER_IDS.includes(userId);
+}

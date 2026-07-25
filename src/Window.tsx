@@ -9,6 +9,7 @@ interface WindowState {
   height: number;
   zIndex: number;
   minimized: boolean;
+  animating?: boolean;
 }
 
 interface WindowProps {
@@ -94,7 +95,7 @@ export function Window({
 
   return (
     <div
-      className={`window ${dragging ? "dragging" : ""}`}
+      className={`window ${dragging ? "dragging" : ""} ${state.animating ? "window-animating" : ""}`}
       style={{
         left: state.x,
         top: state.y,

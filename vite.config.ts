@@ -93,6 +93,19 @@ async function isBlumeAuthorized(userId: string): Promise<boolean> {
   return checks.some(Boolean);
 }
 
+function isBlumeSuperUser(userId: string): boolean {
+  return BLUME_ALLOWED_USER_IDS.includes(userId);
+}
+
+interface BlumeBlogPost {
+  id: string;
+  title: string;
+  excerpt: string;
+  readMinutes: number;
+  authorUsername: string;
+  createdAt: number;
+}
+
 const avatarCache = new Map<string, string | null>();
 
 async function getRobloxAvatarUrl(userId: string): Promise<string | null> {
@@ -946,6 +959,123 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
+const BLUME_BLOG_DB = path.resolve(process.cwd(), "blume-blog-data.json");
+
+function loadBlumeBlogDb(): BlumeBlogPost[] {
+  try {
+    return JSON.parse(fs.readFileSync(BLUME_BLOG_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveBlumeBlogDb(posts: BlumeBlogPost[]) {
+  fs.writeFileSync(BLUME_BLOG_DB, JSON.stringify(posts, null, 2));
+}
+
+function blumeBlogPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "blume-blog-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-blog") {
+          next();
+          return;
+        }
+
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        const canEdit = session ? isBlumeSuperUser(session.userId) : false;
+
+        if (req.method === "GET") {
+          const posts = loadBlumeBlogDb().sort((a, b) => b.createdAt - a.createdAt);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ posts, canEdit }));
+          return;
+        }
+
+        if (req.method === "POST") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          if (!canEdit) {
+            res.statusCode = 403;
+            res.end("Only Blume operators can publish to the blog.");
+            return;
+          }
+          try {
+            const body = await readJsonBody(req);
+            const title = (body.title || "").toString().trim();
+            const excerpt = (body.excerpt || "").toString().trim();
+            const readMinutes = Math.max(1, Math.min(60, Number(body.readMinutes) || 4));
+            if (!title || !excerpt) {
+              res.statusCode = 400;
+              res.end("Title and excerpt are required.");
+              return;
+            }
+            if (title.length > 160) {
+              res.statusCode = 400;
+              res.end("Title is too long (max 160 characters).");
+              return;
+            }
+            if (excerpt.length > 600) {
+              res.statusCode = 400;
+              res.end("Excerpt is too long (max 600 characters).");
+              return;
+            }
+            const entry: BlumeBlogPost = {
+              id: crypto.randomBytes(12).toString("hex"),
+              title,
+              excerpt,
+              readMinutes,
+              authorUsername: session.username,
+              createdAt: Date.now(),
+            };
+            const posts = loadBlumeBlogDb();
+            posts.push(entry);
+            saveBlumeBlogDb(posts);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(entry));
+          } catch (err) {
+            res.statusCode = 500;
+            res.end("Failed to publish post: " + (err as Error).message);
+          }
+          return;
+        }
+
+        if (req.method === "DELETE") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          if (!canEdit) {
+            res.statusCode = 403;
+            res.end("Only Blume operators can remove blog posts.");
+            return;
+          }
+          const id = url.searchParams.get("id") || "";
+          if (!id) {
+            res.statusCode = 400;
+            res.end("Missing post id.");
+            return;
+          }
+          const posts = loadBlumeBlogDb().filter((p) => p.id !== id);
+          saveBlumeBlogDb(posts);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
+
+        next();
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -959,6 +1089,7 @@ export default defineConfig(({ mode }) => {
       messagesPlugin(sessions),
       royalTweetsPlugin(sessions),
       blumeReportsPlugin(sessions),
+      blumeBlogPlugin(sessions),
     ],
   };
 });
