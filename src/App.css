@@ -612,9 +612,13 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* Navbar */
+/* Navbar — sits on top of the hero (absolute, not in flow) so the
+   backdrop-filter actually has hero content behind it to blur. */
 .blume-navbar {
-  flex-shrink: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 20;
   padding: 12px 14px;
 }
@@ -652,25 +656,6 @@
   color: #fff;
   letter-spacing: -0.01em;
 }
-.blume-nav-links {
-  display: flex;
-  gap: 2px;
-}
-.blume-nav-links button {
-  background: none;
-  border: none;
-  color: var(--blume-mist);
-  font-size: 12.5px;
-  font-weight: 500;
-  padding: 7px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: color 0.2s, background 0.2s;
-}
-.blume-nav-links button:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
-}
 .blume-nav-actions {
   display: flex;
   align-items: center;
@@ -698,108 +683,6 @@
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
-.blume-btn-menu {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: transparent;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.blume-btn-menu span {
-  width: 13px;
-  height: 1.5px;
-  background: #fff;
-  border-radius: 2px;
-  transition: transform 0.3s var(--blume-ease), opacity 0.3s var(--blume-ease);
-}
-.blume-btn-menu.blume-open span:nth-child(1) {
-  transform: translateY(5.5px) rotate(45deg);
-}
-.blume-btn-menu.blume-open span:nth-child(2) {
-  opacity: 0;
-}
-.blume-btn-menu.blume-open span:nth-child(3) {
-  transform: translateY(-5.5px) rotate(-45deg);
-}
-
-/* Menu overlay */
-.blume-menu-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 15;
-  background: var(--blume-navy-deep);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-8px);
-  transition: opacity 0.35s var(--blume-ease), transform 0.35s var(--blume-ease), visibility 0s linear 0.35s;
-}
-.blume-menu-overlay.blume-open {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-  transition: opacity 0.35s var(--blume-ease), transform 0.35s var(--blume-ease), visibility 0s;
-}
-.blume-menu-overlay-inner {
-  width: 100%;
-  max-width: 420px;
-  padding: 0 24px;
-}
-.blume-menu-list {
-  list-style: none;
-  margin: 0 0 32px;
-  padding: 0;
-}
-.blume-menu-list li {
-  border-top: 1px solid var(--blume-line);
-}
-.blume-menu-list li:last-child {
-  border-bottom: 1px solid var(--blume-line);
-}
-.blume-menu-list button {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-  width: 100%;
-  padding: 14px 4px;
-  background: none;
-  border: none;
-  text-align: left;
-  font-family: "Inter Tight", sans-serif;
-  font-size: 22px;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: -0.02em;
-  cursor: pointer;
-  transition: opacity 0.2s, padding-left 0.3s var(--blume-ease);
-}
-.blume-menu-list button:hover {
-  opacity: 0.7;
-  padding-left: 12px;
-}
-.blume-menu-index {
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--blume-mist-dim);
-  font-family: "Inter", sans-serif;
-}
-.blume-menu-footer {
-  display: flex;
-  justify-content: space-between;
-  color: var(--blume-mist-dim);
-  font-size: 11.5px;
-  letter-spacing: 0.04em;
-}
-
 .blume-scroll {
   flex: 1;
   overflow-y: auto;
@@ -841,17 +724,9 @@
 }
 .blume-hero h1 {
   color: #fff;
-  font-size: clamp(24px, 4vw, 38px);
-  line-height: 1.15;
-  margin-bottom: 18px;
-}
-.blume-hero-sub {
-  color: var(--blume-mist);
-  font-size: 13.5px;
-  line-height: 1.6;
-  max-width: 440px;
-  margin: 0 0 26px;
-  font-weight: 400;
+  font-size: clamp(24px, 4vw, 40px);
+  line-height: 1.25;
+  margin-bottom: 30px;
 }
 .blume-hero-actions {
   display: flex;
@@ -878,21 +753,6 @@
 .blume-btn-primary-dark {
   background: var(--blume-navy);
   color: #fff;
-}
-.blume-btn-ghost {
-  background: none;
-  border: none;
-  color: var(--blume-mist);
-  font-size: 12.5px;
-  font-weight: 500;
-  padding: 11px 4px;
-  border-bottom: 1px solid transparent;
-  cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
-}
-.blume-btn-ghost:hover {
-  color: #fff;
-  border-color: var(--blume-mist-dim);
 }
 .blume-hero-scroll {
   position: absolute;
@@ -925,23 +785,43 @@
   }
 }
 
-/* Marquee */
+/* Marquee — animation is added via a separate class once fonts have
+   finished loading (see fontsReady in BlumeApp.tsx), so a mid-flight font
+   swap can't change the track's width and make the loop visibly jump. */
 .blume-marquee {
   background: var(--blume-navy-2);
-  padding: 14px 0;
+  padding: 16px 0;
   overflow: hidden;
   border-top: 1px solid var(--blume-line);
   border-bottom: 1px solid var(--blume-line);
 }
 .blume-marquee-track {
   display: flex;
+  align-items: center;
   white-space: nowrap;
   width: max-content;
-  animation: blumeMarquee 28s linear infinite;
   color: var(--blume-mist-dim);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 500;
   letter-spacing: 0.04em;
+}
+.blume-marquee-track.blume-marquee-animate {
+  animation: blumeMarquee 32s linear infinite;
+}
+.blume-marquee-item {
+  padding: 0 20px;
+  position: relative;
+}
+.blume-marquee-item::before {
+  content: "·";
+  position: absolute;
+  left: -3px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--blume-mist-dim);
+}
+.blume-marquee-item:first-child::before {
+  content: none;
 }
 @keyframes blumeMarquee {
   from {
@@ -1249,12 +1129,12 @@
 .blume-blog-card-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   font-size: 10px;
   color: rgba(7, 32, 59, 0.5);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .blume-blog-meta {
   font-size: 10.5px;

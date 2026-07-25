@@ -90,14 +90,6 @@ const APPROACH = [
   },
 ];
 
-const MENU_ITEMS = [
-  { index: "01", label: "Platform", section: "blume-platform" },
-  { index: "02", label: "Industries", section: "blume-industries" },
-  { index: "03", label: "Blog", section: "blume-blog" },
-  { index: "04", label: "Approach", section: "blume-approach" },
-  { index: "05", label: "Company", section: "blume-company" },
-];
-
 const REQUEST_ACCESS_URL = "https://discord.gg/ye7FsHsCTM";
 
 function useReveal<T extends HTMLElement>() {
@@ -141,7 +133,7 @@ export function BlumeApp({
 }) {
   const [canAccess, setCanAccess] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [fontsReady, setFontsReady] = useState(false);
 
   const [reports, setReports] = useState<BlumeReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
@@ -180,11 +172,18 @@ export function BlumeApp({
   useEffect(() => {
     loadAccess();
     loadBlog();
+    // Don't start the marquee animation until the custom fonts have finished
+    // loading — otherwise the mid-flight font swap changes the track's
+    // width and the animation visibly jumps/gaps.
+    if (typeof document !== "undefined" && "fonts" in document) {
+      document.fonts.ready.then(() => setFontsReady(true));
+    } else {
+      setFontsReady(true);
+    }
   }, []);
 
   function handleLogin() {
     if (!canAccess) return;
-    setMenuOpen(false);
     onMaximize?.();
     // Let the window's resize animation get underway before the content
     // swaps, so the transition reads as one fluid motion rather than a cut.
@@ -250,7 +249,6 @@ export function BlumeApp({
   }
 
   function scrollToSection(id: string) {
-    setMenuOpen(false);
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   }
 
@@ -265,15 +263,6 @@ export function BlumeApp({
             <span className="blume-brand-name">Blume</span>
           </span>
 
-          {!loggedIn && (
-            <nav className="blume-nav-links">
-              <button onClick={() => scrollToSection("blume-platform")}>Platform</button>
-              <button onClick={() => scrollToSection("blume-industries")}>Industries</button>
-              <button onClick={() => scrollToSection("blume-approach")}>Approach</button>
-              <button onClick={() => scrollToSection("blume-company")}>Company</button>
-            </nav>
-          )}
-
           <div className="blume-nav-actions">
             {!loggedIn && canAccess && (
               <button className="blume-btn-login" onClick={handleLogin}>
@@ -285,59 +274,19 @@ export function BlumeApp({
                 LOGOUT
               </button>
             )}
-            {!loggedIn && (
-              <button
-                className={`blume-btn-menu ${menuOpen ? "blume-open" : ""}`}
-                onClick={() => setMenuOpen((v) => !v)}
-                aria-label="Open menu"
-                aria-expanded={menuOpen}
-              >
-                <span />
-                <span />
-                <span />
-              </button>
-            )}
           </div>
         </div>
       </header>
-
-      {!loggedIn && (
-        <div className={`blume-menu-overlay ${menuOpen ? "blume-open" : ""}`}>
-          <div className="blume-menu-overlay-inner">
-            <ol className="blume-menu-list">
-              {MENU_ITEMS.map((item) => (
-                <li key={item.section}>
-                  <button onClick={() => scrollToSection(item.section)}>
-                    <span className="blume-menu-index">{item.index}</span>
-                    {item.label}
-                  </button>
-                </li>
-              ))}
-            </ol>
-            <div className="blume-menu-footer">
-              <span>Blume Technologies</span>
-              <span>Est. 2024</span>
-            </div>
-          </div>
-        </div>
-      )}
 
       {!loggedIn && (
         <div className="blume-scroll" ref={scrollRef}>
           <section className="blume-hero">
             <div className="blume-hero-mark" aria-hidden="true" />
             <div className="blume-hero-content">
-              <p className="blume-eyebrow blume-eyebrow-light">Decision infrastructure</p>
               <h1>
-                One model of the truth.
-                <br />
-                Every team, working from it.
+                The world's foremost innovator of high-tech, high-performance security
+                technology.
               </h1>
-              <p className="blume-hero-sub">
-                Blume connects the data your organization already has — across systems, teams,
-                and vendors — into a single live model, so the people making decisions are never
-                working from a stale picture.
-              </p>
               <div className="blume-hero-actions">
                 <a
                   className="blume-btn-primary"
@@ -347,12 +296,6 @@ export function BlumeApp({
                 >
                   Request access
                 </a>
-                <button
-                  className="blume-btn-ghost"
-                  onClick={() => scrollToSection("blume-platform")}
-                >
-                  See the platform ↓
-                </button>
               </div>
             </div>
             <div className="blume-hero-scroll" aria-hidden="true">
@@ -361,14 +304,14 @@ export function BlumeApp({
           </section>
 
           <section className="blume-marquee">
-            <div className="blume-marquee-track">
-              {[0, 1].map((rep) => (
-                <span key={rep}>
-                  {INDUSTRIES.map((ind) => (
-                    <span key={ind.title}>{ind.title} · </span>
-                  ))}
-                </span>
-              ))}
+            <div className={`blume-marquee-track ${fontsReady ? "blume-marquee-animate" : ""}`}>
+              {[0, 1].map((rep) =>
+                INDUSTRIES.map((ind) => (
+                  <span className="blume-marquee-item" key={`${rep}-${ind.title}`}>
+                    {ind.title}
+                  </span>
+                ))
+              )}
             </div>
           </section>
 
@@ -521,9 +464,8 @@ export function BlumeApp({
               ) : (
                 blogPosts.map((p) => (
                   <Reveal className="blume-industry-card blume-blog-card" key={p.id}>
-                    <div className="blume-blog-card-top">
-                      <span>{p.readMinutes} min read</span>
-                      {canEditBlog && (
+                    {canEditBlog && (
+                      <div className="blume-blog-card-top">
                         <button
                           className="blume-report-delete"
                           onClick={() => handleDeleteBlogPost(p.id)}
@@ -531,8 +473,8 @@ export function BlumeApp({
                         >
                           ✕
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                     <h3>{p.title}</h3>
                     <p>{p.excerpt}</p>
                     <span className="blume-blog-meta">
