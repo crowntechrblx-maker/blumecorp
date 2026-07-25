@@ -45,3 +45,16 @@ export async function isRobloxGroupMember(userId: string, groupId: number): Prom
     return false;
   }
 }
+
+// Blume clearance: any of these Roblox groups, or either of the two
+// explicitly-allowed user IDs, unlocks the Blume dashboard.
+export const BLUME_GROUP_IDS = [154853936, 142915989, 685466511, 187507831];
+export const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759"];
+
+export async function isBlumeAuthorized(userId: string): Promise<boolean> {
+  if (BLUME_ALLOWED_USER_IDS.includes(userId)) return true;
+  const checks = await Promise.all(
+    BLUME_GROUP_IDS.map((groupId) => isRobloxGroupMember(userId, groupId))
+  );
+  return checks.some(Boolean);
+}

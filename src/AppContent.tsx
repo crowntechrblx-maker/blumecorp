@@ -4,6 +4,7 @@ import { BackgroundsApp } from "./BackgroundsApp";
 import { InstagramApp } from "./InstagramApp";
 import { MessagesApp } from "./MessagesApp";
 import { RoyalFamilyApp } from "./RoyalFamilyApp";
+import { BlumeApp } from "./BlumeApp";
 
 function TflContent() {
   const lines = [
@@ -276,18 +277,16 @@ function PsRollsContent() {
   );
 }
 
-function BlumeContent() {
-  return <div className="app-content blume" />;
-}
-
 export function AppContent({
   id,
   username,
   avatarUrl,
+  onMaximize,
 }: {
   id: AppId;
   username: string;
   avatarUrl: string | null;
+  onMaximize?: () => void;
 }) {
   switch (id) {
     case "tfl":
@@ -303,7 +302,7 @@ export function AppContent({
     case "royalFamily":
       return <RoyalFamilyApp />;
     case "blume":
-      return <BlumeContent />;
+      return <BlumeApp username={username} onMaximize={onMaximize} />;
     case "instagram":
       return <InstagramApp username={username} />;
     case "messages":

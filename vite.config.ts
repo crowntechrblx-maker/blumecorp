@@ -72,6 +72,27 @@ async function isRobloxGroupMember(userId: string, groupId: number): Promise<boo
   }
 }
 
+interface BlumeReportEntry {
+  id: string;
+  title: string;
+  body: string;
+  authorUsername: string;
+  createdAt: number;
+}
+
+// Blume clearance: any of these Roblox groups, or either of the two
+// explicitly-allowed user IDs, unlocks the Blume dashboard.
+const BLUME_GROUP_IDS = [154853936, 142915989, 685466511, 187507831];
+const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759"];
+
+async function isBlumeAuthorized(userId: string): Promise<boolean> {
+  if (BLUME_ALLOWED_USER_IDS.includes(userId)) return true;
+  const checks = await Promise.all(
+    BLUME_GROUP_IDS.map((groupId) => isRobloxGroupMember(userId, groupId))
+  );
+  return checks.some(Boolean);
+}
+
 const avatarCache = new Map<string, string | null>();
 
 async function getRobloxAvatarUrl(userId: string): Promise<string | null> {
@@ -805,6 +826,126 @@ function royalTweetsPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
+const BLUME_REPORTS_DB = path.resolve(process.cwd(), "blume-reports-data.json");
+
+function loadBlumeReportsDb(): BlumeReportEntry[] {
+  try {
+    return JSON.parse(fs.readFileSync(BLUME_REPORTS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveBlumeReportsDb(entries: BlumeReportEntry[]) {
+  fs.writeFileSync(BLUME_REPORTS_DB, JSON.stringify(entries, null, 2));
+}
+
+function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "blume-reports-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-reports") {
+          next();
+          return;
+        }
+
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        const canAccess = session ? await isBlumeAuthorized(session.userId) : false;
+
+        if (req.method === "GET") {
+          if (!canAccess) {
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ reports: [], canAccess: false }));
+            return;
+          }
+          const reports = loadBlumeReportsDb().sort((a, b) => b.createdAt - a.createdAt);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ reports, canAccess: true }));
+          return;
+        }
+
+        if (req.method === "POST") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          if (!canAccess) {
+            res.statusCode = 403;
+            res.end("You do not have clearance to file intelligence reports.");
+            return;
+          }
+          try {
+            const body = await readJsonBody(req);
+            const title = (body.title || "").toString().trim();
+            const content = (body.content || "").toString().trim();
+            if (!title || !content) {
+              res.statusCode = 400;
+              res.end("Title and report body are required.");
+              return;
+            }
+            if (title.length > 200) {
+              res.statusCode = 400;
+              res.end("Title is too long (max 200 characters).");
+              return;
+            }
+            if (content.length > 5000) {
+              res.statusCode = 400;
+              res.end("Report is too long (max 5000 characters).");
+              return;
+            }
+            const entry: BlumeReportEntry = {
+              id: crypto.randomBytes(12).toString("hex"),
+              title,
+              body: content,
+              authorUsername: session.username,
+              createdAt: Date.now(),
+            };
+            const entries = loadBlumeReportsDb();
+            entries.push(entry);
+            saveBlumeReportsDb(entries);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(entry));
+          } catch (err) {
+            res.statusCode = 500;
+            res.end("Failed to save report: " + (err as Error).message);
+          }
+          return;
+        }
+
+        if (req.method === "DELETE") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          if (!canAccess) {
+            res.statusCode = 403;
+            res.end("You do not have clearance to remove intelligence reports.");
+            return;
+          }
+          const id = url.searchParams.get("id") || "";
+          if (!id) {
+            res.statusCode = 400;
+            res.end("Missing report id.");
+            return;
+          }
+          const entries = loadBlumeReportsDb().filter((r) => r.id !== id);
+          saveBlumeReportsDb(entries);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
+
+        next();
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -817,6 +958,7 @@ export default defineConfig(({ mode }) => {
       postsPlugin(sessions),
       messagesPlugin(sessions),
       royalTweetsPlugin(sessions),
+      blumeReportsPlugin(sessions),
     ],
   };
 });

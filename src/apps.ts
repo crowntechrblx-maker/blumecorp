@@ -66,7 +66,7 @@ export const APPS: AppDef[] = [
     name: "Blume",
     icon: "",
     color: "#ff0000",
-    defaultSize: { width: 480, height: 560 },
+    defaultSize: { width: 720, height: 560 },
   },
   {
     id: "instagram",

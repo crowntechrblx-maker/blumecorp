@@ -21,6 +21,7 @@ interface WindowProps {
   onMinimize: () => void;
   onMove: (x: number, y: number) => void;
   onResize: (width: number, height: number) => void;
+  onMaximize: () => void;
 }
 
 const MIN_WIDTH = 300;
@@ -38,6 +39,7 @@ export function Window({
   onMinimize,
   onMove,
   onResize,
+  onMaximize,
 }: WindowProps) {
   const [dragging, setDragging] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -110,8 +112,13 @@ export function Window({
         </div>
         <span className="titlebar-title">{app.name}</span>
       </div>
-      <div className="window-body">
-        <AppContent id={app.id} username={username} avatarUrl={avatarUrl} />
+      <div className={`window-body ${app.id === "blume" ? "window-body-dark" : ""}`}>
+        <AppContent
+          id={app.id}
+          username={username}
+          avatarUrl={avatarUrl}
+          onMaximize={onMaximize}
+        />
       </div>
 
       <div className="resize-handle resize-e" onMouseDown={handleResizeMouseDown("e")} />

@@ -82,6 +82,21 @@ function App() {
     }));
   }
 
+  function maximizeApp(id: AppId) {
+    const width = Math.min(window.innerWidth - 60, window.innerWidth * 0.94);
+    const height = Math.min(window.innerHeight - 100, window.innerHeight * 0.88);
+    setWindows((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id]!,
+        x: Math.max(16, (window.innerWidth - width) / 2),
+        y: Math.max(32, (window.innerHeight - height) / 2 - 10),
+        width,
+        height,
+      },
+    }));
+  }
+
   const activeAppName = activeApp
     ? APPS.find((a) => a.id === activeApp)?.name ?? "Finder"
     : "Finder";
@@ -120,6 +135,7 @@ function App() {
             onMinimize={() => minimizeApp(app.id)}
             onMove={(x, y) => moveApp(app.id, x, y)}
             onResize={(w, h) => resizeApp(app.id, w, h)}
+            onMaximize={() => maximizeApp(app.id)}
           />
         );
       })}
