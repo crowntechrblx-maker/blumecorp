@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useFadingError } from "./useFadingError";
 
 interface BlumeReport {
   id: string;
@@ -215,14 +216,14 @@ export function BlumeApp({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, fading, setError } = useFadingError();
 
   const [blogPosts, setBlogPosts] = useState<BlumeBlogPost[]>([]);
   const [canEditBlog, setCanEditBlog] = useState(false);
   const [blogTitle, setBlogTitle] = useState("");
   const [blogExcerpt, setBlogExcerpt] = useState("");
   const [blogSubmitting, setBlogSubmitting] = useState(false);
-  const [blogError, setBlogError] = useState<string | null>(null);
+  const { error: blogError, fading: blogFading, setError: setBlogError } = useFadingError();
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -521,7 +522,9 @@ export function BlumeApp({
                 >
                   {blogSubmitting ? "Publishing…" : "Publish"}
                 </button>
-                {blogError && <p className="blume-error">{blogError}</p>}
+                {blogError && (
+                  <p className={`blume-error${blogFading ? " fading-out" : ""}`}>{blogError}</p>
+                )}
               </div>
             )}
 
@@ -665,7 +668,7 @@ export function BlumeApp({
                 >
                   {submitting ? "Filing…" : "File report"}
                 </button>
-                {error && <p className="blume-error">{error}</p>}
+                {error && <p className={`blume-error${fading ? " fading-out" : ""}`}>{error}</p>}
               </div>
               <div className="blume-reports-list">
                 {loadingReports ? (

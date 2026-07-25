@@ -929,9 +929,7 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 text: m.text,
                 createdAt: m.createdAt,
                 isMine: m.fromUsername.toLowerCase() === session.username.toLowerCase(),
-                canDelete:
-                  m.fromUsername.toLowerCase() === session.username.toLowerCase() ||
-                  isAdminOverride,
+                canDelete: isAdminOverride,
               }))
             )
           );
@@ -998,7 +996,7 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 text: entry.text,
                 createdAt: entry.createdAt,
                 isMine: true,
-                canDelete: true,
+                canDelete: false,
               })
             );
           } catch (err) {
@@ -1023,11 +1021,10 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const message = entries[index];
-          const isOwner = message.fromUsername.toLowerCase() === session.username.toLowerCase();
           const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
-          if (!isOwner && !isAdminOverride) {
+          if (!isAdminOverride) {
             res.statusCode = 403;
-            res.end("You can only delete your own messages.");
+            res.end("Only an admin in Admin Mode can delete messages.");
             return;
           }
           entries.splice(index, 1);
@@ -1035,10 +1032,7 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
           appendAuditLog({
             type: "message_deleted",
             username: session.username,
-            detail:
-              isAdminOverride && !isOwner
-                ? `Admin-deleted a message from ${message.fromUsername} to ${message.toUsername}`
-                : "Deleted their own message",
+            detail: `Admin-deleted a message from ${message.fromUsername} to ${message.toUsername}`,
           });
           res.statusCode = 204;
           res.end();

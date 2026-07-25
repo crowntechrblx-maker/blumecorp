@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Avatar } from "./Avatar";
 import { FileButton } from "./FileButton";
+import { useFadingError } from "./useFadingError";
 
 interface Post {
   id: string;
@@ -36,7 +37,7 @@ export function InstagramApp({
   const [text, setText] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [posting, setPosting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, fading, setError } = useFadingError();
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   function loadPosts() {
@@ -142,7 +143,7 @@ export function InstagramApp({
               {posting ? "Posting…" : "Post"}
             </button>
           </div>
-          {error && <p className="upload-error">{error}</p>}
+          {error && <p className={`upload-error${fading ? " fading-out" : ""}`}>{error}</p>}
         </div>
       )}
 

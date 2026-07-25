@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "./Avatar";
+import { useFadingError } from "./useFadingError";
 
 interface UserResult {
   username: string;
@@ -31,7 +32,7 @@ export function MessagesApp({
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, fading, setError } = useFadingError();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -152,7 +153,7 @@ export function MessagesApp({
                       <button
                         className="bubble-delete"
                         onClick={() => handleDeleteMessage(m.id)}
-                        title={m.isMine ? "Delete message" : "Admin delete"}
+                        title="Admin delete"
                       >
                         ✕
                       </button>
@@ -176,7 +177,7 @@ export function MessagesApp({
                   Send
                 </button>
               </div>
-              {error && <p className="upload-error">{error}</p>}
+              {error && <p className={`upload-error${fading ? " fading-out" : ""}`}>{error}</p>}
             </>
           )}
         </div>

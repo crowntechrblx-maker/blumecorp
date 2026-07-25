@@ -53,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         text: m.text,
         createdAt: m.createdAt,
         isMine: m.fromUsername.toLowerCase() === session.username.toLowerCase(),
-        canDelete: m.fromUsername.toLowerCase() === session.username.toLowerCase() || isAdminOverride,
+        canDelete: isAdminOverride,
       }))
     );
     return;
@@ -112,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         text: entry.text,
         createdAt: entry.createdAt,
         isMine: true,
-        canDelete: true,
+        canDelete: false,
       });
     } catch (err) {
       res.status(500).send("Send failed: " + (err as Error).message);
@@ -133,10 +133,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     const message = entries[index];
-    const isOwner = message.fromUsername.toLowerCase() === session.username.toLowerCase();
     const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
-    if (!isOwner && !isAdminOverride) {
-      res.status(403).send("You can only delete your own messages.");
+    if (!isAdminOverride) {
+      res.status(403).send("Only an admin in Admin Mode can delete messages.");
       return;
     }
     entries.splice(index, 1);
@@ -145,9 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await appendAuditLog({
       type: "message_deleted",
       username: session.username,
-      detail: isAdminOverride && !isOwner
-        ? `Admin-deleted a message from ${message.fromUsername} to ${message.toUsername}`
-        : "Deleted their own message",
+      detail: `Admin-deleted a message from ${message.fromUsername} to ${message.toUsername}`,
     });
 
     res.status(204).end();
