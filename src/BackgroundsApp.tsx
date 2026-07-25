@@ -65,49 +65,8 @@ export function BackgroundsApp() {
 
   return (
     <div className="app-content backgrounds">
-      <h2>Backgrounds</h2>
-      <p className="backgrounds-hint">
-        Pick a background below to set it as your desktop wallpaper. Uploads can be shared with
-        everyone, or kept just for you.
-      </p>
-
-      <div className="backgrounds-grid">
-        {items.map((item) => (
-          <button
-            key={item.id}
-            className={`background-thumb ${item.url === wallpaperUrl ? "selected" : ""}`}
-            style={{ backgroundImage: `url(${item.url})` }}
-            onClick={() => setWallpaperUrl(item.url)}
-            title={item.isDefault ? "Default" : `By ${item.ownerUsername}`}
-          >
-            {item.visibility === "private" && <span className="private-badge">Only me</span>}
-            {item.url === wallpaperUrl && <span className="selected-badge">✓</span>}
-          </button>
-        ))}
-      </div>
-
-      <div className="section backgrounds-upload">
+      <div className="backgrounds-upload">
         <h3>Upload a background</h3>
-        <div className="visibility-toggle">
-          <label>
-            <input
-              type="radio"
-              name="visibility"
-              checked={visibility === "public"}
-              onChange={() => setVisibility("public")}
-            />
-            Everyone can use it
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="visibility"
-              checked={visibility === "private"}
-              onChange={() => setVisibility("private")}
-            />
-            Only me
-          </label>
-        </div>
         <div className="backgrounds-upload-row">
           <FileButton
             file={file}
@@ -116,11 +75,43 @@ export function BackgroundsApp() {
             label="Choose image"
             disabled={uploading}
           />
+          <button
+            type="button"
+            className={`visibility-toggle-btn ${visibility}`}
+            onClick={() => setVisibility((v) => (v === "public" ? "private" : "public"))}
+            disabled={uploading}
+            title="Click to switch between public and private"
+          >
+            {visibility === "public" ? "PUBLIC" : "PRIVATE"}
+          </button>
           <button className="cta" disabled={uploading || !file} onClick={handleUpload}>
             {uploading ? "Uploading…" : "Upload"}
           </button>
         </div>
         {error && <p className="upload-error">{error}</p>}
+      </div>
+
+      <div className="backgrounds-body">
+        <p className="backgrounds-hint">
+          Pick a background below to set it as your desktop wallpaper. Uploads can be shared with
+          everyone, or kept just for you.
+        </p>
+
+        <div className="backgrounds-grid">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              className={`background-thumb ${item.url === wallpaperUrl ? "selected" : ""}`}
+              onClick={() => setWallpaperUrl(item.url)}
+              title={item.isDefault ? "Default" : `By ${item.ownerUsername}`}
+            >
+              <img className="background-thumb-img" src={item.url} alt="" />
+              {item.visibility === "private" && <span className="private-badge">Only me</span>}
+              <span className="owner-badge">{item.ownerUsername}</span>
+              {item.url === wallpaperUrl && <span className="selected-badge">✓</span>}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

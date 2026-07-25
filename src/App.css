@@ -661,6 +661,30 @@
 }
 
 /* Backgrounds app */
+.backgrounds {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+}
+.backgrounds-upload {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-shrink: 0;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+  padding: 16px 20px;
+}
+.backgrounds-upload h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+.backgrounds-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
 .backgrounds-hint {
   font-size: 12.5px;
   color: #555;
@@ -677,22 +701,43 @@
   aspect-ratio: 16 / 10;
   border-radius: 8px;
   border: 2px solid transparent;
-  background-size: cover;
-  background-position: center;
   padding: 0;
+  overflow: hidden;
+  background: #1c1c1e;
+}
+.background-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #1c1c1e;
 }
 .background-thumb.selected {
   border-color: #0a84ff;
 }
 .private-badge {
   position: absolute;
-  bottom: 4px;
+  top: 4px;
   left: 4px;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.65);
   color: #fff;
   font-size: 9.5px;
   padding: 2px 6px;
   border-radius: 4px;
+}
+.owner-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 9.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  max-width: calc(100% - 8px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .selected-badge {
   position: absolute;
@@ -708,20 +753,26 @@
   align-items: center;
   justify-content: center;
 }
-.backgrounds-upload {
-  border-top: 1px solid #eee;
-  padding-top: 12px;
-}
-.visibility-toggle {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 10px;
-  font-size: 12.5px;
-}
-.visibility-toggle label {
+.backgrounds-upload-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+}
+.visibility-toggle-btn {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #fff;
+}
+.visibility-toggle-btn.public {
+  background: #0a84ff;
+}
+.visibility-toggle-btn.private {
+  background: #6b7280;
 }
 .upload-status {
   font-size: 12px;
