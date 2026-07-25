@@ -38,7 +38,7 @@ export const APPS: AppDef[] = [
     name: "Swift Corporate",
     icon: "",
     color: "#ff0000",
-    defaultSize: { width: 560, height: 520 },
+    defaultSize: { width: 800, height: 600 },
   },
   {
     id: "maps",
@@ -52,7 +52,7 @@ export const APPS: AppDef[] = [
     name: "PS C&M Rolls",
     icon: "",
     color: "#ff0000",
-    defaultSize: { width: 560, height: 480 },
+    defaultSize: { width: 800, height: 600 },
   },
   {
     id: "royalFamily",

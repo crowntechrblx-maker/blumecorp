@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AppId } from "./apps";
 import { BackgroundsApp } from "./BackgroundsApp";
 import { InstagramApp } from "./InstagramApp";
@@ -38,9 +38,23 @@ function TflContent() {
 function UberContent({ username }: { username: string }) {
   const [location, setLocation] = useState("");
   const [requested, setRequested] = useState(false);
+  const [price, setPrice] = useState<number | null>(null);
+
+  // Wait for the person to finish typing the full location before showing a
+  // price, rather than flashing a number after every keystroke.
+  useEffect(() => {
+    if (!location.trim()) {
+      setPrice(null);
+      return;
+    }
+    const handle = setTimeout(() => {
+      setPrice(Math.random() * 20 + 8);
+    }, 500);
+    return () => clearTimeout(handle);
+  }, [location]);
 
   function handleRequest() {
-    if (!location.trim()) return;
+    if (!location.trim() || price === null) return;
     // No real dispatch API yet — auto-confirm locally for now.
     setRequested(true);
   }
@@ -48,6 +62,7 @@ function UberContent({ username }: { username: string }) {
   function handleReset() {
     setRequested(false);
     setLocation("");
+    setPrice(null);
   }
 
   if (requested) {
@@ -74,15 +89,15 @@ function UberContent({ username }: { username: string }) {
         value={location}
         onChange={(e) => setLocation(e.target.value)}
       />
-      <div className="ride-options">
-        {["UberX", "Comfort", "Black", "XL"].map((r) => (
-          <div className="ride-option" key={r}>
-            <span>{r}</span>
-            <span>£{(Math.random() * 20 + 8).toFixed(2)}</span>
+      {price !== null && (
+        <div className="ride-options">
+          <div className="ride-option">
+            <span>Standard</span>
+            <span>£{price.toFixed(2)}</span>
           </div>
-        ))}
-      </div>
-      <button className="cta" disabled={!location.trim()} onClick={handleRequest}>
+        </div>
+      )}
+      <button className="cta" disabled={!location.trim() || price === null} onClick={handleRequest}>
         Request a taxi
       </button>
     </div>
@@ -90,22 +105,80 @@ function UberContent({ username }: { username: string }) {
 }
 
 function SwiftCorporateContent() {
+  const services = [
+    {
+      icon: "📈",
+      title: "Growth Strategy",
+      copy: "Data-driven roadmaps that turn ambitious targets into a workable quarter-by-quarter plan.",
+    },
+    {
+      icon: "🤝",
+      title: "Corporate Consulting",
+      copy: "Hands-on advisory across operations, structure, and process to keep your business scaling smoothly.",
+    },
+    {
+      icon: "💼",
+      title: "Talent & Hiring",
+      copy: "Building the teams that carry your growth forward, from first hire to full department.",
+    },
+    {
+      icon: "🌍",
+      title: "Market Expansion",
+      copy: "Research and rollout support for businesses looking to expand into new markets and regions.",
+    },
+  ];
+
+  const stats = [
+    { value: "300+", label: "Companies served" },
+    { value: "£120M", label: "Client revenue supported" },
+    { value: "12", label: "Years in business" },
+  ];
+
   return (
     <div className="app-content swift">
-      <h2>Corporate Travel Dashboard</h2>
-      <div className="stat-row">
-        <div className="stat"><strong>128</strong><span>Bookings this month</span></div>
-        <div className="stat"><strong>£42,310</strong><span>Spend</span></div>
-        <div className="stat"><strong>96%</strong><span>On policy</span></div>
+      <div className="swift-hero">
+        <div className="swift-hero-badge">SWIFT CORPORATE</div>
+        <h2 className="swift-motto">Helping Your Company Grow</h2>
+        <p className="swift-hero-sub">
+          Swift Corporate partners with ambitious businesses to plan, staff, and scale — with a
+          dedicated team behind every stage of the journey.
+        </p>
       </div>
-      <table>
-        <thead><tr><th>Traveller</th><th>Route</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td>J. Whitfield</td><td>LHR → JFK</td><td>Confirmed</td></tr>
-          <tr><td>A. Osei</td><td>LCY → CDG</td><td>Pending</td></tr>
-          <tr><td>R. Patel</td><td>LGW → DXB</td><td>Confirmed</td></tr>
-        </tbody>
-      </table>
+
+      <div className="swift-stats">
+        {stats.map((s) => (
+          <div className="swift-stat" key={s.label}>
+            <strong>{s.value}</strong>
+            <span>{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="section">
+        <h3>What we do</h3>
+        <div className="swift-services">
+          {services.map((s) => (
+            <div className="swift-service-card" key={s.title}>
+              <div className="swift-service-icon">{s.icon}</div>
+              <strong>{s.title}</strong>
+              <p>{s.copy}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="section swift-contact">
+        <h3>Ready to grow?</h3>
+        <p>Get in touch with our team and we'll walk you through how Swift Corporate can help.</p>
+        <a
+          className="app-content-cta-link"
+          href="https://discord.gg/93FQDz6Uk"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <button className="cta">Contact us</button>
+        </a>
+      </div>
     </div>
   );
 }
@@ -125,18 +198,80 @@ function MapsContent() {
 }
 
 function PsRollsContent() {
+  const practiceAreas = [
+    {
+      icon: "🏢",
+      title: "Corporate Law",
+      copy: "Advising businesses across Westbridge on structure, contracts, and disputes.",
+    },
+    {
+      icon: "⚖️",
+      title: "Criminal Law",
+      copy: "Robust representation for criminal matters, from first hearing through to trial.",
+    },
+    {
+      icon: "📄",
+      title: "Employment Law",
+      copy: "Guidance for both employers and employees on contracts, disputes, and tribunals.",
+    },
+  ];
+
   return (
     <div className="app-content ps-rolls">
-      <h2>PS C&amp;M Rolls</h2>
-      <table>
-        <thead><tr><th>Roll No.</th><th>Description</th><th>Qty</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td>CM-1042</td><td>Structural steel batch</td><td>24</td><td>Approved</td></tr>
-          <tr><td>CM-1043</td><td>Concrete mix record</td><td>12</td><td>In review</td></tr>
-          <tr><td>CM-1044</td><td>Welding cert roll</td><td>8</td><td>Approved</td></tr>
-        </tbody>
-      </table>
-      <button>Add new roll</button>
+      <div className="rolls-hero">
+        <div className="rolls-hero-badge">C&amp;M ROLLS</div>
+        <h2 className="rolls-motto">"Where Justice Lays"</h2>
+        <p className="rolls-hero-sub">
+          A private law firm operating within Westbridge, catered towards corporate law,
+          criminal law, and employment law.
+        </p>
+      </div>
+
+      <div className="section">
+        <h3>Practice areas</h3>
+        <div className="rolls-services">
+          {practiceAreas.map((p) => (
+            <div className="rolls-service-card" key={p.title}>
+              <div className="rolls-service-icon">{p.icon}</div>
+              <strong>{p.title}</strong>
+              <p>{p.copy}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="section">
+        <h3>Job openings</h3>
+        <p>
+          We have a multitude of job openings available if you wish to take them, as well as
+          being open to taking on new cases too.
+        </p>
+        <p>
+          We're also offering trainee contracts for those wanting to get into PS Law and working
+          within the courts, but just can't seem to find their foothold.
+        </p>
+      </div>
+
+      <div className="section">
+        <h3>Taking new cases</h3>
+        <p>
+          Our doors are open to taking a whole plethora of cases, with a wide array of
+          solicitors and barristers — some who sit on the King's Bench.
+        </p>
+      </div>
+
+      <div className="section rolls-contact">
+        <h3>Any questions?</h3>
+        <p>Feel free to open a ticket and a member of our team will be with you.</p>
+        <a
+          className="app-content-cta-link"
+          href="https://discord.gg/crjrGHbqc"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <button className="cta">Open a ticket</button>
+        </a>
+      </div>
     </div>
   );
 }
