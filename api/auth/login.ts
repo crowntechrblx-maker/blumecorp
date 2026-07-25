@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "node:crypto";
-import { setCookie } from "../lib/cookies";
+import { setCookie } from "../lib/cookies.js";
 
 function b64url(buf: Buffer) {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

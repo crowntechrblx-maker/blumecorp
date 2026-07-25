@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { kv } from "../lib/kv";
+import { kv } from "../lib/kv.js";
 import { del } from "@vercel/blob";
-import { parseCookies } from "../lib/cookies";
-import { decodeSession } from "../lib/session";
+import { parseCookies } from "../lib/cookies.js";
+import { decodeSession } from "../lib/session.js";
 
 interface PostEntry {
   id: string;

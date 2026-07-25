@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { parseCookies, setCookie } from "../lib/cookies";
-import { encodeSession } from "../lib/session";
-import { getRobloxAvatarUrl } from "../lib/roblox";
+import { parseCookies, setCookie } from "../lib/cookies.js";
+import { encodeSession } from "../lib/session.js";
+import { getRobloxAvatarUrl } from "../lib/roblox.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const CLIENT_ID = process.env.ROBLOX_CLIENT_ID || "";
