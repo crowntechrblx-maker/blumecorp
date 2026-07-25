@@ -674,6 +674,20 @@
   padding: 8px 12px;
   border-radius: 16px;
   font-size: 13px;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.bubble-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubble-tick {
+  font-size: 10px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.75);
+  flex-shrink: 0;
+  margin-bottom: 1px;
 }
 .message-compose {
   display: flex;

@@ -4,6 +4,7 @@ import { Avatar } from "./Avatar";
 interface UserResult {
   username: string;
   avatarUrl: string | null;
+  lastSeen?: number;
 }
 
 interface Message {
@@ -95,14 +96,16 @@ export function MessagesApp({
         <div className="messages-sidebar">
           <input
             className="messages-search"
-            placeholder="Search username…"
+            placeholder="Filter by username…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <div className="messages-results">
             {results.length === 0 && (
               <p className="messages-empty-hint">
-                {search.trim() ? "No matching users." : "Search for someone who's signed in."}
+                {search.trim()
+                  ? "No matching users."
+                  : "No one has signed in during the past 7 days."}
               </p>
             )}
             {results.map((u) => (
@@ -127,7 +130,12 @@ export function MessagesApp({
               <div className="message-thread">
                 {messages.map((m) => (
                   <div key={m.id} className={`bubble ${m.isMine ? "outgoing" : "incoming"}`}>
-                    {m.text}
+                    <span className="bubble-text">{m.text}</span>
+                    {m.isMine && (
+                      <span className="bubble-tick" title="Delivered">
+                        ✓✓
+                      </span>
+                    )}
                   </div>
                 ))}
                 {messages.length === 0 && (

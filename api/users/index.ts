@@ -19,12 +19,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const search = ((req.query.search as string) || "").trim().toLowerCase();
-  const users = ((await kv.get<KnownUser[]>("users")) || []).filter(
-    (u) => u.username.toLowerCase() !== session.username.toLowerCase()
-  );
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const users = ((await kv.get<KnownUser[]>("users")) || [])
+    .filter((u) => u.username.toLowerCase() !== session.username.toLowerCase())
+    .filter((u) => u.lastSeen >= sevenDaysAgo)
+    .sort((a, b) => b.lastSeen - a.lastSeen);
   const filtered = search ? users.filter((u) => u.username.toLowerCase().includes(search)) : users;
 
   res
     .status(200)
-    .json(filtered.slice(0, 20).map((u) => ({ username: u.username, avatarUrl: u.avatarUrl })));
+    .json(
+      filtered
+        .slice(0, 100)
+        .map((u) => ({ username: u.username, avatarUrl: u.avatarUrl, lastSeen: u.lastSeen }))
+    );
 }

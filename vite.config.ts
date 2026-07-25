@@ -602,16 +602,20 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const search = (url.searchParams.get("search") || "").trim().toLowerCase();
-          const users = loadUsersDb().filter(
-            (u) => u.username.toLowerCase() !== session.username.toLowerCase()
-          );
+          const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          const users = loadUsersDb()
+            .filter((u) => u.username.toLowerCase() !== session.username.toLowerCase())
+            .filter((u) => u.lastSeen >= sevenDaysAgo)
+            .sort((a, b) => b.lastSeen - a.lastSeen);
           const filtered = search
             ? users.filter((u) => u.username.toLowerCase().includes(search))
             : users;
           res.setHeader("Content-Type", "application/json");
           res.end(
             JSON.stringify(
-              filtered.slice(0, 20).map((u) => ({ username: u.username, avatarUrl: u.avatarUrl }))
+              filtered
+                .slice(0, 100)
+                .map((u) => ({ username: u.username, avatarUrl: u.avatarUrl, lastSeen: u.lastSeen }))
             )
           );
           return;
