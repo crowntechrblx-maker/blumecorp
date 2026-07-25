@@ -15,7 +15,7 @@ type WindowsMap = Partial<Record<AppId, WindowState>>;
 let zCounter = 10;
 
 function App() {
-  const { user, loading, banned, toggleAdminMode } = useAuth();
+  const { user, loading, banned } = useAuth();
   const { wallpaperUrl } = useWallpaper();
   const [windows, setWindows] = useState<WindowsMap>({});
   const [activeApp, setActiveApp] = useState<AppId | null>(null);
@@ -134,13 +134,7 @@ function App() {
   return (
     <div className="desktop-root" style={{ backgroundImage: `url(${wallpaperUrl})` }}>
       <MessageToast />
-      <MenuBar
-        activeAppName={activeAppName}
-        username={user.username}
-        isAdmin={user.isAdmin}
-        adminMode={user.adminMode}
-        onToggleAdminMode={toggleAdminMode}
-      />
+      <MenuBar activeAppName={activeAppName} username={user.username} />
 
       <div className="desktop-icons">
         {visibleApps.map((app) => (
@@ -159,7 +153,6 @@ function App() {
             username={user.username}
             avatarUrl={user.avatarUrl}
             isAdmin={user.isAdmin}
-            adminMode={user.adminMode}
             onClose={() => closeApp(app.id)}
             onFocus={() => focusApp(app.id)}
             onMinimize={() => minimizeApp(app.id)}

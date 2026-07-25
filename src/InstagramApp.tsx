@@ -29,7 +29,6 @@ export function InstagramApp({
 }: {
   username: string;
   isAdmin?: boolean;
-  adminMode?: boolean;
 }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [search, setSearch] = useState("");

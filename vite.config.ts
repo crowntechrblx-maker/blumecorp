@@ -9,7 +9,6 @@ interface RobloxSession {
   username: string;
   displayName: string;
   avatarUrl: string | null;
-  adminMode?: boolean;
 }
 
 interface WallpaperEntry {
@@ -472,7 +471,6 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
               username: profile.preferred_username,
               displayName: profile.nickname || profile.preferred_username,
               avatarUrl,
-              adminMode: false,
             });
 
             upsertKnownUser({
@@ -523,7 +521,6 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
             JSON.stringify({
               ...session,
               isAdmin: isPlatformAdmin(session.userId),
-              adminMode: !!session.adminMode,
               latestIncomingMessage: latest
                 ? {
                     id: latest.id,
@@ -713,7 +710,7 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
           if (search) {
             posts = posts.filter((p) => p.authorUsername.toLowerCase().includes(search));
           }
-          const isAdminOverride = !!(session && isPlatformAdmin(session.userId) && session.adminMode);
+          const isAdminOverride = !!(session && isPlatformAdmin(session.userId));
           const payload = posts.map((p) => ({
             id: p.id,
             authorUsername: p.authorUsername,
@@ -834,7 +831,7 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const post = entries[index];
-          const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
+          const isAdminOverride = isPlatformAdmin(session.userId);
           if (post.authorId !== session.userId && !isAdminOverride) {
             res.statusCode = 403;
             res.end("You can only delete your own posts.");
@@ -942,7 +939,6 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const key = conversationKey(session.username, withUser);
-          const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
           const messages = loadMessagesDb()
             .filter((m) => m.conversationKey === key)
             .sort((a, b) => a.createdAt - b.createdAt);
@@ -955,7 +951,6 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 text: m.text,
                 createdAt: m.createdAt,
                 isMine: m.fromUsername.toLowerCase() === session.username.toLowerCase(),
-                canDelete: isAdminOverride,
               }))
             )
           );
@@ -1022,7 +1017,6 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 text: entry.text,
                 createdAt: entry.createdAt,
                 isMine: true,
-                canDelete: false,
               })
             );
           } catch (err) {
@@ -1047,10 +1041,9 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const message = entries[index];
-          const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
-          if (!isAdminOverride) {
+          if (!isPlatformAdmin(session.userId)) {
             res.statusCode = 403;
-            res.end("Only an admin in Admin Mode can delete messages.");
+            res.end("Only an admin can delete messages.");
             return;
           }
           entries.splice(index, 1);
@@ -1482,13 +1475,23 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
             );
             return;
           }
+          const allMessages = loadMessagesDb()
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .slice(0, 300)
+            .map((m) => ({
+              id: m.id,
+              from: m.fromUsername,
+              to: m.toUsername,
+              text: m.text,
+              createdAt: m.createdAt,
+            }));
           res.setHeader("Content-Type", "application/json");
           res.end(
             JSON.stringify({
               isAdmin: true,
-              adminMode: !!session.adminMode,
               auditLog: getAuditLog(300),
               bans: loadBansDb(),
+              messages: allMessages,
             })
           );
           return;
@@ -1498,12 +1501,6 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
           try {
             const body = await readJsonBody(req);
             const action = (body.action || "").toString();
-            if (action === "toggleAdminMode") {
-              session.adminMode = !session.adminMode;
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ adminMode: session.adminMode }));
-              return;
-            }
             if (action === "ban" || action === "unban") {
               const targetQuery = (body.target || "").toString().trim();
               if (!targetQuery) {

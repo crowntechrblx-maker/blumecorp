@@ -43,7 +43,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({
     ...session,
     isAdmin: isPlatformAdmin(session.userId),
-    adminMode: !!session.adminMode,
     latestIncomingMessage: latest
       ? { id: latest.id, fromUsername: latest.fromUsername, createdAt: latest.createdAt }
       : null,

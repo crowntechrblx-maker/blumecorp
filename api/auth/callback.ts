@@ -82,7 +82,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       username: profile.preferred_username,
       displayName: profile.nickname || profile.preferred_username,
       avatarUrl,
-      adminMode: false,
     };
 
     await upsertKnownUser({ userId: profile.sub, username: profile.preferred_username, avatarUrl });

@@ -40,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       imageUrl: p.imageUrl ?? null,
       createdAt: p.createdAt,
       isMine: session ? p.authorId === session.userId : false,
-      canDelete: session ? p.authorId === session.userId || (isPlatformAdmin(session.userId) && !!session.adminMode) : false,
+      canDelete: session ? p.authorId === session.userId || isPlatformAdmin(session.userId) : false,
     }));
     res.status(200).json(payload);
     return;
@@ -142,7 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const post = entries[index];
-    const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
+    const isAdminOverride = isPlatformAdmin(session.userId);
     if (post.authorId !== session.userId && !isAdminOverride) {
       res.status(403).send("You can only delete your own posts.");
       return;

@@ -3,15 +3,9 @@ import { useEffect, useState } from "react";
 export function MenuBar({
   activeAppName,
   username,
-  isAdmin,
-  adminMode,
-  onToggleAdminMode,
 }: {
   activeAppName: string;
   username: string;
-  isAdmin: boolean;
-  adminMode: boolean;
-  onToggleAdminMode: () => void;
 }) {
   const [now, setNow] = useState(new Date());
 
@@ -39,15 +33,6 @@ export function MenuBar({
         <span className="menubar-item">Help</span>
       </div>
       <div className="menubar-right">
-        {isAdmin && (
-          <button
-            className={`admin-mode-toggle ${adminMode ? "admin-mode-on" : ""}`}
-            onClick={onToggleAdminMode}
-            title="Toggle Admin Mode"
-          >
-            Admin Mode: {adminMode ? "ON" : "OFF"}
-          </button>
-        )}
         <button
           className="menubar-user"
           onClick={() => {

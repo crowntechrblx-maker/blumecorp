@@ -1,10 +1,20 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { parseCookies, setCookie } from "../../lib/cookies.js";
-import { decodeSession, encodeSession } from "../../lib/session.js";
+import { parseCookies } from "../../lib/cookies.js";
+import { decodeSession } from "../../lib/session.js";
 import { isPlatformAdmin, getMemberGroupNames } from "../../lib/roblox.js";
 import { findKnownUser } from "../../lib/known-users.js";
 import { getAuditLog } from "../../lib/audit.js";
 import { getBans, addBan, removeBan } from "../../lib/bans.js";
+import { kv } from "../../lib/kv.js";
+
+interface MessageEntry {
+  id: string;
+  conversationKey: string;
+  fromUsername: string;
+  toUsername: string;
+  text: string;
+  createdAt: number;
+}
 
 // Everything the Settings app needs lives behind this single endpoint
 // (rather than several) to stay within Vercel's Hobby-plan 12-function
@@ -44,12 +54,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const [auditLog, bans] = await Promise.all([getAuditLog(300), getBans()]);
+    const [auditLog, bans, allMessages] = await Promise.all([
+      getAuditLog(300),
+      getBans(),
+      kv.get<MessageEntry[]>("messages"),
+    ]);
+    const messages = (allMessages || [])
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 300)
+      .map((m) => ({
+        id: m.id,
+        from: m.fromUsername,
+        to: m.toUsername,
+        text: m.text,
+        createdAt: m.createdAt,
+      }));
     res.status(200).json({
       isAdmin: true,
-      adminMode: !!session.adminMode,
       auditLog,
       bans,
+      messages,
     });
     return;
   }
@@ -58,15 +82,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const body = req.body as { action?: string; target?: string };
       const action = body.action || "";
-
-      if (action === "toggleAdminMode") {
-        const nextAdminMode = !session.adminMode;
-        setCookie(res, "wb_session", encodeSession({ ...session, adminMode: nextAdminMode }), {
-          maxAge: 60 * 60 * 24 * 30,
-        });
-        res.status(200).json({ adminMode: nextAdminMode });
-        return;
-      }
 
       if (action === "ban" || action === "unban") {
         const targetQuery = (body.target || "").toString().trim();

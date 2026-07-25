@@ -23,9 +23,20 @@ interface TargetCheck {
   groupNames?: string[];
 }
 
+interface AdminMessage {
+  id: string;
+  from: string;
+  to: string;
+  text: string;
+  createdAt: number;
+}
+
 export function SettingsApp() {
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [bans, setBans] = useState<BanEntry[]>([]);
+  const [messages, setMessages] = useState<AdminMessage[]>([]);
+  const [messageFilter, setMessageFilter] = useState("");
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [banInput, setBanInput] = useState("");
   const [checking, setChecking] = useState(false);
@@ -42,8 +53,26 @@ export function SettingsApp() {
       const data = await res.json();
       setAuditLog(data.auditLog || []);
       setBans(data.bans || []);
+      setMessages(data.messages || []);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDeleteMessage(id: string) {
+    setDeletingIds((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch(`/api/messages?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) throw new Error(await res.text());
+      setMessages((prev) => prev.filter((m) => m.id !== id));
+    } catch (err) {
+      setError((err as Error).message || "Couldn't delete that message.");
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -138,6 +167,46 @@ export function SettingsApp() {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="section settings-section">
+        <h3>Messages</h3>
+        <p className="settings-audit-hint">
+          Every message sent across the platform. Delete anything that shouldn't be here.
+        </p>
+        <input
+          className="settings-message-filter"
+          placeholder="Filter by username…"
+          value={messageFilter}
+          onChange={(e) => setMessageFilter(e.target.value)}
+        />
+        <div className="settings-message-list">
+          {messages
+            .filter((m) => {
+              const term = messageFilter.trim().toLowerCase();
+              if (!term) return true;
+              return m.from.toLowerCase().includes(term) || m.to.toLowerCase().includes(term);
+            })
+            .map((m) => (
+              <div className="settings-message-row" key={m.id}>
+                <div className="settings-message-meta">
+                  <strong>{m.from}</strong> → <strong>{m.to}</strong>
+                  <span className="settings-audit-time">
+                    {new Date(m.createdAt).toLocaleString()}
+                  </span>
+                </div>
+                <p className="settings-message-text">{m.text}</p>
+                <button
+                  className="settings-unban-btn"
+                  disabled={deletingIds.has(m.id)}
+                  onClick={() => handleDeleteMessage(m.id)}
+                >
+                  {deletingIds.has(m.id) ? "Deleting…" : "Delete"}
+                </button>
+              </div>
+            ))}
+          {messages.length === 0 && !loading && <p>No messages sent yet.</p>}
+        </div>
       </div>
 
       <div className="section settings-section">

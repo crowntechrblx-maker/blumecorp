@@ -283,14 +283,12 @@ export function AppContent({
   username,
   avatarUrl,
   isAdmin,
-  adminMode,
   onMaximize,
 }: {
   id: AppId;
   username: string;
   avatarUrl: string | null;
   isAdmin: boolean;
-  adminMode: boolean;
   onMaximize?: () => void;
 }) {
   switch (id) {
@@ -309,16 +307,9 @@ export function AppContent({
     case "blume":
       return <BlumeApp username={username} onMaximize={onMaximize} />;
     case "instagram":
-      return <InstagramApp username={username} isAdmin={isAdmin} adminMode={adminMode} />;
+      return <InstagramApp username={username} isAdmin={isAdmin} />;
     case "messages":
-      return (
-        <MessagesApp
-          username={username}
-          avatarUrl={avatarUrl}
-          isAdmin={isAdmin}
-          adminMode={adminMode}
-        />
-      );
+      return <MessagesApp username={username} avatarUrl={avatarUrl} isAdmin={isAdmin} />;
     case "backgrounds":
       return <BackgroundsApp />;
     case "settings":

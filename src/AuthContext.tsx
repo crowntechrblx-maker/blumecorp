@@ -6,7 +6,6 @@ export interface RobloxUser {
   displayName: string;
   avatarUrl: string | null;
   isAdmin: boolean;
-  adminMode: boolean;
 }
 
 export interface MessageNotification {
@@ -19,7 +18,6 @@ interface AuthState {
   loading: boolean;
   banned: boolean;
   refresh: () => void;
-  toggleAdminMode: () => Promise<void>;
   messageNotification: MessageNotification | null;
   clearMessageNotification: () => void;
 }
@@ -29,7 +27,6 @@ const AuthContext = createContext<AuthState>({
   loading: true,
   banned: false,
   refresh: () => {},
-  toggleAdminMode: async () => {},
   messageNotification: null,
   clearMessageNotification: () => {},
 });
@@ -81,9 +78,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
-    // Polled so a ban (or an admin-mode change from another tab) takes
-    // effect for someone already using the site, not just on next login —
-    // and so a new incoming message can trigger a toast promptly.
+    // Polled so a ban takes effect for someone already using the site, not
+    // just on next login — and so a new incoming message can trigger a
+    // toast promptly.
     pollRef.current = setInterval(() => {
       fetch("/api/auth/me")
         .then((r) => r.json())
@@ -94,15 +91,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
-
-  async function toggleAdminMode() {
-    const res = await fetch("/api/admin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "toggleAdminMode" }),
-    });
-    if (res.ok) refresh();
-  }
 
   function clearMessageNotification() {
     setMessageNotification(null);
@@ -115,7 +103,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         banned,
         refresh,
-        toggleAdminMode,
         messageNotification,
         clearMessageNotification,
       }}

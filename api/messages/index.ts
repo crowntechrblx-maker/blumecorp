@@ -42,7 +42,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     const key = conversationKey(session.username, withUser);
-    const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
     const messages = ((await kv.get<MessageEntry[]>("messages")) || [])
       .filter((m) => m.conversationKey === key)
       .sort((a, b) => a.createdAt - b.createdAt);
@@ -53,7 +52,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         text: m.text,
         createdAt: m.createdAt,
         isMine: m.fromUsername.toLowerCase() === session.username.toLowerCase(),
-        canDelete: isAdminOverride,
       }))
     );
     return;
@@ -112,7 +110,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         text: entry.text,
         createdAt: entry.createdAt,
         isMine: true,
-        canDelete: false,
       });
     } catch (err) {
       res.status(500).send("Send failed: " + (err as Error).message);
@@ -133,9 +130,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     const message = entries[index];
-    const isAdminOverride = isPlatformAdmin(session.userId) && !!session.adminMode;
-    if (!isAdminOverride) {
-      res.status(403).send("Only an admin in Admin Mode can delete messages.");
+    if (!isPlatformAdmin(session.userId)) {
+      res.status(403).send("Only an admin can delete messages.");
       return;
     }
     entries.splice(index, 1);
