@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 interface BlumeReport {
   id: string;
@@ -57,7 +57,80 @@ const INDUSTRIES = [
   },
 ];
 
+const FEATURES = [
+  {
+    num: "01",
+    title: "Integrate",
+    copy: "Connect source systems as they are — ERPs, sensors, spreadsheets, legacy databases — without months of migration or a rip-and-replace mandate.",
+  },
+  {
+    num: "02",
+    title: "Model",
+    copy: "Turn raw, disconnected records into a shared object model that reflects how your operation actually works, not how a schema assumed it would.",
+  },
+  {
+    num: "03",
+    title: "Act",
+    copy: "Give operators, analysts, and executives one live surface to monitor, simulate, and commit decisions — with a full record of what changed and why.",
+  },
+];
+
+const APPROACH = [
+  {
+    title: "Weeks, not years",
+    copy: "Deployment starts against your real data in the first weeks of engagement — not after a discovery phase that outlives the contract.",
+  },
+  {
+    title: "Your systems stay",
+    copy: "Blume sits alongside existing infrastructure. Nothing needs to be torn out for the model to go live.",
+  },
+  {
+    title: "Built with your team",
+    copy: "Engineers embed on-site during rollout, and hand over a model your own team can extend without us in the room.",
+  },
+];
+
+const MENU_ITEMS = [
+  { index: "01", label: "Platform", section: "blume-platform" },
+  { index: "02", label: "Industries", section: "blume-industries" },
+  { index: "03", label: "Blog", section: "blume-blog" },
+  { index: "04", label: "Approach", section: "blume-approach" },
+  { index: "05", label: "Company", section: "blume-company" },
+];
+
 const REQUEST_ACCESS_URL = "https://discord.gg/ye7FsHsCTM";
+
+function useReveal<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setRevealed(true);
+            io.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.15, rootMargin: "0px 0px -60px 0px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return { ref, revealed };
+}
+
+function Reveal({ children, className = "" }: { children: ReactNode; className?: string }) {
+  const { ref, revealed } = useReveal<HTMLDivElement>();
+  return (
+    <div ref={ref} className={`blume-reveal ${revealed ? "blume-in" : ""} ${className}`}>
+      {children}
+    </div>
+  );
+}
 
 export function BlumeApp({
   username,
@@ -68,7 +141,7 @@ export function BlumeApp({
 }) {
   const [canAccess, setCanAccess] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [reports, setReports] = useState<BlumeReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
@@ -83,6 +156,8 @@ export function BlumeApp({
   const [blogExcerpt, setBlogExcerpt] = useState("");
   const [blogSubmitting, setBlogSubmitting] = useState(false);
   const [blogError, setBlogError] = useState<string | null>(null);
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   async function loadAccess() {
     try {
@@ -109,7 +184,7 @@ export function BlumeApp({
 
   function handleLogin() {
     if (!canAccess) return;
-    setNavOpen(false);
+    setMenuOpen(false);
     onMaximize?.();
     // Let the window's resize animation get underway before the content
     // swaps, so the transition reads as one fluid motion rather than a cut.
@@ -174,88 +249,247 @@ export function BlumeApp({
     await loadBlog();
   }
 
-  function scrollToSection(sectionId: string) {
-    setNavOpen(false);
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" });
+  function scrollToSection(id: string) {
+    setMenuOpen(false);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   }
 
   return (
     <div className="blume-app">
-      <div className="blume-topbar">
-        <span className="blume-logo">
-          <span className="blume-logo-mark" />
-          Blume
-        </span>
-        <div className="blume-topbar-right">
-          {!loggedIn && canAccess && (
-            <button className="blume-pill-btn" onClick={handleLogin}>
-              Login
-            </button>
-          )}
-          {loggedIn && (
-            <button className="blume-pill-btn blume-pill-btn-ghost" onClick={handleLogout}>
-              Logout
-            </button>
-          )}
+      {!loggedIn && <div className="blume-grain" aria-hidden="true" />}
+
+      <header className="blume-navbar">
+        <div className="blume-nav-inner">
+          <span className="blume-brand">
+            <span className="blume-brand-mark" />
+            <span className="blume-brand-name">Blume</span>
+          </span>
+
           {!loggedIn && (
-            <div className="blume-nav-wrap">
+            <nav className="blume-nav-links">
+              <button onClick={() => scrollToSection("blume-platform")}>Platform</button>
+              <button onClick={() => scrollToSection("blume-industries")}>Industries</button>
+              <button onClick={() => scrollToSection("blume-approach")}>Approach</button>
+              <button onClick={() => scrollToSection("blume-company")}>Company</button>
+            </nav>
+          )}
+
+          <div className="blume-nav-actions">
+            {!loggedIn && canAccess && (
+              <button className="blume-btn-login" onClick={handleLogin}>
+                LOGIN
+              </button>
+            )}
+            {loggedIn && (
+              <button className="blume-btn-login blume-btn-login-ghost" onClick={handleLogout}>
+                LOGOUT
+              </button>
+            )}
+            {!loggedIn && (
               <button
-                className="blume-hamburger"
-                onClick={() => setNavOpen((v) => !v)}
-                aria-label="Menu"
+                className={`blume-btn-menu ${menuOpen ? "blume-open" : ""}`}
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-label="Open menu"
+                aria-expanded={menuOpen}
               >
                 <span />
                 <span />
                 <span />
               </button>
-              {navOpen && (
-                <div className="blume-nav-dropdown">
-                  <button onClick={() => scrollToSection("blume-industries")}>Industries</button>
-                  <button onClick={() => scrollToSection("blume-blog")}>Blog</button>
-                  <a href={REQUEST_ACCESS_URL} target="_blank" rel="noopener noreferrer">
-                    Request access
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      </header>
 
       {!loggedIn && (
-        <div className="blume-scroll">
+        <div className={`blume-menu-overlay ${menuOpen ? "blume-open" : ""}`}>
+          <div className="blume-menu-overlay-inner">
+            <ol className="blume-menu-list">
+              {MENU_ITEMS.map((item) => (
+                <li key={item.section}>
+                  <button onClick={() => scrollToSection(item.section)}>
+                    <span className="blume-menu-index">{item.index}</span>
+                    {item.label}
+                  </button>
+                </li>
+              ))}
+            </ol>
+            <div className="blume-menu-footer">
+              <span>Blume Technologies</span>
+              <span>Est. 2024</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!loggedIn && (
+        <div className="blume-scroll" ref={scrollRef}>
           <section className="blume-hero">
-            <h1 className="blume-hero-title">
-              The world's foremost innovator of high-tech, high-performance security technology.
-            </h1>
-            <a
-              className="blume-request-link"
-              href={REQUEST_ACCESS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <button className="blume-pill-btn blume-pill-btn-solid">Request access</button>
-            </a>
+            <div className="blume-hero-mark" aria-hidden="true" />
+            <div className="blume-hero-content">
+              <p className="blume-eyebrow blume-eyebrow-light">Decision infrastructure</p>
+              <h1>
+                One model of the truth.
+                <br />
+                Every team, working from it.
+              </h1>
+              <p className="blume-hero-sub">
+                Blume connects the data your organization already has — across systems, teams,
+                and vendors — into a single live model, so the people making decisions are never
+                working from a stale picture.
+              </p>
+              <div className="blume-hero-actions">
+                <a
+                  className="blume-btn-primary"
+                  href={REQUEST_ACCESS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Request access
+                </a>
+                <button
+                  className="blume-btn-ghost"
+                  onClick={() => scrollToSection("blume-platform")}
+                >
+                  See the platform ↓
+                </button>
+              </div>
+            </div>
+            <div className="blume-hero-scroll" aria-hidden="true">
+              <span />
+            </div>
+          </section>
+
+          <section className="blume-marquee">
+            <div className="blume-marquee-track">
+              {[0, 1].map((rep) => (
+                <span key={rep}>
+                  {INDUSTRIES.map((ind) => (
+                    <span key={ind.title}>{ind.title} · </span>
+                  ))}
+                </span>
+              ))}
+            </div>
+          </section>
+
+          <section className="blume-platform" id="blume-platform">
+            <Reveal className="blume-section-head">
+              <p className="blume-eyebrow">Platform</p>
+              <h2>Built for the problem underneath the problem.</h2>
+              <p className="blume-section-lede">
+                Most operational failures aren't failures of judgment — they're failures of
+                visibility. Blume closes that gap with three connected layers.
+              </p>
+            </Reveal>
+
+            <div className="blume-feature-grid">
+              {FEATURES.map((f) => (
+                <Reveal className="blume-feature" key={f.num}>
+                  <div className="blume-feature-num">{f.num}</div>
+                  <h3>{f.title}</h3>
+                  <p>{f.copy}</p>
+                </Reveal>
+              ))}
+            </div>
+          </section>
+
+          <section className="blume-showcase">
+            <Reveal className="blume-showcase-media">
+              <div className="blume-mock-window">
+                <div className="blume-mock-bar">
+                  <span />
+                  <span />
+                  <span />
+                  <div className="blume-mock-tabs">
+                    <div className="blume-mock-tab blume-active">Operations</div>
+                    <div className="blume-mock-tab">Assets</div>
+                    <div className="blume-mock-tab">Alerts</div>
+                  </div>
+                </div>
+                <div className="blume-mock-body">
+                  <div className="blume-mock-side">
+                    <div className="blume-mock-row blume-long" />
+                    <div className="blume-mock-row" />
+                    <div className="blume-mock-row" />
+                    <div className="blume-mock-row blume-short" />
+                    <div className="blume-mock-divider" />
+                    <div className="blume-mock-row" />
+                    <div className="blume-mock-row blume-short" />
+                  </div>
+                  <div className="blume-mock-main">
+                    <div className="blume-mock-stat-row">
+                      <div className="blume-mock-stat">
+                        <span className="blume-mock-stat-label">Throughput</span>
+                        <span className="blume-mock-stat-value">94.2%</span>
+                      </div>
+                      <div className="blume-mock-stat">
+                        <span className="blume-mock-stat-label">Open incidents</span>
+                        <span className="blume-mock-stat-value">3</span>
+                      </div>
+                      <div className="blume-mock-stat">
+                        <span className="blume-mock-stat-label">Model freshness</span>
+                        <span className="blume-mock-stat-value">Live</span>
+                      </div>
+                    </div>
+                    <div className="blume-mock-graph">
+                      <svg viewBox="0 0 400 120" preserveAspectRatio="none">
+                        <polyline points="0,90 40,80 80,85 120,60 160,65 200,40 240,50 280,30 320,35 360,15 400,20" />
+                      </svg>
+                    </div>
+                    <div className="blume-mock-list">
+                      <div className="blume-mock-list-row">
+                        <span className="blume-dot" />
+                        Line 3 — capacity model updated
+                      </div>
+                      <div className="blume-mock-list-row">
+                        <span className="blume-dot" />
+                        Vendor feed reconnected — Northgate
+                      </div>
+                      <div className="blume-mock-list-row">
+                        <span className="blume-dot blume-warn" />
+                        Anomaly flagged — cold storage 6
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+            <Reveal className="blume-showcase-copy">
+              <p className="blume-eyebrow blume-eyebrow-light">A single surface</p>
+              <h2>Everyone looks at the same board.</h2>
+              <p>
+                No more reconciling three dashboards before a nine o'clock call. Every
+                stakeholder, from the floor to the board, works against one continuously updated
+                model — so a decision made in one room holds up in the next.
+              </p>
+              <ul className="blume-checklist">
+                <li>Change history on every object, not just every table</li>
+                <li>Permissions that follow the data, not the department</li>
+                <li>Simulations run against the same model that runs live</li>
+              </ul>
+            </Reveal>
           </section>
 
           <section className="blume-industries" id="blume-industries">
-            <div className="blume-section-eyebrow">Industries</div>
-            <h2 className="blume-section-title">
-              Where the stakes are highest, and the data is worst.
-            </h2>
-            <div className="blume-industries-grid">
+            <Reveal className="blume-section-head">
+              <p className="blume-eyebrow">Industries</p>
+              <h2>Where the stakes are highest, and the data is worst.</h2>
+            </Reveal>
+            <div className="blume-industry-grid">
               {INDUSTRIES.map((ind) => (
-                <div className="blume-industry-card" key={ind.title}>
-                  <strong>{ind.title}</strong>
+                <Reveal className="blume-industry-card" key={ind.title}>
+                  <h3>{ind.title}</h3>
                   <p>{ind.copy}</p>
-                </div>
+                </Reveal>
               ))}
             </div>
           </section>
 
           <section className="blume-blog" id="blume-blog">
-            <div className="blume-section-eyebrow">From our blog</div>
-            <h2 className="blume-section-title">Field notes from the Blume team.</h2>
+            <Reveal className="blume-section-head">
+              <p className="blume-eyebrow">From our blog</p>
+              <h2>Field notes from the Blume team.</h2>
+            </Reveal>
 
             {canEditBlog && (
               <div className="blume-blog-form">
@@ -271,7 +505,7 @@ export function BlumeApp({
                   rows={3}
                 />
                 <button
-                  className="blume-pill-btn blume-pill-btn-solid"
+                  className="blume-btn-primary blume-btn-primary-dark"
                   disabled={!blogTitle.trim() || !blogExcerpt.trim() || blogSubmitting}
                   onClick={handleAddBlogPost}
                 >
@@ -281,12 +515,12 @@ export function BlumeApp({
               </div>
             )}
 
-            <div className="blume-blog-grid">
+            <div className="blume-industry-grid">
               {blogPosts.length === 0 ? (
                 <p className="blume-muted">No posts published yet.</p>
               ) : (
                 blogPosts.map((p) => (
-                  <div className="blume-blog-card" key={p.id}>
+                  <Reveal className="blume-industry-card blume-blog-card" key={p.id}>
                     <div className="blume-blog-card-top">
                       <span>{p.readMinutes} min read</span>
                       {canEditBlog && (
@@ -299,16 +533,86 @@ export function BlumeApp({
                         </button>
                       )}
                     </div>
-                    <strong>{p.title}</strong>
+                    <h3>{p.title}</h3>
                     <p>{p.excerpt}</p>
                     <span className="blume-blog-meta">
                       {p.authorUsername} · {new Date(p.createdAt).toLocaleDateString()}
                     </span>
-                  </div>
+                  </Reveal>
                 ))
               )}
             </div>
           </section>
+
+          <section className="blume-approach" id="blume-approach">
+            <div className="blume-approach-inner">
+              <p className="blume-eyebrow blume-eyebrow-light">Approach</p>
+              <h2>We install into how you already work.</h2>
+              <div className="blume-approach-grid">
+                {APPROACH.map((a) => (
+                  <Reveal className="blume-approach-item" key={a.title}>
+                    <h3>{a.title}</h3>
+                    <p>{a.copy}</p>
+                  </Reveal>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="blume-cta" id="blume-company">
+            <Reveal className="blume-cta-inner">
+              <p className="blume-eyebrow">Company</p>
+              <h2>Blume works with organizations who can't afford to guess.</h2>
+              <p>
+                We're a small team building the layer we wish existed the last time an outage, a
+                shortage, or a missed handoff turned out to be a data problem in disguise.
+              </p>
+              <a
+                className="blume-btn-primary blume-btn-primary-dark"
+                href={REQUEST_ACCESS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Talk to us
+              </a>
+            </Reveal>
+          </section>
+
+          <footer className="blume-footer">
+            <div className="blume-footer-inner">
+              <div className="blume-footer-brand">
+                <span className="blume-footer-mark" />
+                <span>Blume</span>
+              </div>
+              <div className="blume-footer-links">
+                <div className="blume-footer-col">
+                  <h4>Product</h4>
+                  <button onClick={() => scrollToSection("blume-platform")}>Platform</button>
+                  <button onClick={() => scrollToSection("blume-industries")}>Industries</button>
+                  <button onClick={() => scrollToSection("blume-approach")}>Approach</button>
+                </div>
+                <div className="blume-footer-col">
+                  <h4>Company</h4>
+                  <button onClick={() => scrollToSection("blume-company")}>About</button>
+                  <a href={REQUEST_ACCESS_URL} target="_blank" rel="noopener noreferrer">
+                    Contact
+                  </a>
+                </div>
+                <div className="blume-footer-col">
+                  <h4>Legal</h4>
+                  <a href="https://www.blumecorp.uk/privacy" target="_blank" rel="noopener noreferrer">
+                    Privacy
+                  </a>
+                  <a href="https://www.blumecorp.uk/tos" target="_blank" rel="noopener noreferrer">
+                    Terms
+                  </a>
+                </div>
+              </div>
+            </div>
+            <div className="blume-footer-bottom">
+              <span>© 2026 Blume Technologies, Inc.</span>
+            </div>
+          </footer>
         </div>
       )}
 
@@ -343,7 +647,7 @@ export function BlumeApp({
                   rows={3}
                 />
                 <button
-                  className="blume-cta"
+                  className="blume-cta-btn"
                   disabled={!title.trim() || !body.trim() || submitting}
                   onClick={handleAddReport}
                 >
