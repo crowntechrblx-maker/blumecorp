@@ -33,7 +33,7 @@ The app now requires signing in with Roblox before the desktop loads, and the si
 8. Restart the dev server (`npm run dev`) so it picks up the new env vars.
 9. Open `http://localhost:5173` — you'll be prompted to sign in with Roblox before the desktop appears.
 
-Auth is currently implemented as an in-memory session handled by Vite's dev server middleware (see `vite.config.ts`), so it only works while `npm run dev` is running locally. It is not wired up for the Vercel deployment yet — that would need a real backend (e.g. Vercel serverless functions) since Vercel doesn't run this dev-only middleware in production.
+For local dev, auth is an in-memory session handled by Vite's dev server middleware (see `vite.config.ts`). It only works while `npm run dev` is running. Production uses a completely separate implementation — see below.
 
 ## Deploy to GitHub + Vercel
 
@@ -50,3 +50,24 @@ Auth is currently implemented as an in-memory session handled by Vite's dev serv
 3. Vercel auto-detects Vite — framework preset "Vite", build command `npm run build`, output directory `dist`. Click Deploy.
 
 Every push to `main` will auto-redeploy.
+
+## Production sign-in, backgrounds, and posts (Vercel)
+
+The dev-server middleware in `vite.config.ts` doesn't exist once deployed — Vercel serves a static build plus a separate `/api` folder of serverless functions. Those functions (`api/auth/*`, `api/wallpapers`, `api/posts`) are what actually power sign-in, backgrounds, and the Instagram feed in production. Serverless functions are stateless and have no persistent local disk, so this version uses:
+
+- A signed cookie for sessions (no server-side memory needed to verify who's logged in).
+- **Upstash Redis** (via Vercel's Marketplace) to store wallpaper and post metadata.
+- **Vercel Blob** to store uploaded images.
+
+To wire it up, in your Vercel project dashboard:
+
+1. **Storage** tab → under **Marketplace Database Providers**, click **Upstash** → create a Redis database and connect it to this project. This adds either `KV_REST_API_URL`/`KV_REST_API_TOKEN` or `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` (the code checks for both, so either naming works).
+2. **Storage** tab → **Create** → **Blob** → connect it to this project. This automatically adds `BLOB_READ_WRITE_TOKEN`.
+3. **Settings** → **Environment Variables**, add:
+   - `ROBLOX_CLIENT_ID` and `ROBLOX_CLIENT_SECRET` — same values from your Roblox OAuth app.
+   - `ROBLOX_REDIRECT_URI` — set to `https://<your-vercel-domain>/api/auth/callback`.
+   - `SESSION_SECRET` — a long random string. Generate one locally with `openssl rand -hex 32` and paste the result in.
+4. On the Roblox Creator Dashboard, open your OAuth app and add a second Redirect URI (in addition to your `localhost` one): `https://<your-vercel-domain>/api/auth/callback`.
+5. Redeploy — new environment variables only take effect on a fresh deployment, so trigger one (push a commit, or use "Redeploy" in the Vercel dashboard).
+
+Once that's done, sign-in, background uploads, and the Instagram feed all work on the live site, backed by real shared storage instead of the local-only dev setup.
