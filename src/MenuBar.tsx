@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
-import { Avatar } from "./Avatar";
 
 export function MenuBar({
   activeAppName,
   username,
-  avatarUrl,
 }: {
   activeAppName: string;
   username: string;
-  avatarUrl: string | null;
 }) {
   const [now, setNow] = useState(new Date());
 
@@ -43,7 +40,6 @@ export function MenuBar({
           }}
           title="Log out"
         >
-          <Avatar url={avatarUrl} size={18} />
           {username}
         </button>
         <span className="menubar-item">{dateStr}</span>

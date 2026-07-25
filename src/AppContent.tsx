@@ -3,7 +3,7 @@ import type { AppId } from "./apps";
 import { BackgroundsApp } from "./BackgroundsApp";
 import { InstagramApp } from "./InstagramApp";
 import { MessagesApp } from "./MessagesApp";
-import { TweetEmbed } from "./TweetEmbed";
+import { RoyalFamilyApp } from "./RoyalFamilyApp";
 
 function TflContent() {
   const lines = [
@@ -141,26 +141,6 @@ function PsRollsContent() {
   );
 }
 
-function RoyalFamilyContent() {
-  return (
-    <div className="app-content royal">
-      <h2>The Royal Family</h2>
-      <div className="royal-grid">
-        {["The King", "The Queen", "The Prince of Wales", "The Princess of Wales"].map((n) => (
-          <div className="royal-card" key={n}>
-            <div className="royal-avatar">👤</div>
-            <span>{n}</span>
-          </div>
-        ))}
-      </div>
-      <div className="section">
-        <h3>Latest post</h3>
-        <TweetEmbed url="https://x.com/psroyalfamily/status/2080749758025527640" />
-      </div>
-    </div>
-  );
-}
-
 function BlumeContent() {
   return <div className="app-content blume" />;
 }
@@ -186,7 +166,7 @@ export function AppContent({
     case "psRolls":
       return <PsRollsContent />;
     case "royalFamily":
-      return <RoyalFamilyContent />;
+      return <RoyalFamilyApp />;
     case "blume":
       return <BlumeContent />;
     case "instagram":

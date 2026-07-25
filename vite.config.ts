@@ -50,6 +50,28 @@ function conversationKey(a: string, b: string): string {
   return [a.toLowerCase(), b.toLowerCase()].sort().join("::");
 }
 
+interface RoyalTweetEntry {
+  id: string;
+  url: string;
+  addedByUsername: string;
+  createdAt: number;
+}
+
+// The "PS Royal Households of the United Kingdom" Roblox community.
+// https://www.roblox.com/communities/35167585/PS-Royal-Households-of-the-United-Kingdom
+const ROYAL_FAMILY_GROUP_ID = 35167585;
+
+async function isRobloxGroupMember(userId: string, groupId: number): Promise<boolean> {
+  try {
+    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    if (!res.ok) return false;
+    const data = (await res.json()) as { data?: { group?: { id?: number } }[] };
+    return (data.data || []).some((entry) => entry.group?.id === groupId);
+  } catch {
+    return false;
+  }
+}
+
 const avatarCache = new Map<string, string | null>();
 
 async function getRobloxAvatarUrl(userId: string): Promise<string | null> {
@@ -691,6 +713,94 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
+const ROYAL_TWEETS_DB = path.resolve(process.cwd(), "royal-tweets-data.json");
+const TWEET_URL_PATTERN = /^https?:\/\/(www\.)?(x\.com|twitter\.com)\/[^/]+\/status\/\d+/i;
+
+function loadRoyalTweetsDb(): RoyalTweetEntry[] {
+  try {
+    return JSON.parse(fs.readFileSync(ROYAL_TWEETS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveRoyalTweetsDb(entries: RoyalTweetEntry[]) {
+  fs.writeFileSync(ROYAL_TWEETS_DB, JSON.stringify(entries, null, 2));
+}
+
+function royalTweetsPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "royal-tweets-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+
+        if (url.pathname === "/api/royal-tweets" && req.method === "GET") {
+          const entries = loadRoyalTweetsDb().sort((a, b) => b.createdAt - a.createdAt);
+          const canAdd = session
+            ? await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID)
+            : false;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              tweets: entries.map((e) => ({
+                id: e.id,
+                url: e.url,
+                addedByUsername: e.addedByUsername,
+                createdAt: e.createdAt,
+              })),
+              canAdd,
+            })
+          );
+          return;
+        }
+
+        if (url.pathname === "/api/royal-tweets" && req.method === "POST") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          const isMember = await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID);
+          if (!isMember) {
+            res.statusCode = 403;
+            res.end("Only members of the Royal Family group can add posts.");
+            return;
+          }
+          try {
+            const body = await readJsonBody(req);
+            const tweetUrl = (body.url || "").toString().trim();
+            if (!TWEET_URL_PATTERN.test(tweetUrl)) {
+              res.statusCode = 400;
+              res.end("That doesn't look like a valid X/Twitter post link.");
+              return;
+            }
+            const entry: RoyalTweetEntry = {
+              id: crypto.randomBytes(12).toString("hex"),
+              url: tweetUrl,
+              addedByUsername: session.username,
+              createdAt: Date.now(),
+            };
+            const entries = loadRoyalTweetsDb();
+            entries.push(entry);
+            saveRoyalTweetsDb(entries);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(entry));
+          } catch (err) {
+            res.statusCode = 500;
+            res.end("Failed to add post: " + (err as Error).message);
+          }
+          return;
+        }
+
+        next();
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -702,6 +812,7 @@ export default defineConfig(({ mode }) => {
       wallpapersPlugin(sessions),
       postsPlugin(sessions),
       messagesPlugin(sessions),
+      royalTweetsPlugin(sessions),
     ],
   };
 });

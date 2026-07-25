@@ -30,3 +30,18 @@ export function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } 
   if (!match) return null;
   return { mime: match[1], buffer: Buffer.from(match[2], "base64") };
 }
+
+// The "PS Royal Households of the United Kingdom" Roblox community.
+// https://www.roblox.com/communities/35167585/PS-Royal-Households-of-the-United-Kingdom
+export const ROYAL_FAMILY_GROUP_ID = 35167585;
+
+export async function isRobloxGroupMember(userId: string, groupId: number): Promise<boolean> {
+  try {
+    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    if (!res.ok) return false;
+    const data = (await res.json()) as { data?: { group?: { id?: number } }[] };
+    return (data.data || []).some((entry) => entry.group?.id === groupId);
+  } catch {
+    return false;
+  }
+}

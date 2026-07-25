@@ -97,11 +97,7 @@ function App() {
 
   return (
     <div className="desktop-root" style={{ backgroundImage: `url(${wallpaperUrl})` }}>
-      <MenuBar
-        activeAppName={activeAppName}
-        username={user.username}
-        avatarUrl={user.avatarUrl}
-      />
+      <MenuBar activeAppName={activeAppName} username={user.username} />
 
       <div className="desktop-icons">
         {APPS.map((app) => (

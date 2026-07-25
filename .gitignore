@@ -26,6 +26,7 @@ posts-data.json
 # Local dev user directory and message history (production uses Upstash instead)
 users-data.json
 messages-data.json
+royal-tweets-data.json
 
 # Editor directories and files
 .vscode/*

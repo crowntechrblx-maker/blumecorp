@@ -410,6 +410,42 @@
 .royal-avatar {
   font-size: 30px;
 }
+.royal-add-section {
+  background: #f6f6f7;
+  border-radius: 8px;
+  padding: 12px;
+}
+.royal-add-form {
+  display: flex;
+  gap: 8px;
+}
+.royal-add-form input {
+  flex: 1;
+}
+.royal-add-error {
+  color: #d92c2c;
+  font-size: 11.5px;
+  margin: 8px 0 0;
+}
+.royal-tweet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.royal-tweet-item {
+  border-bottom: 1px solid #e5e5e7;
+  padding-bottom: 12px;
+}
+.royal-tweet-meta {
+  font-size: 11px;
+  color: #8a8a8e;
+  margin: 6px 0 0;
+}
+.royal-loading,
+.royal-empty {
+  font-size: 12.5px;
+  color: #8a8a8e;
+}
 
 /* Blume */
 .blume-products {
