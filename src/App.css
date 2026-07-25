@@ -1,0 +1,825 @@
+.desktop-root {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background-color: #182848;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Menu bar */
+.menubar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 26px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  font-size: 13px;
+  color: #1c1c1e;
+  z-index: 5000;
+}
+.menubar-left,
+.menubar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.apple-logo {
+  font-size: 14px;
+}
+.menubar-app-name {
+  font-weight: 700;
+}
+.menubar-item {
+  opacity: 0.85;
+}
+
+/* Desktop icons */
+.desktop-icons {
+  position: absolute;
+  top: 40px;
+  right: 18px;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  gap: 6px;
+  height: calc(100vh - 120px);
+  align-content: flex-start;
+}
+
+.desktop-icon {
+  width: 84px;
+  background: transparent;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 8px;
+}
+.desktop-icon:hover,
+.desktop-icon:focus {
+  background: rgba(255, 255, 255, 0.12);
+}
+.desktop-icon-glyph {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.desktop-icon-label {
+  color: #fff;
+  font-size: 11.5px;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  line-height: 1.2;
+}
+
+/* Dock */
+.dock {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  z-index: 5000;
+}
+.dock-item {
+  width: 52px;
+  height: 52px;
+  border-radius: 13px;
+  border: none;
+  font-size: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: transform 0.12s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.dock-item:hover {
+  transform: translateY(-8px) scale(1.08);
+}
+.dock-dot {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* Windows */
+.window {
+  position: absolute;
+  background: #f2f1ee;
+  border-radius: 10px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 300px;
+  min-height: 200px;
+}
+.window.dragging {
+  opacity: 0.95;
+}
+
+.resize-handle {
+  position: absolute;
+  z-index: 10;
+}
+.resize-e {
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+}
+.resize-s {
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 6px;
+  cursor: ns-resize;
+}
+.resize-se {
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+
+.titlebar {
+  height: 34px;
+  background: linear-gradient(#eceae6, #ddd9d3);
+  border-bottom: 1px solid #cac6bf;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 8px;
+  cursor: grab;
+  flex-shrink: 0;
+}
+.traffic-lights {
+  display: flex;
+  gap: 8px;
+}
+.tl {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+}
+.tl.close {
+  background: #ff5f57;
+}
+.tl.minimize {
+  background: #febc2e;
+}
+.tl.zoom {
+  background: #28c840;
+}
+.titlebar-title {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3a3a3c;
+  margin-right: 60px;
+}
+
+.window-body {
+  flex: 1;
+  overflow: auto;
+  background: #fff;
+}
+
+/* Generic app content */
+.app-content {
+  padding: 18px 20px;
+  font-size: 14px;
+  color: #1c1c1e;
+  height: 100%;
+}
+.app-content h2 {
+  font-size: 17px;
+}
+.app-content h3 {
+  font-size: 14px;
+  margin-top: 16px;
+}
+.app-content input {
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid #d1d1d6;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.app-content button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #1c1c1e;
+  color: #fff;
+  font-size: 13px;
+}
+.app-content button.cta {
+  width: 100%;
+  background: #0a84ff;
+}
+.app-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  margin-bottom: 12px;
+}
+.app-content th,
+.app-content td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #eee;
+}
+.section {
+  margin-top: 14px;
+}
+
+/* TfL */
+.line-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+}
+.line-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid #eee;
+}
+.line-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.line-name {
+  flex: 1;
+  font-weight: 600;
+}
+.line-status {
+  font-size: 12px;
+  color: #555;
+}
+
+/* Uber */
+.ride-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+.ride-option {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #f6f6f7;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+/* Swift Corporate */
+.stat-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.stat {
+  flex: 1;
+  background: #f6f6f7;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat strong {
+  font-size: 18px;
+}
+.stat span {
+  font-size: 11px;
+  color: #666;
+}
+
+/* Maps */
+.maps .map-toolbar {
+  margin-bottom: 10px;
+}
+.map-canvas {
+  position: relative;
+  height: calc(100% - 50px);
+  background: #dceadd;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.map-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+.map-pin {
+  position: absolute;
+  top: 45%;
+  left: 48%;
+  font-size: 28px;
+}
+
+/* Royal Family */
+.royal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.royal-card {
+  background: #f6f6f7;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  text-align: center;
+}
+.royal-avatar {
+  font-size: 30px;
+}
+
+/* Blume */
+.blume-products {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.blume-card {
+  background: #fdf1f5;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.blume-swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f5a6c0, #f0d9e4);
+}
+
+/* Instagram */
+.instagram {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+}
+.ig-topbar {
+  display: flex;
+  padding: 12px 14px;
+  gap: 8px;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+}
+.ig-search {
+  flex: 0 0 80%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #d1d1d6;
+  border-radius: 6px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.ig-plus {
+  flex: 0 0 calc(20% - 8px);
+  height: 36px;
+  border: none;
+  border-radius: 6px;
+  background: #d6249f;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ig-compose {
+  padding: 12px 14px;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+}
+.ig-compose textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d1d6;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+.ig-compose-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ig-compose-row button.cta {
+  flex-shrink: 0;
+  width: auto;
+  padding: 8px 16px;
+}
+.ig-feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+.ig-empty {
+  font-size: 13px;
+  color: #888;
+  text-align: center;
+  margin-top: 30px;
+}
+.ig-post-card {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.ig-post-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.ig-post-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f7d794, #f6a6b2 50%, #a29bfe);
+  flex-shrink: 0;
+}
+.ig-post-time {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: #999;
+}
+.ig-post-delete {
+  border: none;
+  background: none;
+  color: #d92626;
+  font-size: 11.5px;
+  padding: 2px 4px;
+}
+.ig-post-delete:hover {
+  text-decoration: underline;
+}
+.ig-post-delete:disabled {
+  opacity: 0.5;
+}
+.ig-post-text {
+  font-size: 13.5px;
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ig-post-image {
+  width: 100%;
+  border-radius: 8px;
+  display: block;
+}
+
+/* Messages */
+.messages {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+}
+.messages-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+}
+.messages-list {
+  padding: 10px 14px;
+  border-bottom: 1px solid #eee;
+}
+.message-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  align-items: center;
+}
+.message-item .avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #c7c7cc;
+  flex-shrink: 0;
+}
+.message-item p {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+}
+.message-thread {
+  flex: 1;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bubble {
+  max-width: 70%;
+  padding: 8px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+}
+.bubble.incoming {
+  align-self: flex-start;
+  background: #e9e9eb;
+  color: #1c1c1e;
+}
+.bubble.outgoing {
+  align-self: flex-end;
+  background: #0a84ff;
+  color: #fff;
+}
+
+/* Boot / login screens */
+.boot-screen {
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+}
+
+.login-screen {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #4b6cb7 0%, #182848 55%, #0f1c33 100%);
+}
+.login-card {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 18px;
+  padding: 40px 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  text-align: center;
+  min-width: 320px;
+}
+.login-glyph {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: #1c1c1e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.login-card h1 {
+  font-size: 20px;
+  margin: 0;
+}
+.login-card p {
+  font-size: 13px;
+  opacity: 0.85;
+  margin-bottom: 8px;
+}
+.login-button {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 10px 22px;
+  background: #00a2ff;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.login-button:hover {
+  background: #0086d1;
+}
+
+/* Backgrounds app */
+.backgrounds-hint {
+  font-size: 12.5px;
+  color: #555;
+  margin-bottom: 14px;
+}
+.backgrounds-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.background-thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-size: cover;
+  background-position: center;
+  padding: 0;
+}
+.background-thumb.selected {
+  border-color: #0a84ff;
+}
+.private-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 9.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.selected-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: #0a84ff;
+  color: #fff;
+  font-size: 10px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.backgrounds-upload {
+  border-top: 1px solid #eee;
+  padding-top: 12px;
+}
+.visibility-toggle {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+}
+.visibility-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.upload-status {
+  font-size: 12px;
+  color: #666;
+  margin-top: 6px;
+}
+.upload-error {
+  font-size: 12px;
+  color: #d92626;
+  margin-top: 6px;
+}
+
+.menubar-user {
+  cursor: pointer;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+  opacity: 0.85;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.menubar-user:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+/* Avatar */
+.avatar-img {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.avatar-fallback {
+  background: #c7c7cc;
+}
+
+/* Custom file picker button */
+.file-button-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.file-button {
+  border: 1px solid #d1d1d6;
+  background: #f2f2f5;
+  color: #1c1c1e;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.file-button:hover {
+  background: #e6e6ea;
+}
+.file-button:disabled {
+  opacity: 0.5;
+}
+.file-button-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.file-button-clear {
+  border: none;
+  background: none;
+  color: #888;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.file-button-clear:hover {
+  color: #d92626;
+}
+.file-button-input {
+  display: none;
+}
+
+.backgrounds-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.backgrounds-upload-row button.cta {
+  width: auto;
+  flex-shrink: 0;
+}
