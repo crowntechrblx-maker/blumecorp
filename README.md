@@ -53,7 +53,7 @@ Every push to `main` will auto-redeploy.
 
 ## Production sign-in, backgrounds, and posts (Vercel)
 
-The dev-server middleware in `vite.config.ts` doesn't exist once deployed — Vercel serves a static build plus a separate `/api` folder of serverless functions. Those functions (`api/auth/*`, `api/wallpapers`, `api/posts`) are what actually power sign-in, backgrounds, and the Instagram feed in production. Serverless functions are stateless and have no persistent local disk, so this version uses:
+The dev-server middleware in `vite.config.ts` doesn't exist once deployed — Vercel serves a static build plus a separate `/api` folder of serverless functions. Those functions (`api/auth/*`, `api/wallpapers`, `api/posts`, `api/users`, `api/messages`) are what actually power sign-in, backgrounds, the Instagram feed, and Messages in production. Serverless functions are stateless and have no persistent local disk, so this version uses:
 
 - A signed cookie for sessions (no server-side memory needed to verify who's logged in).
 - **Upstash Redis** (via Vercel's Marketplace) to store wallpaper and post metadata.

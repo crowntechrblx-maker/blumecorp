@@ -1,7 +1,9 @@
+import { useState } from "react";
 import type { AppId } from "./apps";
 import { BackgroundsApp } from "./BackgroundsApp";
 import { InstagramApp } from "./InstagramApp";
-import { Avatar } from "./Avatar";
+import { MessagesApp } from "./MessagesApp";
+import { TweetEmbed } from "./TweetEmbed";
 
 function TflContent() {
   const lines = [
@@ -33,11 +35,45 @@ function TflContent() {
   );
 }
 
-function UberContent() {
+function UberContent({ username }: { username: string }) {
+  const [location, setLocation] = useState("");
+  const [requested, setRequested] = useState(false);
+
+  function handleRequest() {
+    if (!location.trim()) return;
+    // No real dispatch API yet — auto-confirm locally for now.
+    setRequested(true);
+  }
+
+  function handleReset() {
+    setRequested(false);
+    setLocation("");
+  }
+
+  if (requested) {
+    return (
+      <div className="app-content uber">
+        <div className="uber-confirmed">
+          <div className="uber-confirmed-icon">🚗</div>
+          <h2>Taxi confirmed</h2>
+          <p className="uber-on-way">{username} is on the way.</p>
+          <p className="uber-pickup-note">Pickup: {location}</p>
+        </div>
+        <button className="cta" onClick={handleReset}>
+          Request another
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="app-content uber">
       <h2>Where to?</h2>
-      <input placeholder="Enter destination" />
+      <input
+        placeholder="Enter your location"
+        value={location}
+        onChange={(e) => setLocation(e.target.value)}
+      />
       <div className="ride-options">
         {["UberX", "Comfort", "Black", "XL"].map((r) => (
           <div className="ride-option" key={r}>
@@ -46,7 +82,9 @@ function UberContent() {
           </div>
         ))}
       </div>
-      <button className="cta">Confirm Ride</button>
+      <button className="cta" disabled={!location.trim()} onClick={handleRequest}>
+        Request a taxi
+      </button>
     </div>
   );
 }
@@ -116,9 +154,8 @@ function RoyalFamilyContent() {
         ))}
       </div>
       <div className="section">
-        <h3>Latest news</h3>
-        <p>Placeholder headline about a royal engagement.</p>
-        <p>Placeholder headline about a state visit.</p>
+        <h3>Latest post</h3>
+        <TweetEmbed url="https://x.com/psroyalfamily/status/2080749758025527640" />
       </div>
     </div>
   );
@@ -126,43 +163,6 @@ function RoyalFamilyContent() {
 
 function BlumeContent() {
   return <div className="app-content blume" />;
-}
-
-function MessagesContent({
-  username,
-  avatarUrl,
-}: {
-  username: string;
-  avatarUrl: string | null;
-}) {
-  const chats = [
-    { name: "Mum", preview: "Call me when you're free x" },
-    { name: "Work", preview: "Meeting moved to 3pm" },
-    { name: "Alex", preview: "Sounds good, see you then" },
-  ];
-  return (
-    <div className="app-content messages">
-      <div className="messages-header">
-        <Avatar url={avatarUrl} size={22} />
-        <strong>{username}</strong>
-      </div>
-      <div className="messages-list">
-        {chats.map((c) => (
-          <div className="message-item" key={c.name}>
-            <div className="avatar" />
-            <div>
-              <strong>{c.name}</strong>
-              <p>{c.preview}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="message-thread">
-        <div className="bubble incoming">Hey, are we still on for later?</div>
-        <div className="bubble outgoing">Yep, see you at 6</div>
-      </div>
-    </div>
-  );
 }
 
 export function AppContent({
@@ -178,7 +178,7 @@ export function AppContent({
     case "tfl":
       return <TflContent />;
     case "uber":
-      return <UberContent />;
+      return <UberContent username={username} />;
     case "swiftCorporate":
       return <SwiftCorporateContent />;
     case "maps":
@@ -192,7 +192,7 @@ export function AppContent({
     case "instagram":
       return <InstagramApp username={username} />;
     case "messages":
-      return <MessagesContent username={username} avatarUrl={avatarUrl} />;
+      return <MessagesApp username={username} avatarUrl={avatarUrl} />;
     case "backgrounds":
       return <BackgroundsApp />;
     default:

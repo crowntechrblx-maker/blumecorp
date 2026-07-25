@@ -30,6 +30,26 @@ interface PostEntry {
   createdAt: number;
 }
 
+interface KnownUser {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  lastSeen: number;
+}
+
+interface MessageEntry {
+  id: string;
+  conversationKey: string;
+  fromUsername: string;
+  toUsername: string;
+  text: string;
+  createdAt: number;
+}
+
+function conversationKey(a: string, b: string): string {
+  return [a.toLowerCase(), b.toLowerCase()].sort().join("::");
+}
+
 const avatarCache = new Map<string, string | null>();
 
 async function getRobloxAvatarUrl(userId: string): Promise<string | null> {
@@ -79,6 +99,32 @@ function readJsonBody(req: Connect.IncomingMessage): Promise<any> {
     });
     req.on("error", reject);
   });
+}
+
+const USERS_DB = path.resolve(process.cwd(), "users-data.json");
+
+function loadUsersDb(): KnownUser[] {
+  try {
+    return JSON.parse(fs.readFileSync(USERS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveUsersDb(entries: KnownUser[]) {
+  fs.writeFileSync(USERS_DB, JSON.stringify(entries, null, 2));
+}
+
+function upsertKnownUser(user: { userId: string; username: string; avatarUrl: string | null }) {
+  const users = loadUsersDb();
+  const index = users.findIndex((u) => u.userId === user.userId);
+  const entry: KnownUser = { ...user, lastSeen: Date.now() };
+  if (index === -1) {
+    users.push(entry);
+  } else {
+    users[index] = entry;
+  }
+  saveUsersDb(users);
 }
 
 function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, RobloxSession>): Plugin {
@@ -165,6 +211,12 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
               userId: profile.sub,
               username: profile.preferred_username,
               displayName: profile.nickname || profile.preferred_username,
+              avatarUrl,
+            });
+
+            upsertKnownUser({
+              userId: profile.sub,
+              username: profile.preferred_username,
               avatarUrl,
             });
 
@@ -498,6 +550,147 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
+const MESSAGES_DB = path.resolve(process.cwd(), "messages-data.json");
+
+function loadMessagesDb(): MessageEntry[] {
+  try {
+    return JSON.parse(fs.readFileSync(MESSAGES_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveMessagesDb(entries: MessageEntry[]) {
+  fs.writeFileSync(MESSAGES_DB, JSON.stringify(entries, null, 2));
+}
+
+function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "messages-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+
+        if (url.pathname === "/api/users" && req.method === "GET") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          const search = (url.searchParams.get("search") || "").trim().toLowerCase();
+          const users = loadUsersDb().filter(
+            (u) => u.username.toLowerCase() !== session.username.toLowerCase()
+          );
+          const filtered = search
+            ? users.filter((u) => u.username.toLowerCase().includes(search))
+            : users;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify(
+              filtered.slice(0, 20).map((u) => ({ username: u.username, avatarUrl: u.avatarUrl }))
+            )
+          );
+          return;
+        }
+
+        if (url.pathname === "/api/messages" && req.method === "GET") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          const withUser = (url.searchParams.get("with") || "").trim();
+          if (!withUser) {
+            res.statusCode = 400;
+            res.end("Missing 'with' query parameter.");
+            return;
+          }
+          const key = conversationKey(session.username, withUser);
+          const messages = loadMessagesDb()
+            .filter((m) => m.conversationKey === key)
+            .sort((a, b) => a.createdAt - b.createdAt);
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify(
+              messages.map((m) => ({
+                id: m.id,
+                from: m.fromUsername,
+                text: m.text,
+                createdAt: m.createdAt,
+                isMine: m.fromUsername.toLowerCase() === session.username.toLowerCase(),
+              }))
+            )
+          );
+          return;
+        }
+
+        if (url.pathname === "/api/messages" && req.method === "POST") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in to send a message.");
+            return;
+          }
+          try {
+            const body = await readJsonBody(req);
+            const to = (body.to || "").toString().trim();
+            const text = (body.text || "").toString().trim();
+            if (!to || !text) {
+              res.statusCode = 400;
+              res.end("Both 'to' and 'text' are required.");
+              return;
+            }
+            if (text.length > 2000) {
+              res.statusCode = 400;
+              res.end("Message is too long (max 2000 characters).");
+              return;
+            }
+            const knownUsers = loadUsersDb();
+            const recipient = knownUsers.find(
+              (u) => u.username.toLowerCase() === to.toLowerCase()
+            );
+            if (!recipient) {
+              res.statusCode = 404;
+              res.end("That user hasn't signed in to Westbridge OS.");
+              return;
+            }
+
+            const entry: MessageEntry = {
+              id: crypto.randomBytes(12).toString("hex"),
+              conversationKey: conversationKey(session.username, to),
+              fromUsername: session.username,
+              toUsername: recipient.username,
+              text,
+              createdAt: Date.now(),
+            };
+            const entries = loadMessagesDb();
+            entries.push(entry);
+            saveMessagesDb(entries);
+
+            res.setHeader("Content-Type", "application/json");
+            res.end(
+              JSON.stringify({
+                id: entry.id,
+                from: entry.fromUsername,
+                text: entry.text,
+                createdAt: entry.createdAt,
+                isMine: true,
+              })
+            );
+          } catch (err) {
+            res.statusCode = 500;
+            res.end("Send failed: " + (err as Error).message);
+          }
+          return;
+        }
+
+        next();
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -508,6 +701,7 @@ export default defineConfig(({ mode }) => {
       robloxOAuthPlugin(env, sessions),
       wallpapersPlugin(sessions),
       postsPlugin(sessions),
+      messagesPlugin(sessions),
     ],
   };
 });

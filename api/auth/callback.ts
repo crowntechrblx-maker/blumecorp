@@ -2,6 +2,30 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { parseCookies, setCookie } from "../lib/cookies.js";
 import { encodeSession } from "../lib/session.js";
 import { getRobloxAvatarUrl } from "../lib/roblox.js";
+import { kv } from "../lib/kv.js";
+
+interface KnownUser {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  lastSeen: number;
+}
+
+async function upsertKnownUser(user: {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+}) {
+  const users = (await kv.get<KnownUser[]>("users")) || [];
+  const index = users.findIndex((u) => u.userId === user.userId);
+  const entry: KnownUser = { ...user, lastSeen: Date.now() };
+  if (index === -1) {
+    users.push(entry);
+  } else {
+    users[index] = entry;
+  }
+  await kv.set("users", users);
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const CLIENT_ID = process.env.ROBLOX_CLIENT_ID || "";
@@ -52,6 +76,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       displayName: profile.nickname || profile.preferred_username,
       avatarUrl,
     };
+
+    await upsertKnownUser({ userId: profile.sub, username: profile.preferred_username, avatarUrl });
 
     setCookie(res, "wb_session", encodeSession(session), { maxAge: 60 * 60 * 24 * 30 });
     setCookie(res, "wb_oauth_verifier", "", { maxAge: 0 });

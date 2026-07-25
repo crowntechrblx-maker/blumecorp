@@ -322,6 +322,23 @@
   border-radius: 8px;
   font-size: 13px;
 }
+.uber-confirmed {
+  text-align: center;
+  padding: 30px 10px 20px;
+}
+.uber-confirmed-icon {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+.uber-on-way {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.uber-pickup-note {
+  font-size: 12.5px;
+  color: #666;
+}
 
 /* Swift Corporate */
 .stat-row {
@@ -554,28 +571,59 @@
   padding: 10px 14px;
   border-bottom: 1px solid #eee;
   font-size: 13px;
+  flex-shrink: 0;
 }
-.messages-list {
-  padding: 10px 14px;
-  border-bottom: 1px solid #eee;
+.messages-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.messages-sidebar {
+  width: 40%;
+  min-width: 140px;
+  border-right: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+}
+.messages-search {
+  margin: 10px;
+  padding: 7px 10px;
+  border: 1px solid #d1d1d6;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+.messages-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 6px 10px;
 }
 .message-item {
   display: flex;
-  gap: 10px;
-  padding: 8px 0;
+  gap: 8px;
+  padding: 8px;
   align-items: center;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 13px;
 }
-.message-item .avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: #c7c7cc;
-  flex-shrink: 0;
+.message-item:hover,
+.message-item.active {
+  background: #f0f0f2;
 }
-.message-item p {
-  margin: 0;
+.messages-empty-hint {
   font-size: 12px;
-  color: #666;
+  color: #888;
+  padding: 10px;
+  text-align: center;
+}
+.message-thread-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 .message-thread {
   flex: 1;
@@ -583,12 +631,36 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow-y: auto;
 }
 .bubble {
   max-width: 70%;
   padding: 8px 12px;
   border-radius: 16px;
   font-size: 13px;
+}
+.message-compose {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid #eee;
+}
+.message-compose input {
+  flex: 1;
+  margin-bottom: 0;
+}
+.message-compose button.cta {
+  width: auto;
+  flex-shrink: 0;
+}
+
+/* Tweet embed */
+.tweet-embed {
+  max-width: 100%;
+  overflow: hidden;
+}
+.tweet-embed iframe {
+  max-width: 100%;
 }
 .bubble.incoming {
   align-self: flex-start;
