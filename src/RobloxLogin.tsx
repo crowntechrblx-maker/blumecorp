@@ -13,11 +13,11 @@ export function RobloxLogin() {
           Sign in with Roblox
         </a>
         <div className="login-legal">
-          <a href="https://www.blumecorp.uk/tos" target="_blank" rel="noopener noreferrer">
+          <a href="/tos.html" target="_blank" rel="noopener noreferrer">
             Terms of Service
           </a>
           <span aria-hidden="true">·</span>
-          <a href="https://www.blumecorp.uk/privacy" target="_blank" rel="noopener noreferrer">
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
             Privacy Policy
           </a>
         </div>
