@@ -1,3 +1,15 @@
+// Some communities reject anonymous requests to their member-list endpoints
+// (confirmed on group 765550426) even though everything else about the
+// group stays publicly readable. Setting ROBLOX_SCAN_COOKIE to a dedicated,
+// permission-less account's .ROBLOSECURITY value gets those requests
+// treated as a logged-in user instead of a bot, which is enough — no group
+// membership or admin rights on that account are required.
+const ROBLOX_SCAN_COOKIE = process.env.ROBLOX_SCAN_COOKIE || "";
+
+export function robloxHeaders(): Record<string, string> {
+  return ROBLOX_SCAN_COOKIE ? { Cookie: `.ROBLOSECURITY=${ROBLOX_SCAN_COOKIE}` } : {};
+}
+
 // Simple in-memory cache. Only helps within a single warm serverless
 // instance, but avoids redundant lookups during a burst of requests.
 const avatarCache = new Map<string, string | null>();
@@ -6,7 +18,8 @@ export async function getRobloxAvatarUrl(userId: string): Promise<string | null>
   if (avatarCache.has(userId)) return avatarCache.get(userId)!;
   try {
     const res = await fetch(
-      `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=true`
+      `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=true`,
+      { headers: robloxHeaders() }
     );
     const data = (await res.json()) as { data?: { imageUrl?: string }[] };
     const url = data.data?.[0]?.imageUrl || null;
@@ -37,7 +50,9 @@ export const ROYAL_FAMILY_GROUP_ID = 35167585;
 
 export async function isRobloxGroupMember(userId: string, groupId: number): Promise<boolean> {
   try {
-    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`, {
+      headers: robloxHeaders(),
+    });
     if (!res.ok) return false;
     const data = (await res.json()) as { data?: { group?: { id?: number } }[] };
     return (data.data || []).some((entry) => entry.group?.id === groupId);
@@ -64,7 +79,9 @@ export function extractGroupId(input: string): string {
 // isRobloxGroupMember call per candidate group.
 export async function getUserGroupIds(userId: string): Promise<number[]> {
   try {
-    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`, {
+      headers: robloxHeaders(),
+    });
     if (!res.ok) return [];
     const data = (await res.json()) as { data?: { group?: { id?: number } }[] };
     return (data.data || [])
@@ -84,7 +101,9 @@ export async function resolveRobloxUserId(
   if (!trimmed) return null;
   if (/^\d+$/.test(trimmed)) {
     try {
-      const res = await fetch(`https://users.roblox.com/v1/users/${trimmed}`);
+      const res = await fetch(`https://users.roblox.com/v1/users/${trimmed}`, {
+        headers: robloxHeaders(),
+      });
       if (!res.ok) return null;
       const data = (await res.json()) as { id?: number; name?: string };
       if (!data.id) return null;
@@ -96,7 +115,7 @@ export async function resolveRobloxUserId(
   try {
     const res = await fetch("https://users.roblox.com/v1/usernames/users", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...robloxHeaders() },
       body: JSON.stringify({ usernames: [trimmed], excludeBannedUsers: false }),
     });
     if (!res.ok) return null;
@@ -149,7 +168,9 @@ const groupNameCache = new Map<number, string | null>();
 export async function getRobloxGroupName(groupId: number): Promise<string | null> {
   if (groupNameCache.has(groupId)) return groupNameCache.get(groupId)!;
   try {
-    const res = await fetch(`https://groups.roblox.com/v1/groups/${groupId}`);
+    const res = await fetch(`https://groups.roblox.com/v1/groups/${groupId}`, {
+      headers: robloxHeaders(),
+    });
     if (!res.ok) {
       groupNameCache.set(groupId, null);
       return null;

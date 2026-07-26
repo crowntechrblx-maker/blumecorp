@@ -13,6 +13,11 @@ dist-ssr
 *.local
 *.bak
 
+# Secrets — never commit real cookies/tokens (e.g. ROBLOX_SCAN_COOKIE)
+.env
+.env.*
+!.env.local.example
+
 # Runtime-uploaded backgrounds and their metadata (user-generated, not source)
 public/wallpapers/uploads/*
 !public/wallpapers/uploads/.gitkeep

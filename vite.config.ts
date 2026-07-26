@@ -63,13 +63,24 @@ const ROYAL_FAMILY_GROUP_ID = 35167585;
 
 async function isRobloxGroupMember(userId: string, groupId: number): Promise<boolean> {
   try {
-    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`, {
+      headers: robloxHeaders(),
+    });
     if (!res.ok) return false;
     const data = (await res.json()) as { data?: { group?: { id?: number } }[] };
     return (data.data || []).some((entry) => entry.group?.id === groupId);
   } catch {
     return false;
   }
+}
+
+// Mirrors lib/roblox.ts's robloxHeaders exactly — some communities reject
+// anonymous member-list requests, so a dedicated account's session cookie
+// (set via ROBLOX_SCAN_COOKIE in .env, bridged into process.env below) gets
+// those requests treated as logged-in instead of anonymous/bot traffic.
+function robloxHeaders(): Record<string, string> {
+  const cookie = process.env.ROBLOX_SCAN_COOKIE || "";
+  return cookie ? { Cookie: `.ROBLOSECURITY=${cookie}` } : {};
 }
 
 // Accepts either a bare group ID or a full group URL and returns just the
@@ -83,7 +94,9 @@ function extractGroupId(input: string): string {
 
 async function getUserGroupIds(userId: string): Promise<number[]> {
   try {
-    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`, {
+      headers: robloxHeaders(),
+    });
     if (!res.ok) return [];
     const data = (await res.json()) as { data?: { group?: { id?: number } }[] };
     return (data.data || [])
@@ -101,7 +114,9 @@ async function resolveRobloxUserId(
   if (!trimmed) return null;
   if (/^\d+$/.test(trimmed)) {
     try {
-      const res = await fetch(`https://users.roblox.com/v1/users/${trimmed}`);
+      const res = await fetch(`https://users.roblox.com/v1/users/${trimmed}`, {
+        headers: robloxHeaders(),
+      });
       if (!res.ok) return null;
       const data = (await res.json()) as { id?: number; name?: string };
       if (!data.id) return null;
@@ -113,7 +128,7 @@ async function resolveRobloxUserId(
   try {
     const res = await fetch("https://users.roblox.com/v1/usernames/users", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...robloxHeaders() },
       body: JSON.stringify({ usernames: [trimmed], excludeBannedUsers: false }),
     });
     if (!res.ok) return null;
@@ -1818,7 +1833,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               const gUrl = `https://groups.roblox.com/v1/groups/${encodeURIComponent(groupId)}/users?limit=100${
                 cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
               }`;
-              const groupRes = await fetch(gUrl);
+              const groupRes = await fetch(gUrl, { headers: robloxHeaders() });
               if (!groupRes.ok) {
                 res.statusCode = 400;
                 res.end(`Couldn't load group members (status ${groupRes.status}). Check the group ID.`);
@@ -2108,6 +2123,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  if (env.ROBLOX_SCAN_COOKIE) process.env.ROBLOX_SCAN_COOKIE = env.ROBLOX_SCAN_COOKIE;
   const sessions = new Map<string, RobloxSession>();
   return {
     plugins: [

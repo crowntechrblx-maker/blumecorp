@@ -11,6 +11,7 @@ import {
   getUserGroupIds,
   resolveRobloxUserId,
   extractGroupId,
+  robloxHeaders,
   PERSON_SEARCH_GROUPS,
 } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
@@ -95,7 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const url = `https://groups.roblox.com/v1/groups/${encodeURIComponent(groupId)}/users?limit=100${
           cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
         }`;
-        const groupRes = await fetch(url);
+        const groupRes = await fetch(url, { headers: robloxHeaders() });
         if (!groupRes.ok) {
           res.status(400).send(`Couldn't load group members (status ${groupRes.status}). Check the group ID.`);
           return;
