@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { kv } from "../../lib/kv.js";
-import { put } from "@vercel/blob";
+import { put, del } from "@vercel/blob";
 import crypto from "node:crypto";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
-import { MIME_EXT, parseDataUrl } from "../../lib/roblox.js";
+import { MIME_EXT, parseDataUrl, isPlatformAdmin } from "../../lib/roblox.js";
+import { appendAuditLog } from "../../lib/audit.js";
 
 interface WallpaperEntry {
   id: string;
@@ -39,6 +40,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ownerUsername: w.ownerUsername,
         isDefault: false,
         isMine: session ? w.ownerId === session.userId : false,
+        canDelete: session
+          ? w.ownerId === session.userId || isPlatformAdmin(session.userId)
+          : false,
       })),
     ];
     res.status(200).json(payload);
@@ -92,10 +96,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ownerUsername: entry.ownerUsername,
         isDefault: false,
         isMine: true,
+        canDelete: true,
       });
     } catch (err) {
       res.status(500).send("Upload failed: " + (err as Error).message);
     }
+    return;
+  }
+
+  if (req.method === "DELETE") {
+    if (!session) {
+      res.status(401).send("You must be signed in.");
+      return;
+    }
+    const id = (req.query.id as string) || "";
+    const entries = (await kv.get<WallpaperEntry[]>("wallpapers")) || [];
+    const index = entries.findIndex((w) => w.id === id);
+    if (index === -1) {
+      res.status(404).send("Background not found.");
+      return;
+    }
+    const wallpaper = entries[index];
+    const isOwner = wallpaper.ownerId === session.userId;
+    const isAdminOverride = isPlatformAdmin(session.userId);
+    if (!isOwner && !isAdminOverride) {
+      res.status(403).send("You can only delete backgrounds you uploaded.");
+      return;
+    }
+
+    try {
+      await del(wallpaper.url);
+    } catch {
+      // Ignore blob delete failures; the metadata removal below still succeeds.
+    }
+
+    entries.splice(index, 1);
+    await kv.set("wallpapers", entries);
+
+    await appendAuditLog({
+      type: "background_deleted",
+      username: session.username,
+      detail:
+        isAdminOverride && !isOwner
+          ? `Admin-deleted a background uploaded by ${wallpaper.ownerUsername}`
+          : "Deleted their own background",
+    });
+
+    res.status(204).end();
     return;
   }
 

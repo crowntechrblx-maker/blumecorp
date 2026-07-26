@@ -602,6 +602,9 @@ function wallpapersPlugin(sessions: Map<string, RobloxSession>): Plugin {
               ownerUsername: w.ownerUsername,
               isDefault: false,
               isMine: session ? w.ownerId === session.userId : false,
+              canDelete: session
+                ? w.ownerId === session.userId || isPlatformAdmin(session.userId)
+                : false,
             })),
           ];
           res.setHeader("Content-Type", "application/json");
@@ -663,12 +666,52 @@ function wallpapersPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 ownerUsername: entry.ownerUsername,
                 isDefault: false,
                 isMine: true,
+                canDelete: true,
               })
             );
           } catch (err) {
             res.statusCode = 500;
             res.end("Upload failed: " + (err as Error).message);
           }
+          return;
+        }
+
+        if (url.pathname === "/api/wallpapers" && req.method === "DELETE") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          const id = url.searchParams.get("id") || "";
+          const entries = loadWallpaperDb();
+          const index = entries.findIndex((w) => w.id === id);
+          if (index === -1) {
+            res.statusCode = 404;
+            res.end("Background not found.");
+            return;
+          }
+          const wallpaper = entries[index];
+          const isOwner = wallpaper.ownerId === session.userId;
+          const isAdminOverride = isPlatformAdmin(session.userId);
+          if (!isOwner && !isAdminOverride) {
+            res.statusCode = 403;
+            res.end("You can only delete backgrounds you uploaded.");
+            return;
+          }
+          const filePath = path.join(WALLPAPER_DIR, wallpaper.filename);
+          fs.rm(filePath, { force: true }, () => {});
+          entries.splice(index, 1);
+          saveWallpaperDb(entries);
+          appendAuditLog({
+            type: "background_deleted",
+            username: session.username,
+            detail:
+              isAdminOverride && !isOwner
+                ? `Admin-deleted a background uploaded by ${wallpaper.ownerUsername}`
+                : "Deleted their own background",
+          });
+          res.statusCode = 204;
+          res.end();
           return;
         }
 

@@ -2313,14 +2313,45 @@
   gap: 10px;
   margin-bottom: 6px;
 }
+.background-thumb-wrap {
+  position: relative;
+}
 .background-thumb {
   position: relative;
+  width: 100%;
   aspect-ratio: 16 / 10;
   border-radius: 8px;
   border: 2px solid transparent;
   padding: 0;
   overflow: hidden;
   background: #1c1c1e;
+}
+.background-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.background-delete-btn:hover {
+  opacity: 1;
+  background: #d92626;
+}
+.background-delete-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 .background-thumb-img {
   width: 100%;

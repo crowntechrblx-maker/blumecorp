@@ -9,6 +9,7 @@ interface WallpaperItem {
   ownerUsername: string;
   isDefault: boolean;
   isMine?: boolean;
+  canDelete?: boolean;
 }
 
 export function BackgroundsApp() {
@@ -18,6 +19,7 @@ export function BackgroundsApp() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   function loadWallpapers() {
     fetch("/api/wallpapers")
@@ -63,6 +65,26 @@ export function BackgroundsApp() {
     }
   }
 
+  async function handleDelete(item: WallpaperItem) {
+    setDeletingIds((prev) => new Set(prev).add(item.id));
+    try {
+      const res = await fetch(`/api/wallpapers?id=${encodeURIComponent(item.id)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok && res.status !== 204) throw new Error(await res.text());
+      setItems((prev) => prev.filter((w) => w.id !== item.id));
+      if (item.url === wallpaperUrl) setWallpaperUrl("/wallpapers/default.webp");
+    } catch (err) {
+      setError((err as Error).message || "Couldn't delete that background.");
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
+    }
+  }
+
   return (
     <div className="app-content backgrounds">
       <div className="backgrounds-upload">
@@ -99,17 +121,31 @@ export function BackgroundsApp() {
 
         <div className="backgrounds-grid">
           {items.map((item) => (
-            <button
-              key={item.id}
-              className={`background-thumb ${item.url === wallpaperUrl ? "selected" : ""}`}
-              onClick={() => setWallpaperUrl(item.url)}
-              title={item.isDefault ? "Default" : `By ${item.ownerUsername}`}
-            >
-              <img className="background-thumb-img" src={item.url} alt="" />
-              {item.visibility === "private" && <span className="private-badge">Only me</span>}
-              <span className="owner-badge">{item.ownerUsername}</span>
-              {item.url === wallpaperUrl && <span className="selected-badge">✓</span>}
-            </button>
+            <div key={item.id} className="background-thumb-wrap">
+              <button
+                className={`background-thumb ${item.url === wallpaperUrl ? "selected" : ""}`}
+                onClick={() => setWallpaperUrl(item.url)}
+                title={item.isDefault ? "Default" : `By ${item.ownerUsername}`}
+              >
+                <img className="background-thumb-img" src={item.url} alt="" />
+                {item.visibility === "private" && <span className="private-badge">Only me</span>}
+                <span className="owner-badge">{item.ownerUsername}</span>
+                {item.url === wallpaperUrl && <span className="selected-badge">✓</span>}
+              </button>
+              {item.canDelete && !item.isDefault && (
+                <button
+                  className="background-delete-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(item);
+                  }}
+                  disabled={deletingIds.has(item.id)}
+                  title={item.isMine ? "Delete background" : "Admin delete"}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           ))}
         </div>
       </div>
