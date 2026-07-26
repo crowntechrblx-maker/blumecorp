@@ -200,13 +200,6 @@ const GROUP_VIEWER_SECTIONS: PersonGroup[] = [
   { id: 1033941381, name: "Consulate of the People's Republic of China", tier: "white" },
 ];
 
-const PLACEHOLDER_ACTIVE = [
-  { username: "n.harrow", role: "Field" },
-  { username: "t.ackland", role: "Analyst" },
-  { username: "r.voss", role: "Field" },
-  { username: "k.imani", role: "Command" },
-];
-
 const PLACEHOLDER_PINS = [
   { label: "Westbridge Central", x: 38, y: 44 },
   { label: "Docklands", x: 68, y: 62 },
@@ -393,6 +386,13 @@ export function BlumeApp({
   const [loggedIn, setLoggedIn] = useState(false);
   const heroIndex = useHeroCycle(HERO_IMAGES.length, HERO_CYCLE_MS);
 
+  const [activeAgents, setActiveAgents] = useState<{ username: string; role: string }[]>([]);
+  const [gamePlaceId, setGamePlaceId] = useState<string | null>(null);
+  const [showPlaceIdForm, setShowPlaceIdForm] = useState(false);
+  const [placeIdInput, setPlaceIdInput] = useState("");
+  const [savingPlaceId, setSavingPlaceId] = useState(false);
+  const { error: placeIdError, fading: placeIdFading, setError: setPlaceIdError } = useFadingError();
+
   const [reports, setReports] = useState<BlumeReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
   const [title, setTitle] = useState("");
@@ -464,6 +464,49 @@ export function BlumeApp({
     loadAccess();
     loadBlog();
   }, []);
+
+  async function loadActiveAgents() {
+    try {
+      const res = await fetch("/api/blume-search?activeAgents=1");
+      if (!res.ok) return;
+      const data = await res.json();
+      setActiveAgents(data.agents || []);
+      setGamePlaceId(data.gamePlaceId || null);
+    } catch {
+      // Best-effort — the strip just stays empty if this fails.
+    }
+  }
+
+  async function handleSavePlaceId() {
+    setSavingPlaceId(true);
+    setPlaceIdError(null);
+    try {
+      const res = await fetch("/api/blume-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setActiveGamePlaceId", placeId: placeIdInput.trim() }),
+      });
+      if (!res.ok) {
+        setPlaceIdError(await res.text());
+        return;
+      }
+      const data = await res.json();
+      setGamePlaceId(data.activeGamePlaceId || null);
+      setShowPlaceIdForm(false);
+      await loadActiveAgents();
+    } finally {
+      setSavingPlaceId(false);
+    }
+  }
+
+  // Presence changes constantly, so refresh it periodically while the
+  // dashboard is actually open rather than fetching it once and going stale.
+  useEffect(() => {
+    if (!loggedIn) return;
+    loadActiveAgents();
+    const id = window.setInterval(loadActiveAgents, 45000);
+    return () => window.clearInterval(id);
+  }, [loggedIn]);
 
   function handleLogin() {
     if (!canAccess) return;
@@ -1065,15 +1108,51 @@ export function BlumeApp({
       {loggedIn && (
         <div className="blume-dashboard">
           <div className="blume-active-strip">
-            <span className="blume-active-label">ACTIVE FIELD AGENTS</span>
-            <div className="blume-active-list">
-              {PLACEHOLDER_ACTIVE.map((a) => (
-                <div className="blume-active-chip" key={a.username}>
-                  <span className="blume-status-dot" />
-                  <span className="blume-active-name">{a.username}</span>
-                  <span className="blume-active-role">{a.role}</span>
+            <div className="blume-active-label-group">
+              <span className="blume-active-label">ACTIVE USERS</span>
+              {canEditBlog && (
+                <button
+                  className="blume-active-config-btn"
+                  title="Set game ID"
+                  onClick={() => {
+                    setPlaceIdInput(gamePlaceId || "");
+                    setShowPlaceIdForm((s) => !s);
+                  }}
+                >
+                  +
+                </button>
+              )}
+              {showPlaceIdForm && (
+                <div className="blume-active-config-form">
+                  <input
+                    placeholder="Game (place) ID…"
+                    value={placeIdInput}
+                    onChange={(e) => setPlaceIdInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !savingPlaceId) handleSavePlaceId();
+                    }}
+                  />
+                  <button className="blume-cta-btn" disabled={savingPlaceId} onClick={handleSavePlaceId}>
+                    {savingPlaceId ? "Saving…" : "Save"}
+                  </button>
+                  {placeIdError && (
+                    <p className={`blume-error${placeIdFading ? " fading-out" : ""}`}>{placeIdError}</p>
+                  )}
                 </div>
-              ))}
+              )}
+            </div>
+            <div className="blume-active-list">
+              {activeAgents.length === 0 ? (
+                <span className="blume-muted">None currently in-game</span>
+              ) : (
+                activeAgents.map((a) => (
+                  <div className="blume-active-chip" key={a.username}>
+                    <span className="blume-status-dot" />
+                    <span className="blume-active-name">{a.username}</span>
+                    <span className="blume-active-role">{a.role}</span>
+                  </div>
+                ))
+              )}
             </div>
             <button className="blume-btn-login blume-btn-login-ghost blume-logout-btn" onClick={handleLogout}>
               LOGOUT

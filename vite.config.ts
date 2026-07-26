@@ -1726,6 +1726,21 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
 const READONLY_API = "https://polarisreadonly.up.railway.app";
 const BLUME_SEARCH_HISTORY_DB = path.resolve(process.cwd(), "blume-search-history-data.json");
 const BLUME_VEHICLE_TAGS_DB = path.resolve(process.cwd(), "blume-vehicle-tags-data.json");
+const BLUME_SETTINGS_DB = path.resolve(process.cwd(), "blume-settings-data.json");
+
+interface BlumeSettings {
+  activeGamePlaceId?: string;
+}
+function loadBlumeSettings(): BlumeSettings {
+  try {
+    return JSON.parse(fs.readFileSync(BLUME_SETTINGS_DB, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+function saveBlumeSettings(settings: BlumeSettings) {
+  fs.writeFileSync(BLUME_SETTINGS_DB, JSON.stringify(settings, null, 2));
+}
 const BLUME_GROUP_SCAN_DB = path.resolve(process.cwd(), "blume-group-scan-data.json");
 const HISTORY_PER_PERSON_CAP = 20;
 const GROUP_SCAN_FRESH_MS = 6 * 60 * 60 * 1000;
@@ -1792,8 +1807,16 @@ function saveVehicleTagsDb(entries: VehicleTag[]) {
 function relevantGroups(groupIds: number[]) {
   return groupIds
     .filter((id) => id in PERSON_SEARCH_GROUPS)
-    .map((id) => ({ id, ...PERSON_SEARCH_GROUPS[id] }));
+    .map((id) => ({ id, ...PERSON_SEARCH_GROUPS[id] }))
+    .sort((a, b) => (a.tier === b.tier ? 0 : a.tier === "red" ? -1 : 1));
 }
+
+const AGENT_GROUPS: { id: number; label: string }[] = [
+  { id: 187507831, label: "CIA" },
+  { id: 154853936, label: "MI5" },
+  { id: 685466511, label: "MI6" },
+  { id: 315987361, label: "ROCU" },
+];
 
 function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
   return {
@@ -1820,6 +1843,59 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
         }
 
         if (req.method === "GET") {
+          if (url.searchParams.get("activeAgents")) {
+            const settings = loadBlumeSettings();
+            const gamePlaceId = settings.activeGamePlaceId
+              ? Number(settings.activeGamePlaceId)
+              : null;
+            const agentGroupIds = AGENT_GROUPS.map((g) => g.id);
+            const all = loadGroupScanDb();
+            const candidates = all.filter((m) =>
+              m.groupIds.some((id) => agentGroupIds.includes(id))
+            );
+            if (candidates.length === 0) {
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ agents: [], gamePlaceId: settings.activeGamePlaceId || null }));
+              return;
+            }
+            try {
+              const agents: { username: string; role: string }[] = [];
+              for (let i = 0; i < candidates.length; i += 100) {
+                const batch = candidates.slice(i, i + 100);
+                const presRes = await fetch("https://presence.roblox.com/v1/presence/users", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", ...robloxHeaders() },
+                  body: JSON.stringify({ userIds: batch.map((m) => Number(m.userId)) }),
+                });
+                if (!presRes.ok) continue;
+                const data = (await presRes.json()) as {
+                  userPresences?: {
+                    userId?: number;
+                    userPresenceType?: number;
+                    rootPlaceId?: number;
+                    placeId?: number;
+                  }[];
+                };
+                for (const p of data.userPresences || []) {
+                  if (p.userPresenceType !== 2) continue;
+                  if (gamePlaceId && p.rootPlaceId !== gamePlaceId && p.placeId !== gamePlaceId) continue;
+                  const member = batch.find((m) => Number(m.userId) === p.userId);
+                  if (!member) continue;
+                  const roles = AGENT_GROUPS.filter((g) => member.groupIds.includes(g.id)).map(
+                    (g) => g.label
+                  );
+                  agents.push({ username: member.username, role: roles.join(" / ") });
+                }
+              }
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ agents, gamePlaceId: settings.activeGamePlaceId || null }));
+            } catch (err) {
+              res.statusCode = 500;
+              res.end("Couldn't reach Roblox's presence API: " + (err as Error).message);
+            }
+            return;
+          }
+
           const groupMembersOf = url.searchParams.get("groupMembers") || "";
           if (groupMembersOf) {
             if (!isBlumeSuperUser(session.userId)) {
@@ -1983,6 +2059,26 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           try {
             const body = await readJsonBody(req);
             const action = (body.action || "").toString();
+
+            if (action === "setActiveGamePlaceId") {
+              if (!isBlumeSuperUser(session.userId)) {
+                res.statusCode = 403;
+                res.end("Only Blume operators can change this.");
+                return;
+              }
+              const placeId = (body.placeId || "").toString().trim();
+              if (placeId && !/^\d+$/.test(placeId)) {
+                res.statusCode = 400;
+                res.end("Place ID must be numeric (or blank to clear it).");
+                return;
+              }
+              const settings = loadBlumeSettings();
+              settings.activeGamePlaceId = placeId || undefined;
+              saveBlumeSettings(settings);
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ activeGamePlaceId: settings.activeGamePlaceId || null }));
+              return;
+            }
 
             if (action === "scanMember") {
               if (!isBlumeSuperUser(session.userId)) {

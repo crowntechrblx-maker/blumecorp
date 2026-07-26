@@ -61,7 +61,29 @@ const GROUP_SCAN_FRESH_MS = 6 * 60 * 60 * 1000;
 function relevantGroups(groupIds: number[]) {
   return groupIds
     .filter((id) => id in PERSON_SEARCH_GROUPS)
-    .map((id) => ({ id, ...PERSON_SEARCH_GROUPS[id] }));
+    .map((id) => ({ id, ...PERSON_SEARCH_GROUPS[id] }))
+    .sort((a, b) => (a.tier === b.tier ? 0 : a.tier === "red" ? -1 : 1));
+}
+
+// The four agencies "Active Field Agents" watches for. Kept separate from
+// PERSON_SEARCH_GROUPS/BLUME_GROUP_IDS since it's its own specific list, not
+// tied to Blume-access grants or the red/white tiering.
+const AGENT_GROUPS: { id: number; label: string }[] = [
+  { id: 187507831, label: "CIA" },
+  { id: 154853936, label: "MI5" },
+  { id: 685466511, label: "MI6" },
+  { id: 315987361, label: "ROCU" },
+];
+
+// The game's Place ID isn't stable (the user's said the link changes), so
+// it's an editable setting rather than a constant — the 3 super users can
+// update it from the dashboard instead of needing a code change each time.
+interface BlumeSettings {
+  activeGamePlaceId?: string;
+}
+
+async function loadBlumeSettings(): Promise<BlumeSettings> {
+  return (await kv.get<BlumeSettings>("blumeSettings")) || {};
 }
 
 // This endpoint doubles up on both Person Search and its vehicle tagging
@@ -81,6 +103,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "GET") {
+    // Active Field Agents: of everyone we've ever scanned into the group
+    // cache who belongs to CIA/MI5/MI6/ROCU, which ones does Roblox's
+    // presence API say are actually in a game right now. Only covers people
+    // who've been swept up by a Group Search scan of one of those groups —
+    // it can't see members it's never encountered.
+    if (req.query.activeAgents) {
+      const settings = await loadBlumeSettings();
+      const gamePlaceId = settings.activeGamePlaceId
+        ? Number(settings.activeGamePlaceId)
+        : null;
+      const agentGroupIds = AGENT_GROUPS.map((g) => g.id);
+      const all = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
+      const candidates = all.filter((m) => m.groupIds.some((id) => agentGroupIds.includes(id)));
+      if (candidates.length === 0) {
+        res.status(200).json({ agents: [], gamePlaceId: settings.activeGamePlaceId || null });
+        return;
+      }
+      try {
+        const agents: { username: string; role: string }[] = [];
+        for (let i = 0; i < candidates.length; i += 100) {
+          const batch = candidates.slice(i, i + 100);
+          const presRes = await fetch("https://presence.roblox.com/v1/presence/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...robloxHeaders() },
+            body: JSON.stringify({ userIds: batch.map((m) => Number(m.userId)) }),
+          });
+          if (!presRes.ok) continue;
+          const data = (await presRes.json()) as {
+            userPresences?: {
+              userId?: number;
+              userPresenceType?: number;
+              rootPlaceId?: number;
+              placeId?: number;
+            }[];
+          };
+          for (const p of data.userPresences || []) {
+            if (p.userPresenceType !== 2) continue; // 2 = actually in a game
+            if (gamePlaceId && p.rootPlaceId !== gamePlaceId && p.placeId !== gamePlaceId) continue;
+            const member = batch.find((m) => Number(m.userId) === p.userId);
+            if (!member) continue;
+            const roles = AGENT_GROUPS.filter((g) => member.groupIds.includes(g.id)).map(
+              (g) => g.label
+            );
+            agents.push({ username: member.username, role: roles.join(" / ") });
+          }
+        }
+        res.status(200).json({ agents, gamePlaceId: settings.activeGamePlaceId || null });
+      } catch (err) {
+        res.status(500).send("Couldn't reach Roblox's presence API: " + (err as Error).message);
+      }
+      return;
+    }
+
     // Group Search: page through a Roblox group's member list. Restricted to
     // the 3 super users since this is the on-ramp for bulk-scanning real
     // people's data, not a general Person Search capability.
@@ -249,8 +324,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         vehicleType?: string;
         id?: string;
         force?: boolean;
+        placeId?: string;
       };
       const action = body.action || "";
+
+      if (action === "setActiveGamePlaceId") {
+        if (!isBlumeSuperUser(session.userId)) {
+          res.status(403).send("Only Blume operators can change this.");
+          return;
+        }
+        const placeId = (body.placeId || "").toString().trim();
+        if (placeId && !/^\d+$/.test(placeId)) {
+          res.status(400).send("Place ID must be numeric (or blank to clear it).");
+          return;
+        }
+        const settings = await loadBlumeSettings();
+        settings.activeGamePlaceId = placeId || undefined;
+        await kv.set("blumeSettings", settings);
+        res.status(200).json({ activeGamePlaceId: settings.activeGamePlaceId || null });
+        return;
+      }
 
       if (action === "scanMember") {
         if (!isBlumeSuperUser(session.userId)) {

@@ -39,6 +39,7 @@ audit-log-data.json
 blume-search-history-data.json
 blume-vehicle-tags-data.json
 blume-group-scan-data.json
+blume-settings-data.json
 
 # Editor directories and files
 .vscode/*
