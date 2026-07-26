@@ -2129,6 +2129,16 @@
   padding: 1px 6px;
   border-radius: 999px;
 }
+/* Same shape as the red-group tag, but neutral — for an agent's role
+   (CIA/MI5/MI6/ROCU) rather than a red-tier group flag. */
+.blume-ingame-role {
+  font-size: 10px;
+  color: var(--blume-accent, #9fc7ec);
+  background: rgba(159, 199, 236, 0.1);
+  border: 1px solid rgba(159, 199, 236, 0.3);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
 
 .blume-search-panel input,
 .blume-group-search-panel input,

@@ -173,8 +173,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Field Activity's in-game list: everyone we've ever scanned (any
     // group, not just the agent ones) who's actually in a game right now.
-    // Anyone in a red-tier group gets that group's name attached, same as
-    // Person Search / Group Viewer already flag red groups.
+    // Anyone in a red-tier group gets that group's name attached (same as
+    // Person Search / Group Viewer), and anyone in one of the 4 agent
+    // groups gets their role attached too — one merged list rather than a
+    // separate "Active agents" section. Red-tier people sort to the top.
     if (req.query.activeInGame) {
       const settings = await loadBlumeSettings();
       const gamePlaceId = settings.activeGamePlaceId
@@ -190,9 +192,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const users = inGame
           .map((m) => {
             const redGroup = relevantGroups(m.groupIds).find((g) => g.tier === "red");
-            return { username: m.username, avatarUrl: m.avatarUrl, redGroupName: redGroup?.name || null };
+            const role =
+              AGENT_GROUPS.filter((g) => m.groupIds.includes(g.id))
+                .map((g) => g.label)
+                .join(" / ") || null;
+            return {
+              username: m.username,
+              avatarUrl: m.avatarUrl,
+              redGroupName: redGroup?.name || null,
+              role,
+            };
           })
-          .sort((a, b) => a.username.localeCompare(b.username));
+          .sort((a, b) => {
+            if (!!a.redGroupName !== !!b.redGroupName) return a.redGroupName ? -1 : 1;
+            return a.username.localeCompare(b.username);
+          });
         res.status(200).json({ users });
       } catch (err) {
         res.status(500).send("Couldn't reach Roblox's presence API: " + (err as Error).message);

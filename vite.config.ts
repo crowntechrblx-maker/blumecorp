@@ -1973,13 +1973,21 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               const users = inGame
                 .map((m) => {
                   const redGroup = relevantGroups(m.groupIds).find((g) => g.tier === "red");
+                  const role =
+                    AGENT_GROUPS.filter((g) => m.groupIds.includes(g.id))
+                      .map((g) => g.label)
+                      .join(" / ") || null;
                   return {
                     username: m.username,
                     avatarUrl: m.avatarUrl,
                     redGroupName: redGroup?.name || null,
+                    role,
                   };
                 })
-                .sort((a, b) => a.username.localeCompare(b.username));
+                .sort((a, b) => {
+                  if (!!a.redGroupName !== !!b.redGroupName) return a.redGroupName ? -1 : 1;
+                  return a.username.localeCompare(b.username);
+                });
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ users }));
             } catch (err) {

@@ -389,7 +389,7 @@ export function BlumeApp({
 
   const [activeAgents, setActiveAgents] = useState<{ username: string; role: string }[]>([]);
   const [inGameUsers, setInGameUsers] = useState<
-    { username: string; avatarUrl: string | null; redGroupName: string | null }[]
+    { username: string; avatarUrl: string | null; redGroupName: string | null; role: string | null }[]
   >([]);
   const [gamePlaceId, setGamePlaceId] = useState<string | null>(null);
   const [showPlaceIdForm, setShowPlaceIdForm] = useState(false);
@@ -1268,22 +1268,6 @@ export function BlumeApp({
               {!collapsedPanels.map && (
                 <div className="blume-map-body">
                   <div className="blume-ingame-list">
-                    <span className="blume-person-label">Active agents</span>
-                    {activeAgents.length === 0 ? (
-                      <p className="blume-muted">None currently in-game.</p>
-                    ) : (
-                      <div className="blume-active-list">
-                        {activeAgents.map((a) => (
-                          <div className="blume-active-chip" key={a.username}>
-                            <span className="blume-status-dot" />
-                            <span className="blume-active-name">{a.username}</span>
-                            <span className="blume-active-role">{a.role}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="blume-ingame-list">
                     <span className="blume-person-label">In game now</span>
                     {inGameUsers.length === 0 ? (
                       <p className="blume-muted">Nobody currently in-game.</p>
@@ -1296,6 +1280,7 @@ export function BlumeApp({
                             {u.redGroupName && (
                               <span className="blume-ingame-red-group">{u.redGroupName}</span>
                             )}
+                            {u.role && <span className="blume-ingame-role">{u.role}</span>}
                           </div>
                         ))}
                       </div>
