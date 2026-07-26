@@ -10,6 +10,7 @@ import {
   getRobloxAvatarUrl,
   getUserGroupIds,
   resolveRobloxUserId,
+  getRobloxFriends,
   extractGroupId,
   robloxHeaders,
   PERSON_SEARCH_GROUPS,
@@ -170,8 +171,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Surveillance Grid's side list: everyone we've ever scanned (any group,
-    // not just the agent ones) who's actually in a game right now.
+    // Field Activity's in-game list: everyone we've ever scanned (any
+    // group, not just the agent ones) who's actually in a game right now.
+    // Anyone in a red-tier group gets that group's name attached, same as
+    // Person Search / Group Viewer already flag red groups.
     if (req.query.activeInGame) {
       const settings = await loadBlumeSettings();
       const gamePlaceId = settings.activeGamePlaceId
@@ -185,7 +188,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const inGame = await findInGamePresence(candidates, gamePlaceId);
         const users = inGame
-          .map((m) => ({ username: m.username, avatarUrl: m.avatarUrl }))
+          .map((m) => {
+            const redGroup = relevantGroups(m.groupIds).find((g) => g.tier === "red");
+            return { username: m.username, avatarUrl: m.avatarUrl, redGroupName: redGroup?.name || null };
+          })
           .sort((a, b) => a.username.localeCompare(b.username));
         res.status(200).json({ users });
       } catch (err) {
@@ -304,6 +310,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (v) => v.userId === userId
     );
 
+    // Friends who are ALREADY in our system — someone else has searched
+    // them before, or they've been swept up by a Group Search scan. Never
+    // look up or list a friend who isn't already known to us; the point is
+    // cross-referencing existing records, not expanding who we track.
+    const [allHistoryForFriends, groupScanForFriends, friends] = await Promise.all([
+      kv.get<SearchSnapshot[]>("blumeSearchHistory"),
+      kv.get<GroupScanEntry[]>("blumeGroupScanCache"),
+      getRobloxFriends(userId),
+    ]);
+    const historyList = allHistoryForFriends || [];
+    const scanList = groupScanForFriends || [];
+    const knownAvatarByUserId = new Map<string, string | null>();
+    for (const h of historyList) knownAvatarByUserId.set(h.userId, h.avatarUrl);
+    for (const s of scanList) knownAvatarByUserId.set(s.userId, s.avatarUrl);
+    const knownIds = new Set<string>([...historyList.map((h) => h.userId), ...scanList.map((s) => s.userId)]);
+    const knownFriends = friends
+      .filter((f) => f.userId !== userId && knownIds.has(f.userId))
+      .map((f) => ({ userId: f.userId, username: f.username, avatarUrl: knownAvatarByUserId.get(f.userId) ?? null }));
+
     // Cache a snapshot of the photo + plate for "View Previous" — only when
     // we actually got something worth remembering, and only when it's
     // actually different from the last thing we cached for this person (no
@@ -349,6 +374,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       arrestHistory,
       groups,
       vehicleTags,
+      knownFriends,
       apiError,
     });
     return;

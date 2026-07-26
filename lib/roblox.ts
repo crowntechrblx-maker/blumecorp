@@ -128,6 +128,26 @@ export async function resolveRobloxUserId(
   }
 }
 
+// Every friend a Roblox account has, per Roblox's own friends list — used by
+// Person Search to cross-reference against people already in our own
+// cache (search history + group scans), NOT to look anyone new up.
+export async function getRobloxFriends(
+  userId: string
+): Promise<{ userId: string; username: string }[]> {
+  try {
+    const res = await fetch(`https://friends.roblox.com/v1/users/${userId}/friends`, {
+      headers: robloxHeaders(),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { data?: { id?: number; name?: string }[] };
+    return (data.data || [])
+      .filter((f): f is { id: number; name: string } => !!f.id && !!f.name)
+      .map((f) => ({ userId: String(f.id), username: f.name }));
+  } catch {
+    return [];
+  }
+}
+
 // Blume clearance: any of these Roblox groups, or one of the three
 // explicitly-allowed user IDs, unlocks the Blume dashboard.
 export const BLUME_GROUP_IDS = [154853936, 142915989, 685466511, 187507831];

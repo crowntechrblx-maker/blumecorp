@@ -107,6 +107,21 @@ async function getUserGroupIds(userId: string): Promise<number[]> {
   }
 }
 
+async function getRobloxFriends(userId: string): Promise<{ userId: string; username: string }[]> {
+  try {
+    const res = await fetch(`https://friends.roblox.com/v1/users/${userId}/friends`, {
+      headers: robloxHeaders(),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { data?: { id?: number; name?: string }[] };
+    return (data.data || [])
+      .filter((f): f is { id: number; name: string } => !!f.id && !!f.name)
+      .map((f) => ({ userId: String(f.id), username: f.name }));
+  } catch {
+    return [];
+  }
+}
+
 async function resolveRobloxUserId(
   query: string
 ): Promise<{ userId: string; username: string } | null> {
@@ -1956,7 +1971,14 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             try {
               const inGame = await findInGamePresence(candidates, gamePlaceId);
               const users = inGame
-                .map((m) => ({ username: m.username, avatarUrl: m.avatarUrl }))
+                .map((m) => {
+                  const redGroup = relevantGroups(m.groupIds).find((g) => g.tier === "red");
+                  return {
+                    username: m.username,
+                    avatarUrl: m.avatarUrl,
+                    redGroupName: redGroup?.name || null,
+                  };
+                })
                 .sort((a, b) => a.username.localeCompare(b.username));
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ users }));
@@ -2078,6 +2100,27 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
           const vehicleTags = loadVehicleTagsDb().filter((v) => v.userId === userId);
 
+          // Friends who are ALREADY in our system — never look up or list a
+          // friend who isn't already known via search history or a group
+          // scan.
+          const historyListForFriends = loadSearchHistoryDb();
+          const scanListForFriends = loadGroupScanDb();
+          const friendsRaw = await getRobloxFriends(userId);
+          const knownAvatarByUserId = new Map<string, string | null>();
+          for (const h of historyListForFriends) knownAvatarByUserId.set(h.userId, h.avatarUrl);
+          for (const s of scanListForFriends) knownAvatarByUserId.set(s.userId, s.avatarUrl);
+          const knownIds = new Set<string>([
+            ...historyListForFriends.map((h) => h.userId),
+            ...scanListForFriends.map((s) => s.userId),
+          ]);
+          const knownFriends = friendsRaw
+            .filter((f) => f.userId !== userId && knownIds.has(f.userId))
+            .map((f) => ({
+              userId: f.userId,
+              username: f.username,
+              avatarUrl: knownAvatarByUserId.get(f.userId) ?? null,
+            }));
+
           if (avatarUrl || customPlate) {
             const allHistory = loadSearchHistoryDb();
             const existingForPerson = allHistory
@@ -2120,6 +2163,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               arrestHistory,
               groups,
               vehicleTags,
+              knownFriends,
               apiError,
             })
           );

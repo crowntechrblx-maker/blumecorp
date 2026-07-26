@@ -35,6 +35,12 @@ interface VehicleTag {
   createdAt: number;
 }
 
+interface KnownFriend {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+}
+
 interface PersonSearchResult {
   userId: string;
   username: string;
@@ -43,6 +49,7 @@ interface PersonSearchResult {
   arrestHistory: unknown;
   groups: PersonGroup[];
   vehicleTags: VehicleTag[];
+  knownFriends: KnownFriend[];
   apiError: string | null;
 }
 
@@ -198,12 +205,6 @@ const GROUP_VIEWER_SECTIONS: PersonGroup[] = [
   { id: 496716538, name: "U.S Marshals Service", tier: "white" },
   { id: 841282433, name: "London Freemasons", tier: "white" },
   { id: 1033941381, name: "Consulate of the People's Republic of China", tier: "white" },
-];
-
-const PLACEHOLDER_PINS = [
-  { label: "Westbridge Central", x: 38, y: 44 },
-  { label: "Docklands", x: 68, y: 62 },
-  { label: "North Sector", x: 30, y: 22 },
 ];
 
 const INDUSTRIES = [
@@ -387,9 +388,9 @@ export function BlumeApp({
   const heroIndex = useHeroCycle(HERO_IMAGES.length, HERO_CYCLE_MS);
 
   const [activeAgents, setActiveAgents] = useState<{ username: string; role: string }[]>([]);
-  const [inGameUsers, setInGameUsers] = useState<{ username: string; avatarUrl: string | null }[]>(
-    []
-  );
+  const [inGameUsers, setInGameUsers] = useState<
+    { username: string; avatarUrl: string | null; redGroupName: string | null }[]
+  >([]);
   const [gamePlaceId, setGamePlaceId] = useState<string | null>(null);
   const [showPlaceIdForm, setShowPlaceIdForm] = useState(false);
   const [placeIdInput, setPlaceIdInput] = useState("");
@@ -615,15 +616,17 @@ export function BlumeApp({
     await loadBlog();
   }
 
-  async function handlePersonSearch() {
-    if (!personQuery.trim()) return;
+  async function handlePersonSearch(overrideQuery?: string) {
+    const q = (overrideQuery ?? personQuery).trim();
+    if (!q) return;
+    if (overrideQuery) setPersonQuery(overrideQuery);
     setPersonLoading(true);
     setPersonError(null);
     setShowPreviousPhotos(false);
     setShowPreviousPlates(false);
     setPersonLinkedReports([]);
     try {
-      const res = await fetch(`/api/blume-search?query=${encodeURIComponent(personQuery.trim())}`);
+      const res = await fetch(`/api/blume-search?query=${encodeURIComponent(q)}`);
       if (!res.ok) {
         setPersonResult(null);
         setPersonError(await res.text());
@@ -1127,7 +1130,7 @@ export function BlumeApp({
         <div className="blume-dashboard">
           <div className="blume-active-strip">
             <div className="blume-active-label-group">
-              <span className="blume-active-label">ACTIVE USERS</span>
+              <span className="blume-active-label">{activeAgents.length} Active</span>
               {canEditBlog && (
                 <button
                   className="blume-active-config-btn"
@@ -1157,19 +1160,6 @@ export function BlumeApp({
                     <p className={`blume-error${placeIdFading ? " fading-out" : ""}`}>{placeIdError}</p>
                   )}
                 </div>
-              )}
-            </div>
-            <div className="blume-active-list">
-              {activeAgents.length === 0 ? (
-                <span className="blume-muted">None currently in-game</span>
-              ) : (
-                activeAgents.map((a) => (
-                  <div className="blume-active-chip" key={a.username}>
-                    <span className="blume-status-dot" />
-                    <span className="blume-active-name">{a.username}</span>
-                    <span className="blume-active-role">{a.role}</span>
-                  </div>
-                ))
               )}
             </div>
             <button className="blume-btn-login blume-btn-login-ghost blume-logout-btn" onClick={handleLogout}>
@@ -1272,24 +1262,26 @@ export function BlumeApp({
 
             <div className={`blume-panel blume-map-panel${collapsedPanels.map ? " blume-panel-collapsed" : ""}`}>
               <button className="blume-panel-header blume-panel-header-toggle" onClick={() => togglePanel("map")}>
-                <span>Surveillance Grid</span>
+                <span>Field Activity</span>
                 <span className="blume-panel-toggle-icon">{collapsedPanels.map ? "▸" : "▾"}</span>
               </button>
               {!collapsedPanels.map && (
                 <div className="blume-map-body">
-                  <div className="blume-map">
-                    <div className="blume-map-grid" />
-                    {PLACEHOLDER_PINS.map((p) => (
-                      <div
-                        className="blume-map-pin"
-                        key={p.label}
-                        style={{ left: `${p.x}%`, top: `${p.y}%` }}
-                        title={p.label}
-                      >
-                        <span className="blume-map-pin-dot" />
-                        <span className="blume-map-pin-label">{p.label}</span>
+                  <div className="blume-ingame-list">
+                    <span className="blume-person-label">Active agents</span>
+                    {activeAgents.length === 0 ? (
+                      <p className="blume-muted">None currently in-game.</p>
+                    ) : (
+                      <div className="blume-active-list">
+                        {activeAgents.map((a) => (
+                          <div className="blume-active-chip" key={a.username}>
+                            <span className="blume-status-dot" />
+                            <span className="blume-active-name">{a.username}</span>
+                            <span className="blume-active-role">{a.role}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
                   <div className="blume-ingame-list">
                     <span className="blume-person-label">In game now</span>
@@ -1301,6 +1293,9 @@ export function BlumeApp({
                           <div className="blume-ingame-user" key={u.username}>
                             {u.avatarUrl && <img src={u.avatarUrl} alt="" />}
                             <span>{u.username}</span>
+                            {u.redGroupName && (
+                              <span className="blume-ingame-red-group">{u.redGroupName}</span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1329,7 +1324,7 @@ export function BlumeApp({
                 <button
                   className="blume-cta-btn"
                   disabled={!personQuery.trim() || personLoading}
-                  onClick={handlePersonSearch}
+                  onClick={() => handlePersonSearch()}
                 >
                   {personLoading ? "Searching…" : "Search"}
                 </button>
@@ -1467,6 +1462,29 @@ export function BlumeApp({
                           >
                             {g.name}
                           </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="blume-person-section">
+                    <span className="blume-person-label">Known friends</span>
+                    {personResult.knownFriends.length === 0 ? (
+                      <p className="blume-muted">
+                        None of this person's friends have been searched or scanned yet.
+                      </p>
+                    ) : (
+                      <div className="blume-friend-list">
+                        {personResult.knownFriends.map((f) => (
+                          <button
+                            key={f.userId}
+                            className="blume-friend-chip"
+                            onClick={() => handlePersonSearch(f.username)}
+                            title={`Search ${f.username}`}
+                          >
+                            {f.avatarUrl && <img src={f.avatarUrl} alt="" />}
+                            <span>{f.username}</span>
+                          </button>
                         ))}
                       </div>
                     )}
