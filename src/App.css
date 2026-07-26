@@ -78,13 +78,18 @@
 .desktop-icons {
   position: absolute;
   /* Menu bar is 26px, then a 16px gap — same 16px gap is left at the
-     bottom of the viewport below, so the icon column is evenly framed
-     now that the dock isn't eating into the bottom margin. */
+     bottom of the viewport below, so the reserved area is evenly framed
+     now that the dock isn't eating into the bottom margin. Icons are then
+     centered vertically inside that area (justify-content below) so the
+     gap above the first icon and below the last icon end up equal too,
+     instead of packing to the top and leaving all the slack at the
+     bottom. */
   top: 42px;
   right: 18px;
   display: flex;
   flex-direction: column;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 6px;
   height: calc(100vh - 58px);
   align-content: flex-start;
