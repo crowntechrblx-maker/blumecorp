@@ -1702,7 +1702,9 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
 const READONLY_API = "https://polarisreadonly.up.railway.app";
 const BLUME_SEARCH_HISTORY_DB = path.resolve(process.cwd(), "blume-search-history-data.json");
 const BLUME_VEHICLE_TAGS_DB = path.resolve(process.cwd(), "blume-vehicle-tags-data.json");
+const BLUME_GROUP_SCAN_DB = path.resolve(process.cwd(), "blume-group-scan-data.json");
 const HISTORY_PER_PERSON_CAP = 20;
+const GROUP_SCAN_FRESH_MS = 6 * 60 * 60 * 1000;
 
 interface SearchSnapshot {
   id: string;
@@ -1720,6 +1722,26 @@ interface VehicleTag {
   vehicleType: string;
   addedByUsername: string;
   createdAt: number;
+}
+
+interface GroupScanEntry {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  customPlate: string | null;
+  groupIds: number[];
+  scannedAt: number;
+}
+
+function loadGroupScanDb(): GroupScanEntry[] {
+  try {
+    return JSON.parse(fs.readFileSync(BLUME_GROUP_SCAN_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveGroupScanDb(entries: GroupScanEntry[]) {
+  fs.writeFileSync(BLUME_GROUP_SCAN_DB, JSON.stringify(entries, null, 2));
 }
 
 function loadSearchHistoryDb(): SearchSnapshot[] {
@@ -1774,6 +1796,57 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
         }
 
         if (req.method === "GET") {
+          const groupMembersOf = url.searchParams.get("groupMembers") || "";
+          if (groupMembersOf) {
+            if (!isBlumeSuperUser(session.userId)) {
+              res.statusCode = 403;
+              res.end("Group Search is restricted to Blume operators.");
+              return;
+            }
+            const cursor = url.searchParams.get("cursor") || "";
+            try {
+              const gUrl = `https://groups.roblox.com/v1/groups/${encodeURIComponent(groupMembersOf)}/users?limit=100${
+                cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
+              }`;
+              const groupRes = await fetch(gUrl);
+              if (!groupRes.ok) {
+                res.statusCode = 400;
+                res.end(`Couldn't load group members (status ${groupRes.status}). Check the group ID.`);
+                return;
+              }
+              const data = (await groupRes.json()) as {
+                nextPageCursor?: string | null;
+                data?: { user?: { userId?: number; username?: string } }[];
+              };
+              const members = (data.data || [])
+                .map((entry) => entry.user)
+                .filter((u): u is { userId: number; username: string } => !!u?.userId && !!u?.username)
+                .map((u) => ({ userId: String(u.userId), username: u.username }));
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ members, nextCursor: data.nextPageCursor || null }));
+            } catch (err) {
+              res.statusCode = 500;
+              res.end("Couldn't reach Roblox's group API: " + (err as Error).message);
+            }
+            return;
+          }
+
+          const groupScanOf = url.searchParams.get("groupScan") || "";
+          if (groupScanOf) {
+            if (!isBlumeSuperUser(session.userId)) {
+              res.statusCode = 403;
+              res.end("Group Viewer is restricted to Blume operators.");
+              return;
+            }
+            const groupId = Number(groupScanOf);
+            const members = loadGroupScanDb()
+              .filter((m) => m.groupIds.includes(groupId))
+              .sort((a, b) => b.scannedAt - a.scannedAt);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ members }));
+            return;
+          }
+
           const historyForUserId = url.searchParams.get("history") || "";
           if (historyForUserId) {
             const history = loadSearchHistoryDb()
@@ -1884,6 +1957,65 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           try {
             const body = await readJsonBody(req);
             const action = (body.action || "").toString();
+
+            if (action === "scanMember") {
+              if (!isBlumeSuperUser(session.userId)) {
+                res.statusCode = 403;
+                res.end("Group Search is restricted to Blume operators.");
+                return;
+              }
+              const userId = (body.userId || "").toString().trim();
+              if (!userId) {
+                res.statusCode = 400;
+                res.end("Missing userId.");
+                return;
+              }
+              const all = loadGroupScanDb();
+              const existing = all.find((m) => m.userId === userId);
+              if (existing && !body.force && Date.now() - existing.scannedAt < GROUP_SCAN_FRESH_MS) {
+                res.setHeader("Content-Type", "application/json");
+                res.end(JSON.stringify({ entry: existing, skipped: true }));
+                return;
+              }
+
+              const resolved = await resolveRobloxUserId(userId);
+              const username = resolved?.username || existing?.username || userId;
+              const [avatarUrl, groupIds] = await Promise.all([
+                getRobloxAvatarUrl(userId),
+                getUserGroupIds(userId),
+              ]);
+
+              let customPlate: string | null = null;
+              try {
+                const playerRes = await fetch(`${READONLY_API}/player/${encodeURIComponent(userId)}`);
+                const playerText = await playerRes.text();
+                let playerData: any;
+                try {
+                  playerData = JSON.parse(playerText);
+                } catch {
+                  playerData = null;
+                }
+                if (playerRes.ok && playerData && !playerData.error) {
+                  customPlate = playerData.CustomPlate ?? null;
+                }
+              } catch {
+                // Best-effort.
+              }
+
+              const entry: GroupScanEntry = {
+                userId,
+                username,
+                avatarUrl,
+                customPlate,
+                groupIds,
+                scannedAt: Date.now(),
+              };
+              const next = [...all.filter((m) => m.userId !== userId), entry];
+              saveGroupScanDb(next);
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ entry, skipped: false }));
+              return;
+            }
 
             if (action === "addVehicle") {
               const userId = (body.userId || "").toString().trim();

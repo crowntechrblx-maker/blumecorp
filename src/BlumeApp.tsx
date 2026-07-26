@@ -56,6 +56,15 @@ interface HistorySnapshot {
   createdAt: number;
 }
 
+interface GroupScanMember {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  customPlate: string | null;
+  groupIds: number[];
+  scannedAt: number;
+}
+
 // Renders whatever shape the arrest data actually turns out to be — a flat
 // list of names/IDs, or a list of record objects with fields like
 // chargeIds/officer/date — decoding any numeric charge codes through the
@@ -375,6 +384,18 @@ export function BlumeApp({
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  const [groupSearchId, setGroupSearchId] = useState("");
+  const [groupScanning, setGroupScanning] = useState(false);
+  const [groupScanProgress, setGroupScanProgress] = useState({ scanned: 0, total: 0 });
+  const [groupScanLog, setGroupScanLog] = useState<string[]>([]);
+  const [groupScanError, setGroupScanError] = useState<string | null>(null);
+  const groupScanStopRef = useRef(false);
+
+  const [viewerGroupId, setViewerGroupId] = useState("");
+  const [viewerResults, setViewerResults] = useState<GroupScanMember[]>([]);
+  const [viewerLoading, setViewerLoading] = useState(false);
+  const [viewerError, setViewerError] = useState<string | null>(null);
+
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   async function loadAccess() {
@@ -577,6 +598,96 @@ export function BlumeApp({
     }
     const data = await res.json();
     setPersonResult((prev) => (prev ? { ...prev, vehicleTags: data.vehicleTags || [] } : prev));
+  }
+
+  // Client-driven so it works within Vercel's serverless timeouts and the
+  // records API's 50 req/min limit: the browser tab pages through the
+  // group's member list, then walks each member one at a time with a ~1.3s
+  // gap between records-API calls, updating progress as it goes. Stopping
+  // just flips a ref the loop checks between steps; resuming later re-runs
+  // the same group and the backend skips anyone scanned recently.
+  async function startGroupScan() {
+    const groupId = groupSearchId.trim();
+    if (!groupId || groupScanning) return;
+    setGroupScanning(true);
+    setGroupScanError(null);
+    setGroupScanLog([]);
+    setGroupScanProgress({ scanned: 0, total: 0 });
+    groupScanStopRef.current = false;
+    try {
+      const allMembers: { userId: string; username: string }[] = [];
+      let cursor = "";
+      do {
+        const res = await fetch(
+          `/api/blume-search?groupMembers=${encodeURIComponent(groupId)}${
+            cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
+          }`
+        );
+        if (!res.ok) {
+          setGroupScanError(await res.text());
+          return;
+        }
+        const data = await res.json();
+        allMembers.push(...(data.members || []));
+        cursor = data.nextCursor || "";
+        setGroupScanProgress((p) => ({ ...p, total: allMembers.length }));
+      } while (cursor && !groupScanStopRef.current);
+
+      for (let i = 0; i < allMembers.length; i++) {
+        if (groupScanStopRef.current) break;
+        const m = allMembers[i];
+        try {
+          const res = await fetch("/api/blume-search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "scanMember", userId: m.userId }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setGroupScanLog((log) =>
+              [`${m.username}${data.skipped ? " (already cached)" : ""}`, ...log].slice(0, 8)
+            );
+          } else {
+            setGroupScanLog((log) => [`${m.username} — scan failed`, ...log].slice(0, 8));
+          }
+        } catch {
+          setGroupScanLog((log) => [`${m.username} — network error`, ...log].slice(0, 8));
+        }
+        setGroupScanProgress((p) => ({ ...p, scanned: i + 1 }));
+        if (!groupScanStopRef.current && i < allMembers.length - 1) {
+          await new Promise((r) => setTimeout(r, 1300));
+        }
+      }
+    } catch {
+      setGroupScanError("Couldn't reach Group Search.");
+    } finally {
+      setGroupScanning(false);
+    }
+  }
+
+  function stopGroupScan() {
+    groupScanStopRef.current = true;
+  }
+
+  async function runGroupViewer() {
+    const groupId = viewerGroupId.trim();
+    if (!groupId) return;
+    setViewerLoading(true);
+    setViewerError(null);
+    try {
+      const res = await fetch(`/api/blume-search?groupScan=${encodeURIComponent(groupId)}`);
+      if (!res.ok) {
+        setViewerResults([]);
+        setViewerError(await res.text());
+        return;
+      }
+      const data = await res.json();
+      setViewerResults(data.members || []);
+    } catch {
+      setViewerError("Couldn't reach Group Viewer.");
+    } finally {
+      setViewerLoading(false);
+    }
   }
 
   function scrollToSection(id: string) {
@@ -1219,6 +1330,130 @@ export function BlumeApp({
               </>
               )}
             </div>
+
+            {canEditBlog && (
+              <div className={`blume-panel blume-group-search-panel${collapsedPanels.groupSearch ? " blume-panel-collapsed" : ""}`}>
+                <button
+                  className="blume-panel-header blume-panel-header-toggle"
+                  onClick={() => togglePanel("groupSearch")}
+                >
+                  <span>Group Search</span>
+                  <span className="blume-panel-toggle-icon">{collapsedPanels.groupSearch ? "▸" : "▾"}</span>
+                </button>
+                {!collapsedPanels.groupSearch && (
+                  <>
+                    <p className="blume-muted blume-search-hint">
+                      Paste a group ID and every member is scanned for their groups, photo, and
+                      plate. This respects the records API's rate limit, so large groups take a
+                      while — keep this tab open until it finishes.
+                    </p>
+                    <div className="blume-search-form">
+                      <input
+                        placeholder="Group ID…"
+                        value={groupSearchId}
+                        onChange={(e) => setGroupSearchId(e.target.value)}
+                        disabled={groupScanning}
+                      />
+                      {groupScanning ? (
+                        <button className="blume-cta-btn" onClick={stopGroupScan}>
+                          Stop
+                        </button>
+                      ) : (
+                        <button
+                          className="blume-cta-btn"
+                          disabled={!groupSearchId.trim()}
+                          onClick={startGroupScan}
+                        >
+                          Start scan
+                        </button>
+                      )}
+                    </div>
+                    {groupScanError && <p className="blume-error">{groupScanError}</p>}
+                    {(groupScanning || groupScanProgress.total > 0) && (
+                      <div className="blume-group-scan-progress">
+                        <span>
+                          {groupScanProgress.scanned} / {groupScanProgress.total || "…"} scanned
+                          {groupScanning ? "…" : groupScanProgress.total ? " — done" : ""}
+                        </span>
+                        {groupScanProgress.total > 0 && (
+                          <div className="blume-group-scan-bar">
+                            <div
+                              className="blume-group-scan-bar-fill"
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  (groupScanProgress.scanned / Math.max(1, groupScanProgress.total)) * 100
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {groupScanLog.length > 0 && (
+                      <div className="blume-group-scan-log">
+                        {groupScanLog.map((line, i) => (
+                          <div key={i}>{line}</div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {canEditBlog && (
+              <div className={`blume-panel blume-group-viewer-panel${collapsedPanels.groupViewer ? " blume-panel-collapsed" : ""}`}>
+                <button
+                  className="blume-panel-header blume-panel-header-toggle"
+                  onClick={() => togglePanel("groupViewer")}
+                >
+                  <span>Group Viewer</span>
+                  <span className="blume-panel-toggle-icon">{collapsedPanels.groupViewer ? "▸" : "▾"}</span>
+                </button>
+                {!collapsedPanels.groupViewer && (
+                  <>
+                    <div className="blume-search-form">
+                      <input
+                        placeholder="Group ID to look up…"
+                        value={viewerGroupId}
+                        onChange={(e) => setViewerGroupId(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !viewerLoading) runGroupViewer();
+                        }}
+                      />
+                      <button
+                        className="blume-cta-btn"
+                        disabled={!viewerGroupId.trim() || viewerLoading}
+                        onClick={runGroupViewer}
+                      >
+                        {viewerLoading ? "Searching…" : "Search"}
+                      </button>
+                    </div>
+                    {viewerError && <p className="blume-error">{viewerError}</p>}
+                    {!viewerLoading && !viewerError && viewerResults.length === 0 && (
+                      <p className="blume-muted">
+                        No scanned members found in that group yet — run a Group Search first.
+                      </p>
+                    )}
+                    <div className="blume-group-viewer-list">
+                      {viewerResults.map((m) => (
+                        <div className="blume-group-viewer-row" key={m.userId}>
+                          {m.avatarUrl && <img src={m.avatarUrl} alt="" />}
+                          <div>
+                            <strong>{m.username}</strong>
+                            <span className="blume-history-meta">
+                              {m.customPlate || "No plate on file"} · scanned{" "}
+                              {new Date(m.scannedAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

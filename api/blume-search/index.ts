@@ -5,6 +5,7 @@ import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
 import {
   isBlumeAuthorized,
+  isBlumeSuperUser,
   isPlatformAdmin,
   getRobloxAvatarUrl,
   getUserGroupIds,
@@ -36,7 +37,24 @@ interface VehicleTag {
   createdAt: number;
 }
 
+// One row per Roblox user ever swept up by a Group Search scan — their full
+// group membership list plus whatever the records API knows, so Group
+// Viewer can answer "who in this subgroup have we already seen" without
+// re-scanning anything.
+interface GroupScanEntry {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  customPlate: string | null;
+  groupIds: number[];
+  scannedAt: number;
+}
+
 const HISTORY_PER_PERSON_CAP = 20;
+// Skip re-fetching a member's data if we scanned them within this window,
+// unless the caller explicitly asks to force a refresh — makes it cheap to
+// stop and re-run a big group scan without redoing all the finished work.
+const GROUP_SCAN_FRESH_MS = 6 * 60 * 60 * 1000;
 
 function relevantGroups(groupIds: number[]) {
   return groupIds
@@ -61,6 +79,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "GET") {
+    // Group Search: page through a Roblox group's member list. Restricted to
+    // the 3 super users since this is the on-ramp for bulk-scanning real
+    // people's data, not a general Person Search capability.
+    const groupMembersOf = (req.query.groupMembers as string) || "";
+    if (groupMembersOf) {
+      if (!isBlumeSuperUser(session.userId)) {
+        res.status(403).send("Group Search is restricted to Blume operators.");
+        return;
+      }
+      const cursor = (req.query.cursor as string) || "";
+      try {
+        const url = `https://groups.roblox.com/v1/groups/${encodeURIComponent(groupMembersOf)}/users?limit=100${
+          cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
+        }`;
+        const groupRes = await fetch(url);
+        if (!groupRes.ok) {
+          res.status(400).send(`Couldn't load group members (status ${groupRes.status}). Check the group ID.`);
+          return;
+        }
+        const data = (await groupRes.json()) as {
+          nextPageCursor?: string | null;
+          data?: { user?: { userId?: number; username?: string } }[];
+        };
+        const members = (data.data || [])
+          .map((entry) => entry.user)
+          .filter((u): u is { userId: number; username: string } => !!u?.userId && !!u?.username)
+          .map((u) => ({ userId: String(u.userId), username: u.username }));
+        res.status(200).json({ members, nextCursor: data.nextPageCursor || null });
+      } catch (err) {
+        res.status(500).send("Couldn't reach Roblox's group API: " + (err as Error).message);
+      }
+      return;
+    }
+
+    // Group Viewer: which already-scanned members belong to a given group.
+    const groupScanOf = (req.query.groupScan as string) || "";
+    if (groupScanOf) {
+      if (!isBlumeSuperUser(session.userId)) {
+        res.status(403).send("Group Viewer is restricted to Blume operators.");
+        return;
+      }
+      const groupId = Number(groupScanOf);
+      const all = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
+      const members = all
+        .filter((m) => m.groupIds.includes(groupId))
+        .sort((a, b) => b.scannedAt - a.scannedAt);
+      res.status(200).json({ members });
+      return;
+    }
+
     const historyForUserId = (req.query.history as string) || "";
     if (historyForUserId) {
       const all = (await kv.get<SearchSnapshot[]>("blumeSearchHistory")) || [];
@@ -176,8 +244,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         userId?: string;
         vehicleType?: string;
         id?: string;
+        force?: boolean;
       };
       const action = body.action || "";
+
+      if (action === "scanMember") {
+        if (!isBlumeSuperUser(session.userId)) {
+          res.status(403).send("Group Search is restricted to Blume operators.");
+          return;
+        }
+        const userId = (body.userId || "").toString().trim();
+        if (!userId) {
+          res.status(400).send("Missing userId.");
+          return;
+        }
+        const all = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
+        const existing = all.find((m) => m.userId === userId);
+        if (existing && !body.force && Date.now() - existing.scannedAt < GROUP_SCAN_FRESH_MS) {
+          res.status(200).json({ entry: existing, skipped: true });
+          return;
+        }
+
+        const resolved = await resolveRobloxUserId(userId);
+        const username = resolved?.username || existing?.username || userId;
+        const [avatarUrl, groupIds] = await Promise.all([
+          getRobloxAvatarUrl(userId),
+          getUserGroupIds(userId),
+        ]);
+
+        let customPlate: string | null = null;
+        try {
+          const playerRes = await fetch(`${READONLY_API}/player/${encodeURIComponent(userId)}`);
+          const playerText = await playerRes.text();
+          let playerData: any;
+          try {
+            playerData = JSON.parse(playerText);
+          } catch {
+            playerData = null;
+          }
+          if (playerRes.ok && playerData && !playerData.error) {
+            customPlate = playerData.CustomPlate ?? null;
+          }
+        } catch {
+          // Best-effort — a scan that can't reach the records API still logs
+          // groups + photo rather than failing the whole member.
+        }
+
+        const entry: GroupScanEntry = {
+          userId,
+          username,
+          avatarUrl,
+          customPlate,
+          groupIds,
+          scannedAt: Date.now(),
+        };
+        const next = [...all.filter((m) => m.userId !== userId), entry];
+        await kv.set("blumeGroupScanCache", next);
+        res.status(200).json({ entry, skipped: false });
+        return;
+      }
 
       if (action === "addVehicle") {
         const userId = (body.userId || "").toString().trim();
