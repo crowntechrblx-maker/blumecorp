@@ -94,15 +94,10 @@
 .desktop-icon-column {
   display: flex;
   flex-direction: column;
-  /* Icons within a column always stack top-down in order (that ordering
-     comes from the chunking logic in App.tsx — the first 8 apps fill
-     column 1, the next 8 fill column 2, etc — justify-content here has no
-     effect on that order). What this DOES control is where the whole
-     stack sits in the leftover vertical space: "center" splits any slack
-     evenly above and below, so the gap from the top icon to the menu bar
-     matches the gap from the bottom icon to the screen edge, even when a
-     column isn't perfectly full. */
-  justify-content: center;
+  /* Every column starts flush at the top and fills downward — a new
+     (overflow) column lines up its first icon with the first icon of the
+     column before it, rather than being vertically centered. */
+  justify-content: flex-start;
   gap: 6px;
 }
 
