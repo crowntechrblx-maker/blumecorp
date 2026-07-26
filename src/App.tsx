@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { APPS, type AppId } from "./apps";
 import { MenuBar } from "./MenuBar";
-import { Dock } from "./Dock";
 import { DesktopIcon } from "./DesktopIcon";
 import { Window, type WindowState } from "./Window";
 import { useAuth } from "./AuthContext";
@@ -108,7 +107,6 @@ function App() {
   const activeAppName = activeApp
     ? APPS.find((a) => a.id === activeApp)?.name ?? "Finder"
     : "Finder";
-  const openAppIds = Object.keys(windows) as AppId[];
 
   if (loading) {
     return <div className="boot-screen" />;
@@ -162,8 +160,6 @@ function App() {
           />
         );
       })}
-
-      <Dock openApps={openAppIds} onOpen={openApp} />
     </div>
   );
 }
