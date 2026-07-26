@@ -8,6 +8,45 @@ interface RoyalTweet {
   createdAt: number;
 }
 
+interface RoyalProfile {
+  title: string;
+  handle: string;
+  bio: string;
+}
+
+const ROYAL_PROFILES: RoyalProfile[] = [
+  {
+    title: "The King",
+    handle: "EdwardMountbatten",
+    bio: "His Majesty is the reigning monarch, having ascended the throne on 23rd June 2025. Alongside his official and ceremonial duties, The King has helped establish more than 20 charities over 40 years, supporting causes across the environment, rural communities, the arts, healthcare and education, and remains a focal point for national unity and continuity.",
+  },
+  {
+    title: "The Queen",
+    handle: "CarolineMountbatten",
+    bio: "Her Majesty became Queen Consort after marrying The King on 31st August 2025, supporting him in his duties while undertaking her own public engagements. Her charity work spans health, literacy, survivor support, women's empowerment, animal welfare, dance and the arts, and she is widely seen as a symbol of duty, unity and voluntary service.",
+  },
+  {
+    title: "The Prince of Wales",
+    handle: "ArthurMountbatten",
+    bio: "The Prince of Wales is heir to the throne and undertakes charitable, public and official duties in support of The King, in the UK and overseas. He regularly takes part in major Royal occasions, including State Visits, Trooping the Colour and the Order of the Garter at Windsor.",
+  },
+  {
+    title: "The Princess Royal",
+    handle: "BellaMountbatten",
+    bio: "The Princess Royal supports The King through wide-ranging charitable work, public duties and official engagements at home and abroad, serving as Patron or President to numerous organisations and regularly representing the Royal Family at major national and international occasions.",
+  },
+  {
+    title: "The Duke of Cambridge",
+    handle: "PhilipMountbatten",
+    bio: "The Duke of Cambridge supports The King through charitable initiatives and official engagements across the UK and overseas, serving as Patron or President to organisations focused on community, wellbeing and service, and regularly undertakes key Royal and ceremonial duties.",
+  },
+  {
+    title: "The Duke of Westminster",
+    handle: "HarryMountbatten",
+    bio: "The Duke of Westminster supports The King as Head of State, representing him at events and visits in the UK and abroad, receiving Heads of State and government officials, and attending state and ceremonial occasions, with a strong economic and business focus.",
+  },
+];
+
 export function RoyalFamilyApp() {
   const [tweets, setTweets] = useState<RoyalTweet[]>([]);
   const [canAdd, setCanAdd] = useState(false);
@@ -73,11 +112,17 @@ export function RoyalFamilyApp() {
   return (
     <div className="app-content royal">
       <h2>The Royal Family</h2>
-      <div className="royal-grid">
-        {["The King", "The Queen", "The Prince of Wales", "The Princess of Wales"].map((n) => (
-          <div className="royal-card" key={n}>
-            <div className="royal-avatar">👤</div>
-            <span>{n}</span>
+      <div className="royal-profiles">
+        {ROYAL_PROFILES.map((p) => (
+          <div className="royal-profile-card" key={p.handle}>
+            <div className="royal-profile-header">
+              <div className="royal-avatar">👤</div>
+              <div>
+                <h3 className="royal-profile-title">{p.title}</h3>
+                <span className="royal-profile-handle">@{p.handle}</span>
+              </div>
+            </div>
+            <p className="royal-profile-bio">{p.bio}</p>
           </div>
         ))}
       </div>

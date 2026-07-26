@@ -828,38 +828,45 @@
 }
 
 /* Royal Family */
-.royal-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.royal-profiles {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   margin-bottom: 12px;
 }
-.royal-card {
+.royal-profile-card {
   background: #f6f6f7;
   border-radius: 8px;
   padding: 12px;
+}
+.royal-profile-header {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.app-content h3.royal-profile-title {
+  font-size: 13.5px;
+  margin: 0;
+}
+.royal-profile-handle {
+  font-size: 11px;
+  color: #8a8a8e;
+}
+.royal-profile-bio {
   font-size: 12.5px;
-  text-align: center;
+  line-height: 1.45;
+  color: #3a3a3c;
+  margin: 0;
 }
 .royal-avatar {
   font-size: 30px;
+  flex-shrink: 0;
 }
 .royal-add-section {
   background: #f6f6f7;
   border-radius: 8px;
   padding: 12px;
-}
-/* Heading styled after the royal.uk-style serif used on the official-look
-   Royal Communications site — Georgia stands in for their editorial
-   serif. */
-.royal-add-section h3 {
-  font-family: Georgia, "Times New Roman", serif;
-  font-weight: 400;
-  letter-spacing: 0.2px;
 }
 .royal-add-form {
   display: flex;

@@ -20,6 +20,9 @@ function App() {
   const [activeApp, setActiveApp] = useState<AppId | null>(null);
   const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
 
+  // Only used to re-center the icon column when the window is resized —
+  // it does NOT affect how many icons fit in a column (that's a flat 8,
+  // regardless of screen size or how many apps are visible).
   useEffect(() => {
     function handleResize() {
       setViewportHeight(window.innerHeight);
@@ -144,15 +147,14 @@ function App() {
   const visibleApps = APPS.filter((app) => app.id !== "settings" || user.isAdmin);
 
   // Mac-style desktop icon layout: fill a column top-to-bottom, and once
-  // it's full, start a new column to the LEFT of it (never to the right,
-  // which would run off toward the menu bar clock). 8 per column is the
-  // target, but on a shorter screen we drop to however many actually fit
-  // without squishing them, rather than overflow past the page edge.
+  // it hits 8, start a new column to the LEFT of it (never to the right,
+  // which would run off toward the menu bar clock). This is a flat,
+  // always-8 rule — it does NOT change based on how many apps someone can
+  // see. An admin (extra Settings icon) simply gets a second column with
+  // one more icon in it; the first column is identical either way.
   const ICON_SLOT_HEIGHT = 94; // 88px icon + 6px gap
   const RESERVED_VERTICAL_SPACE = 58; // 42px top framing + 16px bottom framing
-  const availableHeight = viewportHeight - RESERVED_VERTICAL_SPACE;
-  const maxThatFit = Math.max(1, Math.floor((availableHeight + 6) / ICON_SLOT_HEIGHT));
-  const ICONS_PER_COLUMN = Math.min(8, maxThatFit);
+  const ICONS_PER_COLUMN = 8;
   const iconColumns: (typeof visibleApps)[] = [];
   for (let i = 0; i < visibleApps.length; i += ICONS_PER_COLUMN) {
     iconColumns.push(visibleApps.slice(i, i + ICONS_PER_COLUMN));
@@ -168,6 +170,7 @@ function App() {
   // starts flush with the others at the block's top edge.
   const tallestColumnCount = iconColumns[0]?.length ?? 0;
   const contentHeight = Math.max(0, tallestColumnCount * ICON_SLOT_HEIGHT - 6);
+  const availableHeight = viewportHeight - RESERVED_VERTICAL_SPACE;
   const topOffset = 42 + Math.max(0, (availableHeight - contentHeight) / 2);
 
   return (
