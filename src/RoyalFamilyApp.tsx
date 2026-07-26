@@ -73,8 +73,14 @@ export function RoyalFamilyApp() {
               value={newUrl}
               onChange={(e) => setNewUrl(e.target.value)}
             />
-            <button className="cta" disabled={!newUrl.trim() || submitting} onClick={handleAdd}>
-              {submitting ? "Adding..." : "Add post"}
+            <button
+              className="royal-add-btn"
+              aria-label="Add post"
+              title="Add post"
+              disabled={!newUrl.trim() || submitting}
+              onClick={handleAdd}
+            >
+              {submitting ? "…" : "+"}
             </button>
           </div>
           {error && <p className="royal-add-error">{error}</p>}

@@ -813,12 +813,50 @@
   border-radius: 8px;
   padding: 12px;
 }
+/* Heading styled after the royal.uk-style serif used on the official-look
+   Royal Communications site — Georgia stands in for their editorial
+   serif. */
+.royal-add-section h3 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+}
 .royal-add-form {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 .royal-add-form input {
+  /* Wide text field — this is the primary control, the button next to it
+     is just a small confirm action, matching the site's understated
+     dark-square icon buttons (e.g. its search button) rather than a big
+     pill CTA. */
   flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #d8d8dc;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.royal-add-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: #1c1c1e;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.royal-add-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 .royal-add-error {
   color: #d92c2c;
