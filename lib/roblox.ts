@@ -46,6 +46,56 @@ export async function isRobloxGroupMember(userId: string, groupId: number): Prom
   }
 }
 
+// Every group ID this account belongs to, in one call — used by Person
+// Search to cross-reference against a known list, instead of making one
+// isRobloxGroupMember call per candidate group.
+export async function getUserGroupIds(userId: string): Promise<number[]> {
+  try {
+    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    if (!res.ok) return [];
+    const data = (await res.json()) as { data?: { group?: { id?: number } }[] };
+    return (data.data || [])
+      .map((entry) => entry.group?.id)
+      .filter((id): id is number => typeof id === "number");
+  } catch {
+    return [];
+  }
+}
+
+// Resolves a Roblox username to a user ID. If the input already looks like a
+// numeric ID, it's returned as-is (no network call needed).
+export async function resolveRobloxUserId(
+  query: string
+): Promise<{ userId: string; username: string } | null> {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) {
+    try {
+      const res = await fetch(`https://users.roblox.com/v1/users/${trimmed}`);
+      if (!res.ok) return null;
+      const data = (await res.json()) as { id?: number; name?: string };
+      if (!data.id) return null;
+      return { userId: String(data.id), username: data.name || trimmed };
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const res = await fetch("https://users.roblox.com/v1/usernames/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usernames: [trimmed], excludeBannedUsers: false }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { data?: { id?: number; name?: string }[] };
+    const match = data.data?.[0];
+    if (!match?.id) return null;
+    return { userId: String(match.id), username: match.name || trimmed };
+  } catch {
+    return null;
+  }
+}
+
 // Blume clearance: any of these Roblox groups, or one of the three
 // explicitly-allowed user IDs, unlocks the Blume dashboard.
 export const BLUME_GROUP_IDS = [154853936, 142915989, 685466511, 187507831];
@@ -100,6 +150,51 @@ export async function getRobloxGroupName(groupId: number): Promise<string | null
     return null;
   }
 }
+
+// Groups that matter for Blume's Person Search — everything else the person
+// belongs to is ignored. "red" groups render in red (organized-crime /
+// unaffiliated-interest groups), "white" groups render in normal text
+// (largely law enforcement, government, and emergency services).
+export const PERSON_SEARCH_GROUPS: Record<number, { name: string; tier: "red" | "white" }> = {
+  10742221: { name: "G-Block", tier: "red" },
+  223035360: { name: "Shadow District", tier: "red" },
+  679403020: { name: "Harakat", tier: "red" },
+  16684944: { name: "Irish", tier: "red" },
+  34067916: { name: "CHS", tier: "red" },
+  541807: { name: "UK | United Kingdom", tier: "red" },
+  14641286: { name: "TUI Airways | Roblox", tier: "red" },
+  696897291: { name: "Motorway Roleplay Community", tier: "red" },
+  11939831: { name: "Nottinghamshire, England", tier: "red" },
+  16339807: { name: "Liber Studios", tier: "red" },
+  34544324: { name: "UK | Sandford Studios", tier: "red" },
+  12982639: { name: "NEMG | North East Medical Group", tier: "red" },
+  8103: { name: "UK Explorium Studios", tier: "red" },
+
+  32650605: { name: "London Air Ambulance", tier: "white" },
+  879056831: { name: "London Ambulance Service", tier: "white" },
+  493990898: { name: "Metropolitan Police Service", tier: "white" },
+  360230741: { name: "London Fire Brigade", tier: "white" },
+  931656944: { name: "British Forces", tier: "white" },
+  820909258: { name: "British Transport Police", tier: "white" },
+  743983922: { name: "Greater Manchester Police", tier: "white" },
+  987422423: { name: "Police Service of Northern Ireland", tier: "white" },
+  154853936: { name: "MI5", tier: "white" },
+  142915989: { name: "National Crime Agency", tier: "white" },
+  685466511: { name: "SIS (MI6)", tier: "white" },
+  34974741: { name: "Immigration Enforcement", tier: "white" },
+  11086948: { name: "Hatzola", tier: "white" },
+  35167585: { name: "Royal Households", tier: "white" },
+  841518502: { name: "Home Office", tier: "white" },
+  278125181: { name: "National Police Air Service", tier: "white" },
+  740750486: { name: "Kent Police", tier: "white" },
+  567563234: { name: "HM Revenue and Customs", tier: "white" },
+  187507831: { name: "Central Intelligence Agency", tier: "white" },
+  963189576: { name: "JTF2", tier: "white" },
+  315987361: { name: "Regional Organised Crime Unit", tier: "white" },
+  496716538: { name: "U.S Marshals Service", tier: "white" },
+  841282433: { name: "London Freemasons", tier: "white" },
+  1033941381: { name: "Consulate of the People's Republic of China", tier: "white" },
+};
 
 // Returns the display names of every known group the given user belongs to
 // (fetching the real Roblox group name rather than relying on a hardcoded

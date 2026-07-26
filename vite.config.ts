@@ -72,6 +72,92 @@ async function isRobloxGroupMember(userId: string, groupId: number): Promise<boo
   }
 }
 
+async function getUserGroupIds(userId: string): Promise<number[]> {
+  try {
+    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    if (!res.ok) return [];
+    const data = (await res.json()) as { data?: { group?: { id?: number } }[] };
+    return (data.data || [])
+      .map((entry) => entry.group?.id)
+      .filter((id): id is number => typeof id === "number");
+  } catch {
+    return [];
+  }
+}
+
+async function resolveRobloxUserId(
+  query: string
+): Promise<{ userId: string; username: string } | null> {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) {
+    try {
+      const res = await fetch(`https://users.roblox.com/v1/users/${trimmed}`);
+      if (!res.ok) return null;
+      const data = (await res.json()) as { id?: number; name?: string };
+      if (!data.id) return null;
+      return { userId: String(data.id), username: data.name || trimmed };
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const res = await fetch("https://users.roblox.com/v1/usernames/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usernames: [trimmed], excludeBannedUsers: false }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { data?: { id?: number; name?: string }[] };
+    const match = data.data?.[0];
+    if (!match?.id) return null;
+    return { userId: String(match.id), username: match.name || trimmed };
+  } catch {
+    return null;
+  }
+}
+
+const PERSON_SEARCH_GROUPS: Record<number, { name: string; tier: "red" | "white" }> = {
+  10742221: { name: "G-Block", tier: "red" },
+  223035360: { name: "Shadow District", tier: "red" },
+  679403020: { name: "Harakat", tier: "red" },
+  16684944: { name: "Irish", tier: "red" },
+  34067916: { name: "CHS", tier: "red" },
+  541807: { name: "UK | United Kingdom", tier: "red" },
+  14641286: { name: "TUI Airways | Roblox", tier: "red" },
+  696897291: { name: "Motorway Roleplay Community", tier: "red" },
+  11939831: { name: "Nottinghamshire, England", tier: "red" },
+  16339807: { name: "Liber Studios", tier: "red" },
+  34544324: { name: "UK | Sandford Studios", tier: "red" },
+  12982639: { name: "NEMG | North East Medical Group", tier: "red" },
+  8103: { name: "UK Explorium Studios", tier: "red" },
+
+  32650605: { name: "London Air Ambulance", tier: "white" },
+  879056831: { name: "London Ambulance Service", tier: "white" },
+  493990898: { name: "Metropolitan Police Service", tier: "white" },
+  360230741: { name: "London Fire Brigade", tier: "white" },
+  931656944: { name: "British Forces", tier: "white" },
+  820909258: { name: "British Transport Police", tier: "white" },
+  743983922: { name: "Greater Manchester Police", tier: "white" },
+  987422423: { name: "Police Service of Northern Ireland", tier: "white" },
+  154853936: { name: "MI5", tier: "white" },
+  142915989: { name: "National Crime Agency", tier: "white" },
+  685466511: { name: "SIS (MI6)", tier: "white" },
+  34974741: { name: "Immigration Enforcement", tier: "white" },
+  11086948: { name: "Hatzola", tier: "white" },
+  35167585: { name: "Royal Households", tier: "white" },
+  841518502: { name: "Home Office", tier: "white" },
+  278125181: { name: "National Police Air Service", tier: "white" },
+  740750486: { name: "Kent Police", tier: "white" },
+  567563234: { name: "HM Revenue and Customs", tier: "white" },
+  187507831: { name: "Central Intelligence Agency", tier: "white" },
+  963189576: { name: "JTF2", tier: "white" },
+  315987361: { name: "Regional Organised Crime Unit", tier: "white" },
+  496716538: { name: "U.S Marshals Service", tier: "white" },
+  841282433: { name: "London Freemasons", tier: "white" },
+  1033941381: { name: "Consulate of the People's Republic of China", tier: "white" },
+};
+
 interface BlumeReportEntry {
   id: string;
   title: string;
@@ -1221,7 +1307,7 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = new URL(req.url || "", "http://localhost");
-        if (url.pathname !== "/api/blume-reports") {
+        if (url.pathname !== "/api/blume-content" || (url.searchParams.get("type") || "report") !== "report") {
           next();
           return;
         }
@@ -1357,7 +1443,7 @@ function blumeBlogPlugin(sessions: Map<string, RobloxSession>): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = new URL(req.url || "", "http://localhost");
-        if (url.pathname !== "/api/blume-blog") {
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "blog") {
           next();
           return;
         }
@@ -1593,6 +1679,264 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
+const READONLY_API = "https://polarisreadonly.up.railway.app";
+const BLUME_SEARCH_HISTORY_DB = path.resolve(process.cwd(), "blume-search-history-data.json");
+const BLUME_VEHICLE_TAGS_DB = path.resolve(process.cwd(), "blume-vehicle-tags-data.json");
+const HISTORY_PER_PERSON_CAP = 20;
+
+interface SearchSnapshot {
+  id: string;
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  customPlate: string | null;
+  searchedByUsername: string;
+  createdAt: number;
+}
+
+interface VehicleTag {
+  id: string;
+  userId: string;
+  vehicleType: string;
+  addedByUsername: string;
+  createdAt: number;
+}
+
+function loadSearchHistoryDb(): SearchSnapshot[] {
+  try {
+    return JSON.parse(fs.readFileSync(BLUME_SEARCH_HISTORY_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveSearchHistoryDb(entries: SearchSnapshot[]) {
+  fs.writeFileSync(BLUME_SEARCH_HISTORY_DB, JSON.stringify(entries, null, 2));
+}
+function loadVehicleTagsDb(): VehicleTag[] {
+  try {
+    return JSON.parse(fs.readFileSync(BLUME_VEHICLE_TAGS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveVehicleTagsDb(entries: VehicleTag[]) {
+  fs.writeFileSync(BLUME_VEHICLE_TAGS_DB, JSON.stringify(entries, null, 2));
+}
+
+function relevantGroups(groupIds: number[]) {
+  return groupIds
+    .filter((id) => id in PERSON_SEARCH_GROUPS)
+    .map((id) => ({ id, ...PERSON_SEARCH_GROUPS[id] }));
+}
+
+function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "blume-search-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-search") {
+          next();
+          return;
+        }
+
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        if (!session) {
+          res.statusCode = 401;
+          res.end("You must be signed in.");
+          return;
+        }
+        if (!(await isBlumeAuthorized(session.userId))) {
+          res.statusCode = 403;
+          res.end("You do not have clearance to use Person Search.");
+          return;
+        }
+
+        if (req.method === "GET") {
+          const historyForUserId = url.searchParams.get("history") || "";
+          if (historyForUserId) {
+            const history = loadSearchHistoryDb()
+              .filter((h) => h.userId === historyForUserId)
+              .sort((a, b) => b.createdAt - a.createdAt);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ history }));
+            return;
+          }
+
+          const query = (url.searchParams.get("query") || "").trim();
+          if (!query) {
+            res.statusCode = 400;
+            res.end("Missing search query.");
+            return;
+          }
+
+          const resolved = await resolveRobloxUserId(query);
+          if (!resolved) {
+            res.statusCode = 404;
+            res.end("No Roblox user found matching that name or ID.");
+            return;
+          }
+          const { userId, username } = resolved;
+
+          const [avatarUrl, groupIds] = await Promise.all([
+            getRobloxAvatarUrl(userId),
+            getUserGroupIds(userId),
+          ]);
+          const groups = relevantGroups(groupIds);
+
+          let customPlate: string | null = null;
+          let arrests: unknown = null;
+          let arrestHistory: unknown = null;
+          let apiError: string | null = null;
+
+          try {
+            const playerRes = await fetch(`${READONLY_API}/player/${encodeURIComponent(userId)}`);
+            const playerText = await playerRes.text();
+            let playerData: any;
+            try {
+              playerData = JSON.parse(playerText);
+            } catch {
+              playerData = null;
+            }
+            if (!playerRes.ok || !playerData) {
+              apiError = `The records API didn't respond as expected (status ${playerRes.status}).`;
+            } else if (playerData.error) {
+              apiError = String(playerData.error);
+            } else {
+              customPlate = playerData.CustomPlate ?? null;
+              arrests = playerData.Arrests ?? null;
+              arrestHistory = playerData.ArrestHistory ?? null;
+            }
+          } catch (err) {
+            apiError = "Couldn't reach the records API: " + (err as Error).message;
+          }
+
+          const vehicleTags = loadVehicleTagsDb().filter((v) => v.userId === userId);
+
+          if (avatarUrl || customPlate) {
+            const allHistory = loadSearchHistoryDb();
+            const entry: SearchSnapshot = {
+              id: crypto.randomBytes(12).toString("hex"),
+              userId,
+              username,
+              avatarUrl,
+              customPlate,
+              searchedByUsername: session.username,
+              createdAt: Date.now(),
+            };
+            const others = allHistory.filter((h) => h.userId !== userId);
+            const mine = [entry, ...allHistory.filter((h) => h.userId === userId)]
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .slice(0, HISTORY_PER_PERSON_CAP);
+            saveSearchHistoryDb([...others, ...mine]);
+          }
+
+          appendAuditLog({
+            type: "blume_person_search",
+            username: session.username,
+            detail: `Searched ${username} (${userId})`,
+          });
+
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              userId,
+              username,
+              avatarUrl,
+              customPlate,
+              arrests,
+              arrestHistory,
+              groups,
+              vehicleTags,
+              apiError,
+            })
+          );
+          return;
+        }
+
+        if (req.method === "POST") {
+          try {
+            const body = await readJsonBody(req);
+            const action = (body.action || "").toString();
+
+            if (action === "addVehicle") {
+              const userId = (body.userId || "").toString().trim();
+              const vehicleType = (body.vehicleType || "").toString().trim();
+              if (!userId || !vehicleType) {
+                res.statusCode = 400;
+                res.end("Missing userId or vehicleType.");
+                return;
+              }
+              if (vehicleType.length > 80) {
+                res.statusCode = 400;
+                res.end("Vehicle type is too long (max 80 characters).");
+                return;
+              }
+              if (containsBlockedLanguage(vehicleType)) {
+                res.statusCode = 400;
+                res.end(MODERATION_REJECTION_MESSAGE);
+                return;
+              }
+              const entry: VehicleTag = {
+                id: crypto.randomBytes(12).toString("hex"),
+                userId,
+                vehicleType,
+                addedByUsername: session.username,
+                createdAt: Date.now(),
+              };
+              const tags = loadVehicleTagsDb();
+              tags.push(entry);
+              saveVehicleTagsDb(tags);
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ vehicleTags: tags.filter((t) => t.userId === userId) }));
+              return;
+            }
+
+            if (action === "removeVehicle") {
+              const id = (body.id || "").toString().trim();
+              if (!id) {
+                res.statusCode = 400;
+                res.end("Missing vehicle tag id.");
+                return;
+              }
+              const tags = loadVehicleTagsDb();
+              const target = tags.find((t) => t.id === id);
+              if (!target) {
+                res.statusCode = 404;
+                res.end("Vehicle tag not found.");
+                return;
+              }
+              if (target.addedByUsername !== session.username && !isPlatformAdmin(session.userId)) {
+                res.statusCode = 403;
+                res.end("You can only remove vehicle tags you added.");
+                return;
+              }
+              const next = tags.filter((t) => t.id !== id);
+              saveVehicleTagsDb(next);
+              res.setHeader("Content-Type", "application/json");
+              res.end(
+                JSON.stringify({ vehicleTags: next.filter((t) => t.userId === target.userId) })
+              );
+              return;
+            }
+
+            res.statusCode = 400;
+            res.end("Unknown action.");
+          } catch (err) {
+            res.statusCode = 500;
+            res.end("Action failed: " + (err as Error).message);
+          }
+          return;
+        }
+
+        res.statusCode = 405;
+        res.end("Method not allowed");
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -1608,6 +1952,7 @@ export default defineConfig(({ mode }) => {
       blumeReportsPlugin(sessions),
       blumeBlogPlugin(sessions),
       adminPlugin(sessions),
+      blumeSearchPlugin(sessions),
     ],
   };
 });

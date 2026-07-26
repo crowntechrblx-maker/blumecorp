@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFadingError } from "./useFadingError";
+import { getChargeName } from "./pncCharges";
 
 interface BlumeReport {
   id: string;
@@ -16,6 +17,133 @@ interface BlumeBlogPost {
   readMinutes: number;
   authorUsername: string;
   createdAt: number;
+}
+
+interface PersonGroup {
+  id: number;
+  name: string;
+  tier: "red" | "white";
+}
+
+interface VehicleTag {
+  id: string;
+  userId: string;
+  vehicleType: string;
+  addedByUsername: string;
+  createdAt: number;
+}
+
+interface PersonSearchResult {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  customPlate: string | null;
+  arrests: unknown;
+  arrestHistory: unknown;
+  groups: PersonGroup[];
+  vehicleTags: VehicleTag[];
+  apiError: string | null;
+}
+
+interface HistorySnapshot {
+  id: string;
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  customPlate: string | null;
+  searchedByUsername: string;
+  createdAt: number;
+}
+
+// Renders whatever shape the arrest data actually turns out to be — a flat
+// list of names/IDs, or a list of record objects with fields like
+// chargeIds/officer/date — decoding any numeric charge codes through the
+// PNC table along the way, since we don't control that API's exact schema.
+function ArrestRecord({ data }: { data: unknown }) {
+  if (data === null || data === undefined) {
+    return <p className="blume-muted">None on file.</p>;
+  }
+  const list = Array.isArray(data) ? data : [data];
+  if (list.length === 0) {
+    return <p className="blume-muted">None on file.</p>;
+  }
+
+  function renderChargeLike(value: unknown): string {
+    if (typeof value === "number") return getChargeName(value);
+    if (typeof value === "string" && /^\d+$/.test(value)) return getChargeName(value);
+    return String(value);
+  }
+
+  return (
+    <div className="blume-arrest-list">
+      {list.map((item, i) => {
+        if (typeof item === "number" || typeof item === "string") {
+          return (
+            <div className="blume-arrest-row" key={i}>
+              {renderChargeLike(item)}
+            </div>
+          );
+        }
+        if (item && typeof item === "object") {
+          const obj = item as Record<string, unknown>;
+          const chargeField = obj.chargeIds ?? obj.charges ?? obj.chargeId ?? obj.charge;
+          const charges = Array.isArray(chargeField)
+            ? chargeField.map(renderChargeLike)
+            : chargeField !== undefined
+              ? [renderChargeLike(chargeField)]
+              : [];
+          const officer = obj.officer ?? obj.arrestedBy ?? obj.by ?? obj.arrestingOfficer;
+          const when = obj.date ?? obj.timestamp ?? obj.createdAt ?? obj.time;
+          const knownKeys = new Set([
+            "chargeIds",
+            "charges",
+            "chargeId",
+            "charge",
+            "officer",
+            "arrestedBy",
+            "by",
+            "arrestingOfficer",
+            "date",
+            "timestamp",
+            "createdAt",
+            "time",
+          ]);
+          const rest = Object.entries(obj).filter(([k]) => !knownKeys.has(k));
+          return (
+            <div className="blume-arrest-row" key={i}>
+              {charges.length > 0 && (
+                <div className="blume-arrest-charges">{charges.join(", ")}</div>
+              )}
+              <div className="blume-arrest-meta">
+                {officer !== undefined && <span>Arrested by {String(officer)}</span>}
+                {when !== undefined && (
+                  <span>
+                    {typeof when === "number"
+                      ? new Date(when).toLocaleString()
+                      : String(when)}
+                  </span>
+                )}
+              </div>
+              {rest.length > 0 && charges.length === 0 && (
+                <div className="blume-arrest-raw">
+                  {rest.map(([k, v]) => (
+                    <span key={k}>
+                      {k}: {String(v)}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+        return (
+          <div className="blume-arrest-row" key={i}>
+            {String(item)}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 const PLACEHOLDER_ACTIVE = [
@@ -225,11 +353,22 @@ export function BlumeApp({
   const [blogSubmitting, setBlogSubmitting] = useState(false);
   const { error: blogError, fading: blogFading, setError: setBlogError } = useFadingError();
 
+  const [personQuery, setPersonQuery] = useState("");
+  const [personResult, setPersonResult] = useState<PersonSearchResult | null>(null);
+  const [personLoading, setPersonLoading] = useState(false);
+  const { error: personError, fading: personFading, setError: setPersonError } = useFadingError();
+  const [newVehicleType, setNewVehicleType] = useState("");
+  const [addingVehicle, setAddingVehicle] = useState(false);
+  const [showPreviousPhotos, setShowPreviousPhotos] = useState(false);
+  const [showPreviousPlates, setShowPreviousPlates] = useState(false);
+  const [history, setHistory] = useState<HistorySnapshot[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   async function loadAccess() {
     try {
-      const res = await fetch("/api/blume-reports");
+      const res = await fetch("/api/blume-content?type=report");
       const data = await res.json();
       setCanAccess(!!data.canAccess);
       setReports(data.reports || []);
@@ -239,7 +378,7 @@ export function BlumeApp({
   }
 
   async function loadBlog() {
-    const res = await fetch("/api/blume-blog");
+    const res = await fetch("/api/blume-content?type=blog");
     const data = await res.json();
     setBlogPosts(data.posts || []);
     setCanEditBlog(!!data.canEdit);
@@ -267,7 +406,7 @@ export function BlumeApp({
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch("/api/blume-reports", {
+      const res = await fetch("/api/blume-content?type=report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: title.trim(), content: body.trim() }),
@@ -285,7 +424,9 @@ export function BlumeApp({
   }
 
   async function handleDeleteReport(id: string) {
-    await fetch(`/api/blume-reports?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    await fetch(`/api/blume-content?type=report&id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
     await loadAccess();
   }
 
@@ -294,7 +435,7 @@ export function BlumeApp({
     setBlogSubmitting(true);
     setBlogError(null);
     try {
-      const res = await fetch("/api/blume-blog", {
+      const res = await fetch("/api/blume-content?type=blog", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: blogTitle.trim(), excerpt: blogExcerpt.trim() }),
@@ -312,8 +453,98 @@ export function BlumeApp({
   }
 
   async function handleDeleteBlogPost(id: string) {
-    await fetch(`/api/blume-blog?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    await fetch(`/api/blume-content?type=blog&id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
     await loadBlog();
+  }
+
+  async function handlePersonSearch() {
+    if (!personQuery.trim()) return;
+    setPersonLoading(true);
+    setPersonError(null);
+    setShowPreviousPhotos(false);
+    setShowPreviousPlates(false);
+    try {
+      const res = await fetch(`/api/blume-search?query=${encodeURIComponent(personQuery.trim())}`);
+      if (!res.ok) {
+        setPersonResult(null);
+        setPersonError(await res.text());
+        return;
+      }
+      const data: PersonSearchResult = await res.json();
+      setPersonResult(data);
+    } catch {
+      setPersonError("Couldn't reach Person Search.");
+    } finally {
+      setPersonLoading(false);
+    }
+  }
+
+  async function loadHistory() {
+    if (!personResult) return;
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/blume-search?history=${encodeURIComponent(personResult.userId)}`);
+      const data = await res.json();
+      setHistory(data.history || []);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function togglePreviousPhotos() {
+    const next = !showPreviousPhotos;
+    setShowPreviousPhotos(next);
+    setShowPreviousPlates(false);
+    if (next) await loadHistory();
+  }
+
+  async function togglePreviousPlates() {
+    const next = !showPreviousPlates;
+    setShowPreviousPlates(next);
+    setShowPreviousPhotos(false);
+    if (next) await loadHistory();
+  }
+
+  async function handleAddVehicle() {
+    if (!personResult || !newVehicleType.trim()) return;
+    setAddingVehicle(true);
+    try {
+      const res = await fetch("/api/blume-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "addVehicle",
+          userId: personResult.userId,
+          vehicleType: newVehicleType.trim(),
+        }),
+      });
+      if (!res.ok) {
+        setPersonError(await res.text());
+        return;
+      }
+      const data = await res.json();
+      setPersonResult((prev) => (prev ? { ...prev, vehicleTags: data.vehicleTags || [] } : prev));
+      setNewVehicleType("");
+    } finally {
+      setAddingVehicle(false);
+    }
+  }
+
+  async function handleRemoveVehicle(id: string) {
+    if (!personResult) return;
+    const res = await fetch("/api/blume-search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "removeVehicle", id }),
+    });
+    if (!res.ok) {
+      setPersonError(await res.text());
+      return;
+    }
+    const data = await res.json();
+    setPersonResult((prev) => (prev ? { ...prev, vehicleTags: data.vehicleTags || [] } : prev));
   }
 
   function scrollToSection(id: string) {
@@ -718,11 +949,172 @@ export function BlumeApp({
 
             <div className="blume-panel blume-search-panel">
               <div className="blume-panel-header">Person Search</div>
-              <input placeholder="Search by name or ID…" disabled />
-              <p className="blume-muted blume-search-hint">
-                Person search API not yet connected, {username}. This panel is ready to wire up
-                once it's available.
-              </p>
+              <div className="blume-search-form">
+                <input
+                  placeholder="Search by name or ID…"
+                  value={personQuery}
+                  onChange={(e) => setPersonQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !personLoading) handlePersonSearch();
+                  }}
+                />
+                <button
+                  className="blume-cta-btn"
+                  disabled={!personQuery.trim() || personLoading}
+                  onClick={handlePersonSearch}
+                >
+                  {personLoading ? "Searching…" : "Search"}
+                </button>
+              </div>
+              {personError && (
+                <p className={`blume-error${personFading ? " fading-out" : ""}`}>{personError}</p>
+              )}
+              {!personResult && !personError && (
+                <p className="blume-muted blume-search-hint">
+                  Search by name or Roblox ID, {username}. Every search is logged and cached.
+                </p>
+              )}
+
+              {personResult && (
+                <div className="blume-person-result">
+                  <div className="blume-person-head">
+                    {personResult.avatarUrl && (
+                      <img className="blume-person-photo" src={personResult.avatarUrl} alt="" />
+                    )}
+                    <div>
+                      <strong className="blume-person-name">{personResult.username}</strong>
+                      <span className="blume-person-id">ID {personResult.userId}</span>
+                    </div>
+                  </div>
+
+                  {personResult.apiError && (
+                    <p className="blume-error">{personResult.apiError}</p>
+                  )}
+
+                  <div className="blume-person-row">
+                    <span className="blume-person-label">Equipped plate</span>
+                    <span className="blume-person-value">
+                      {personResult.customPlate || "None on file"}
+                    </span>
+                  </div>
+
+                  <div className="blume-person-history-actions">
+                    <button className="blume-view-previous-btn" onClick={togglePreviousPhotos}>
+                      {showPreviousPhotos ? "Hide previous photos" : "View Previous Photos"}
+                    </button>
+                    <button className="blume-view-previous-btn" onClick={togglePreviousPlates}>
+                      {showPreviousPlates ? "Hide previous plates" : "View Previous Plates"}
+                    </button>
+                  </div>
+
+                  {showPreviousPhotos && (
+                    <div className="blume-history-panel">
+                      {historyLoading ? (
+                        <p className="blume-muted">Loading…</p>
+                      ) : history.length === 0 ? (
+                        <p className="blume-muted">No previous photos cached.</p>
+                      ) : (
+                        <div className="blume-history-photo-grid">
+                          {history.map((h) => (
+                            <div className="blume-history-photo-item" key={h.id}>
+                              {h.avatarUrl ? (
+                                <img src={h.avatarUrl} alt="" />
+                              ) : (
+                                <div className="blume-history-photo-empty" />
+                              )}
+                              <span>{new Date(h.createdAt).toLocaleDateString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {showPreviousPlates && (
+                    <div className="blume-history-panel">
+                      {historyLoading ? (
+                        <p className="blume-muted">Loading…</p>
+                      ) : history.length === 0 ? (
+                        <p className="blume-muted">No previous plates cached.</p>
+                      ) : (
+                        <div className="blume-history-list">
+                          {history.map((h) => (
+                            <div className="blume-history-row" key={h.id}>
+                              <span>{h.customPlate || "—"}</span>
+                              <span className="blume-history-meta">
+                                {new Date(h.createdAt).toLocaleString()} · searched by{" "}
+                                {h.searchedByUsername}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="blume-person-section">
+                    <span className="blume-person-label">Known vehicles</span>
+                    <div className="blume-vehicle-list">
+                      {personResult.vehicleTags.length === 0 && (
+                        <p className="blume-muted">None tagged yet.</p>
+                      )}
+                      {personResult.vehicleTags.map((v) => (
+                        <div className="blume-vehicle-chip" key={v.id}>
+                          <span>{v.vehicleType}</span>
+                          <button onClick={() => handleRemoveVehicle(v.id)} title="Remove">
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="blume-vehicle-form">
+                      <input
+                        placeholder="Add a known vehicle type…"
+                        value={newVehicleType}
+                        onChange={(e) => setNewVehicleType(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !addingVehicle) handleAddVehicle();
+                        }}
+                      />
+                      <button
+                        className="blume-cta-btn"
+                        disabled={!newVehicleType.trim() || addingVehicle}
+                        onClick={handleAddVehicle}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="blume-person-section">
+                    <span className="blume-person-label">Groups</span>
+                    {personResult.groups.length === 0 ? (
+                      <p className="blume-muted">No relevant group memberships found.</p>
+                    ) : (
+                      <div className="blume-group-list">
+                        {personResult.groups.map((g) => (
+                          <span
+                            key={g.id}
+                            className={`blume-group-chip ${g.tier === "red" ? "blume-group-red" : ""}`}
+                          >
+                            {g.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="blume-person-section">
+                    <span className="blume-person-label">Arrests</span>
+                    <ArrestRecord data={personResult.arrests} />
+                  </div>
+
+                  <div className="blume-person-section">
+                    <span className="blume-person-label">Arrest history</span>
+                    <ArrestRecord data={personResult.arrestHistory} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

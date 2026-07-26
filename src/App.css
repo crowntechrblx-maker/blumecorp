@@ -1901,10 +1901,212 @@
   padding: 7px 10px;
   color: #e5e7eb;
   font-size: 12.5px;
-  margin-bottom: 10px;
 }
 .blume-search-hint {
   line-height: 1.5;
+}
+.blume-search-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.blume-search-form input {
+  flex: 1;
+  margin-bottom: 0;
+}
+.blume-person-result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.blume-person-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.blume-person-photo {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.blume-person-head div {
+  display: flex;
+  flex-direction: column;
+}
+.blume-person-name {
+  font-size: 13.5px;
+  color: #f4f6fb;
+}
+.blume-person-id {
+  font-size: 10.5px;
+  color: #6b7280;
+}
+.blume-person-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+.blume-person-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+.blume-person-value {
+  color: #e5e7eb;
+  font-weight: 600;
+}
+.blume-person-history-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.blume-view-previous-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--blume-accent);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.blume-view-previous-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.blume-history-panel {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 10px;
+}
+.blume-history-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 8px;
+}
+.blume-history-photo-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.blume-history-photo-item img,
+.blume-history-photo-empty {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.05);
+}
+.blume-history-photo-item span {
+  font-size: 9px;
+  color: #6b7280;
+}
+.blume-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.blume-history-row {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: #e5e7eb;
+}
+.blume-history-meta {
+  font-size: 10px;
+  color: #6b7280;
+}
+.blume-person-section {
+  display: flex;
+  flex-direction: column;
+}
+.blume-vehicle-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.blume-vehicle-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  padding: 4px 6px 4px 10px;
+  font-size: 11.5px;
+  color: #e5e7eb;
+}
+.blume-vehicle-chip button {
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px;
+}
+.blume-vehicle-chip button:hover {
+  color: #f87171;
+}
+.blume-vehicle-form {
+  display: flex;
+  gap: 8px;
+}
+.blume-vehicle-form input {
+  flex: 1;
+  margin-bottom: 0;
+}
+.blume-group-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.blume-group-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #e5e7eb;
+}
+.blume-group-red {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+.blume-arrest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.blume-arrest-row {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #e5e7eb;
+}
+.blume-arrest-charges {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.blume-arrest-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 10.5px;
+  color: #6b7280;
+}
+.blume-arrest-raw {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #9aa1ad;
 }
 
 /* Instagram */
@@ -2328,8 +2530,8 @@
 }
 .background-delete-btn {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 26px;
+  left: 4px;
   width: 18px;
   height: 18px;
   padding: 0;
