@@ -6,7 +6,8 @@ import { MessagesApp } from "./MessagesApp";
 import { RoyalFamilyApp } from "./RoyalFamilyApp";
 import { BlumeApp } from "./BlumeApp";
 import { SettingsApp } from "./SettingsApp";
-import { MapsApp } from "./MapsApp";
+import { PsRollsApp } from "./PsRollsApp";
+import { SwiftCorporateApp } from "./SwiftCorporateApp";
 
 function TflContent() {
   const lines = [
@@ -107,164 +108,6 @@ function UberContent({ username }: { username: string }) {
   );
 }
 
-function SwiftCorporateContent() {
-  const services = [
-    {
-      icon: "📈",
-      title: "Growth Strategy",
-      copy: "Data-driven roadmaps that turn ambitious targets into a workable quarter-by-quarter plan.",
-    },
-    {
-      icon: "🤝",
-      title: "Corporate Consulting",
-      copy: "Hands-on advisory across operations, structure, and process to keep your business scaling smoothly.",
-    },
-    {
-      icon: "💼",
-      title: "Talent & Hiring",
-      copy: "Building the teams that carry your growth forward, from first hire to full department.",
-    },
-    {
-      icon: "🌍",
-      title: "Market Expansion",
-      copy: "Research and rollout support for businesses looking to expand into new markets and regions.",
-    },
-  ];
-
-  const stats = [
-    { value: "300+", label: "Companies served" },
-    { value: "£120M", label: "Client revenue supported" },
-    { value: "12", label: "Years in business" },
-  ];
-
-  return (
-    <div className="app-content swift">
-      <div className="swift-hero">
-        <div className="swift-hero-badge">SWIFT CORPORATE</div>
-        <h2 className="swift-motto">Helping Your Company Grow</h2>
-        <p className="swift-hero-sub">
-          Swift Corporate partners with ambitious businesses to plan, staff, and scale — with a
-          dedicated team behind every stage of the journey.
-        </p>
-      </div>
-
-      <div className="swift-stats">
-        {stats.map((s) => (
-          <div className="swift-stat" key={s.label}>
-            <strong>{s.value}</strong>
-            <span>{s.label}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="section">
-        <h3>What we do</h3>
-        <div className="swift-services">
-          {services.map((s) => (
-            <div className="swift-service-card" key={s.title}>
-              <div className="swift-service-icon">{s.icon}</div>
-              <strong>{s.title}</strong>
-              <p>{s.copy}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="section swift-contact">
-        <h3>Ready to grow?</h3>
-        <p>Get in touch with our team and we'll walk you through how Swift Corporate can help.</p>
-        <a
-          className="app-content-cta-link"
-          href="https://discord.gg/93FQDz6Uk"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <button className="cta">Contact us</button>
-        </a>
-      </div>
-    </div>
-  );
-}
-
-function PsRollsContent() {
-  const practiceAreas = [
-    {
-      icon: "🏢",
-      title: "Corporate Law",
-      copy: "Advising businesses across Westbridge on structure, contracts, and disputes.",
-    },
-    {
-      icon: "⚖️",
-      title: "Criminal Law",
-      copy: "Robust representation for criminal matters, from first hearing through to trial.",
-    },
-    {
-      icon: "📄",
-      title: "Employment Law",
-      copy: "Guidance for both employers and employees on contracts, disputes, and tribunals.",
-    },
-  ];
-
-  return (
-    <div className="app-content ps-rolls">
-      <div className="rolls-hero">
-        <div className="rolls-hero-badge">C&amp;M ROLLS</div>
-        <h2 className="rolls-motto">"Where Justice Lays"</h2>
-        <p className="rolls-hero-sub">
-          A private law firm operating within Westbridge, catered towards corporate law,
-          criminal law, and employment law.
-        </p>
-      </div>
-
-      <div className="section">
-        <h3>Practice areas</h3>
-        <div className="rolls-services">
-          {practiceAreas.map((p) => (
-            <div className="rolls-service-card" key={p.title}>
-              <div className="rolls-service-icon">{p.icon}</div>
-              <strong>{p.title}</strong>
-              <p>{p.copy}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="section">
-        <h3>Job openings</h3>
-        <p>
-          We have a multitude of job openings available if you wish to take them, as well as
-          being open to taking on new cases too.
-        </p>
-        <p>
-          We're also offering trainee contracts for those wanting to get into PS Law and working
-          within the courts, but just can't seem to find their foothold.
-        </p>
-      </div>
-
-      <div className="section">
-        <h3>Taking new cases</h3>
-        <p>
-          Our doors are open to taking a whole plethora of cases, with a wide array of
-          solicitors and barristers — some who sit on the King's Bench.
-        </p>
-      </div>
-
-      <div className="section rolls-contact">
-        <h3>Any questions?</h3>
-        <p>Feel free to open a ticket and a member of our team will be with you.</p>
-        <a
-          className="app-content-cta-link"
-          href="https://discord.gg/crjrGHbqc"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <button className="cta">Open a ticket</button>
-        </a>
-      </div>
-    </div>
-  );
-}
-
 export function AppContent({
   id,
   username,
@@ -284,11 +127,9 @@ export function AppContent({
     case "uber":
       return <UberContent username={username} />;
     case "swiftCorporate":
-      return <SwiftCorporateContent />;
-    case "maps":
-      return <MapsApp />;
+      return <SwiftCorporateApp />;
     case "psRolls":
-      return <PsRollsContent />;
+      return <PsRollsApp />;
     case "royalFamily":
       return <RoyalFamilyApp />;
     case "blume":

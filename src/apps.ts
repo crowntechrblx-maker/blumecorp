@@ -2,7 +2,6 @@ export type AppId =
   | "tfl"
   | "uber"
   | "swiftCorporate"
-  | "maps"
   | "psRolls"
   | "royalFamily"
   | "blume"
@@ -40,13 +39,6 @@ export const APPS: AppDef[] = [
     icon: "",
     color: "#ff0000",
     defaultSize: { width: 800, height: 600 },
-  },
-  {
-    id: "maps",
-    name: "Maps",
-    icon: "",
-    color: "#ff0000",
-    defaultSize: { width: 900, height: 680 },
   },
   {
     id: "psRolls",

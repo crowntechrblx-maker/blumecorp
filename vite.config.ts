@@ -1091,7 +1091,8 @@ function royalTweetsPlugin(sessions: Map<string, RobloxSession>): Plugin {
         if (url.pathname === "/api/royal-tweets" && req.method === "GET") {
           const entries = loadRoyalTweetsDb().sort((a, b) => b.createdAt - a.createdAt);
           const canAdd = session
-            ? await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID)
+            ? isPlatformAdmin(session.userId) ||
+              (await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID))
             : false;
           res.setHeader("Content-Type", "application/json");
           res.end(
@@ -1115,7 +1116,7 @@ function royalTweetsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const isMember = await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID);
-          if (!isMember) {
+          if (!isPlatformAdmin(session.userId) && !isMember) {
             res.statusCode = 403;
             res.end("Only members of the Royal Family group can add posts.");
             return;
