@@ -347,6 +347,46 @@
   color: #666;
 }
 
+/* Uber launch splash — brief animated black wordmark before the real
+   "Where to?" screen appears, echoing Uber's own app launch animation. */
+.uber-splash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 260px;
+  background: #fff;
+}
+.uber-splash-logo {
+  font-family: "Inter Tight", "Inter", -apple-system, sans-serif;
+  font-weight: 800;
+  font-size: 34px;
+  letter-spacing: 6px;
+  color: #000;
+  animation: uber-splash-in 1.6s ease forwards;
+}
+@keyframes uber-splash-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+    letter-spacing: 2px;
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.04);
+    letter-spacing: 7px;
+  }
+  55% {
+    transform: scale(1);
+    letter-spacing: 6px;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* Swift Corporate */
 .stat-row {
   display: flex;
@@ -830,19 +870,27 @@
   /* Wide text field — this is the primary control, the button next to it
      is just a small confirm action, matching the site's understated
      dark-square icon buttons (e.g. its search button) rather than a big
-     pill CTA. */
+     pill CTA. box-sizing + zeroed margin here matter: the generic
+     .app-content input rule adds a bottom margin (meant for stacked form
+     fields) which, left in place, throws off align-items: center in this
+     row and makes the input look shifted relative to the button. */
+  box-sizing: border-box;
+  margin: 0;
   flex: 1;
   min-width: 0;
-  padding: 10px 12px;
+  height: 36px;
+  padding: 0 12px;
   border: 1px solid #d8d8dc;
   border-radius: 6px;
   font-size: 13px;
 }
-.royal-add-btn {
+.app-content button.royal-add-btn {
+  box-sizing: border-box;
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
+  margin: 0;
   border: none;
   border-radius: 6px;
   background: #1c1c1e;
@@ -866,16 +914,42 @@
 .royal-tweet-list {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 14px;
 }
 .royal-tweet-item {
+  /* X's embed widget maxes out around ~550px and won't stretch further,
+     so on a wide window just letting it sit flush-left leaves a big
+     awkward strip of blank space beside it. Centering a capped-width
+     column instead makes that look deliberate rather than broken. */
+  width: 100%;
+  max-width: 550px;
   border-bottom: 1px solid #e5e5e7;
   padding-bottom: 12px;
+}
+.royal-tweet-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 .royal-tweet-meta {
   font-size: 11px;
   color: #8a8a8e;
   margin: 6px 0 0;
+}
+.app-content button.royal-tweet-delete {
+  flex-shrink: 0;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px solid #e5e5e7;
+  border-radius: 6px;
+  background: transparent;
+  color: #d92c2c;
+  font-size: 11px;
+}
+.app-content button.royal-tweet-delete:disabled {
+  opacity: 0.5;
 }
 .royal-loading,
 .royal-empty {

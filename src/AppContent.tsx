@@ -43,6 +43,15 @@ function UberContent({ username }: { username: string }) {
   const [location, setLocation] = useState("");
   const [requested, setRequested] = useState(false);
   const [price, setPrice] = useState<number | null>(null);
+  const [initializing, setInitializing] = useState(true);
+
+  // Brief branded splash before the app is usable, like Uber's own
+  // launch animation — the wordmark scales/fades in, holds briefly, then
+  // the real "Where to?" screen takes over.
+  useEffect(() => {
+    const timer = setTimeout(() => setInitializing(false), 1600);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Wait for the person to finish typing the full location before showing a
   // price, rather than flashing a number after every keystroke.
@@ -67,6 +76,14 @@ function UberContent({ username }: { username: string }) {
     setRequested(false);
     setLocation("");
     setPrice(null);
+  }
+
+  if (initializing) {
+    return (
+      <div className="app-content uber uber-splash">
+        <div className="uber-splash-logo">UBER</div>
+      </div>
+    );
   }
 
   if (requested) {

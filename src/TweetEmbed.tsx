@@ -41,6 +41,30 @@ export function TweetEmbed({ url }: { url: string }) {
     };
   }, [url]);
 
+  useEffect(() => {
+    // X's widget picks a fixed pixel width based on the container's size
+    // the moment it renders, and never revisits that — so resizing its
+    // container afterwards leaves it either too narrow with a wall of
+    // blank space next to it, or clipped. A plain window "resize" listener
+    // isn't enough here: dragging a Westbridge OS window's corner resizes
+    // this container without changing the actual browser viewport size, so
+    // a ResizeObserver on the container itself is what actually catches it.
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let resizeTimer: number | undefined;
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        if (containerRef.current) window.twttr?.widgets.load(containerRef.current);
+      }, 250);
+    });
+    observer.observe(el);
+    return () => {
+      window.clearTimeout(resizeTimer);
+      observer.disconnect();
+    };
+  }, []);
+
   return (
     <div className="tweet-embed" ref={containerRef}>
       <blockquote className="twitter-tweet" data-theme="light">

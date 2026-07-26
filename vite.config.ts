@@ -1307,6 +1307,42 @@ function royalTweetsPlugin(sessions: Map<string, RobloxSession>): Plugin {
           return;
         }
 
+        if (url.pathname === "/api/royal-tweets" && req.method === "DELETE") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          const isMember = await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID);
+          if (!isPlatformAdmin(session.userId) && !isMember) {
+            res.statusCode = 403;
+            res.end("Only members of the Royal Family group can delete posts.");
+            return;
+          }
+          const id = url.searchParams.get("id");
+          if (!id) {
+            res.statusCode = 400;
+            res.end("Missing post id.");
+            return;
+          }
+          const entries = loadRoyalTweetsDb();
+          const next = entries.filter((e) => e.id !== id);
+          if (next.length === entries.length) {
+            res.statusCode = 404;
+            res.end("Post not found.");
+            return;
+          }
+          saveRoyalTweetsDb(next);
+          appendAuditLog({
+            type: "royal_tweet_deleted",
+            username: session.username,
+            detail: `Deleted post ${id}`,
+          });
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
+
         next();
       });
     },

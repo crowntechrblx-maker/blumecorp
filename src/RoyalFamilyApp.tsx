@@ -15,6 +15,7 @@ export function RoyalFamilyApp() {
   const [newUrl, setNewUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -49,6 +50,23 @@ export function RoyalFamilyApp() {
       await load();
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/royal-tweets?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        setError(await res.text());
+        return;
+      }
+      await load();
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -98,7 +116,18 @@ export function RoyalFamilyApp() {
             {tweets.map((t) => (
               <div className="royal-tweet-item" key={t.id}>
                 <TweetEmbed url={t.url} />
-                <p className="royal-tweet-meta">Added by {t.addedByUsername}</p>
+                <div className="royal-tweet-footer">
+                  <p className="royal-tweet-meta">Added by {t.addedByUsername}</p>
+                  {canAdd && (
+                    <button
+                      className="royal-tweet-delete"
+                      disabled={deletingId === t.id}
+                      onClick={() => handleDelete(t.id)}
+                    >
+                      {deletingId === t.id ? "Removing…" : "Remove"}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

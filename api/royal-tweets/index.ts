@@ -76,5 +76,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  if (req.method === "DELETE") {
+    if (!session) {
+      res.status(401).send("You must be signed in.");
+      return;
+    }
+    const isMember = await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID);
+    if (!isPlatformAdmin(session.userId) && !isMember) {
+      res.status(403).send("Only members of the Royal Family group can delete posts.");
+      return;
+    }
+    const url = new URL(req.url || "", `https://${req.headers.host}`);
+    const id = url.searchParams.get("id");
+    if (!id) {
+      res.status(400).send("Missing post id.");
+      return;
+    }
+    const entries = (await kv.get<RoyalTweetEntry[]>("royalTweets")) || [];
+    const next = entries.filter((e) => e.id !== id);
+    if (next.length === entries.length) {
+      res.status(404).send("Post not found.");
+      return;
+    }
+    await kv.set("royalTweets", next);
+    await appendAuditLog({
+      type: "royal_tweet_deleted",
+      username: session.username,
+      detail: `Deleted post ${id}`,
+    });
+    res.status(200).json({ ok: true });
+    return;
+  }
+
   res.status(405).send("Method not allowed");
 }
