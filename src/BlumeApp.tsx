@@ -599,6 +599,26 @@ export function BlumeApp({
     await loadBlog();
   }
 
+  const [usernameCopied, setUsernameCopied] = useState(false);
+
+  function handleUsernameClick(name: string) {
+    // Jump the searched name into Person Search — expand the panel if it's
+    // collapsed so the result is actually visible.
+    setCollapsedPanels((prev) => ({ ...prev, search: false }));
+    handlePersonSearch(name);
+  }
+
+  async function handleCopyUsername(name: string) {
+    try {
+      await navigator.clipboard.writeText(name);
+      setUsernameCopied(true);
+      window.setTimeout(() => setUsernameCopied(false), 1500);
+    } catch {
+      // Clipboard API can be denied/unavailable — fail quietly, nothing to
+      // recover from client-side.
+    }
+  }
+
   async function handlePersonSearch(overrideQuery?: string) {
     const q = (overrideQuery ?? personQuery).trim();
     if (!q) return;
@@ -1297,7 +1317,12 @@ export function BlumeApp({
                         {inGameUsers.map((u) => (
                           <div className="blume-ingame-user" key={u.username}>
                             {u.avatarUrl && <img src={u.avatarUrl} alt="" />}
-                            <span>{u.username}</span>
+                            <span
+                              className="blume-clickable-username"
+                              onClick={() => handleUsernameClick(u.username)}
+                            >
+                              {u.username}
+                            </span>
                             {u.redGroupName && (
                               <span className="blume-ingame-red-group">{u.redGroupName}</span>
                             )}
@@ -1351,7 +1376,14 @@ export function BlumeApp({
                       <img className="blume-person-photo" src={personResult.avatarUrl} alt="" />
                     )}
                     <div>
-                      <strong className="blume-person-name">{personResult.username}</strong>
+                      <strong
+                        className="blume-person-name blume-clickable-username"
+                        title="Click to copy username"
+                        onClick={() => handleCopyUsername(personResult.username)}
+                      >
+                        {personResult.username}
+                        {usernameCopied && <span className="blume-copied-tag">Copied</span>}
+                      </strong>
                       <span className="blume-person-id">ID {personResult.userId}</span>
                     </div>
                   </div>

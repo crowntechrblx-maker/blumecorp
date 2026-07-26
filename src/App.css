@@ -2251,6 +2251,27 @@
 .blume-person-name {
   font-size: 13.5px;
   color: #f4f6fb;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Shared by in-game usernames (jump to Person Search) and the Person
+   Search result name (copy to clipboard) — underline only on hover so it
+   doesn't look like a permanent link. */
+.blume-clickable-username {
+  cursor: pointer;
+}
+.blume-clickable-username:hover {
+  text-decoration: underline;
+}
+.blume-copied-tag {
+  font-size: 10px;
+  font-weight: 400;
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  padding: 1px 6px;
+  border-radius: 999px;
 }
 .blume-person-id {
   font-size: 10.5px;
