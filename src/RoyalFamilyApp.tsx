@@ -111,21 +111,25 @@ export function RoyalFamilyApp() {
 
   return (
     <div className="app-content royal">
-      <h2>The Royal Family</h2>
-      <div className="royal-profiles">
-        {ROYAL_PROFILES.map((p) => (
-          <div className="royal-profile-card" key={p.handle}>
-            <div className="royal-profile-header">
-              <div className="royal-avatar">👤</div>
-              <div>
-                <h3 className="royal-profile-title">{p.title}</h3>
-                <span className="royal-profile-handle">@{p.handle}</span>
+      <div className="royal-profiles-section">
+        <h2>The Royal Family</h2>
+        <div className="royal-profiles">
+          {ROYAL_PROFILES.map((p) => (
+            <div className="royal-profile-card" key={p.handle}>
+              <div className="royal-profile-header">
+                <div className="royal-avatar">👤</div>
+                <div>
+                  <h3 className="royal-profile-title">{p.title}</h3>
+                  <span className="royal-profile-handle">@{p.handle}</span>
+                </div>
               </div>
+              <p className="royal-profile-bio">{p.bio}</p>
             </div>
-            <p className="royal-profile-bio">{p.bio}</p>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
+
+      <hr className="royal-divider" />
 
       {canAdd && (
         <div className="section royal-add-section">

@@ -828,16 +828,37 @@
 }
 
 /* Royal Family */
+.royal-profiles-section {
+  background-image: url("/royal/family-meeting.png");
+  background-size: cover;
+  background-position: center 35%;
+  border-radius: 10px;
+  padding: 14px;
+}
+.royal-profiles-section h2 {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
 .royal-profiles {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-bottom: 12px;
 }
 .royal-profile-card {
-  background: #f6f6f7;
+  /* Slightly transparent so the room photo behind the section shows
+     through, rather than a flat opaque panel. */
+  background: rgba(246, 246, 247, 0.62);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   border-radius: 8px;
   padding: 12px;
+}
+.royal-divider {
+  border: none;
+  border-top: 1px solid #e5e5e7;
+  margin: 16px 0;
 }
 .royal-profile-header {
   display: flex;
