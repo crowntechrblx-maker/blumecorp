@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { APPS, type AppId } from "./apps";
 import { MenuBar } from "./MenuBar";
 import { DesktopIcon } from "./DesktopIcon";
@@ -18,6 +18,15 @@ function App() {
   const { wallpaperUrl } = useWallpaper();
   const [windows, setWindows] = useState<WindowsMap>({});
   const [activeApp, setActiveApp] = useState<AppId | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
+
+  useEffect(() => {
+    function handleResize() {
+      setViewportHeight(window.innerHeight);
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   function openApp(id: AppId) {
     const app = APPS.find((a) => a.id === id)!;
@@ -134,10 +143,16 @@ function App() {
 
   const visibleApps = APPS.filter((app) => app.id !== "settings" || user.isAdmin);
 
-  // Mac-style desktop icon layout: fill a column top-to-bottom, and once it
-  // holds 9 icons, start a new column to the LEFT of it (never to the right,
-  // which would run off toward the menu bar clock).
-  const ICONS_PER_COLUMN = 9;
+  // Mac-style desktop icon layout: fill a column top-to-bottom, and once
+  // it's full, start a new column to the LEFT of it (never to the right,
+  // which would run off toward the menu bar clock). 8 per column is the
+  // target, but on a shorter screen we drop to however many actually fit
+  // without squishing them, rather than overflow past the page edge.
+  const ICON_SLOT_HEIGHT = 94; // 88px icon + 6px gap
+  const RESERVED_VERTICAL_SPACE = 58; // 42px top framing + 16px bottom framing
+  const availableHeight = viewportHeight - RESERVED_VERTICAL_SPACE;
+  const maxThatFit = Math.max(1, Math.floor((availableHeight + 6) / ICON_SLOT_HEIGHT));
+  const ICONS_PER_COLUMN = Math.min(8, maxThatFit);
   const iconColumns: (typeof visibleApps)[] = [];
   for (let i = 0; i < visibleApps.length; i += ICONS_PER_COLUMN) {
     iconColumns.push(visibleApps.slice(i, i + ICONS_PER_COLUMN));

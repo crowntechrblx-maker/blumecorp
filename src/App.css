@@ -103,6 +103,10 @@
 .desktop-icon {
   width: 84px;
   height: 88px;
+  /* Never let flex shrink these to fit — the column count in App.tsx is
+     already calculated to fit the screen at full size, so a shrunk icon
+     here would mean that math is wrong, not that squishing is the fix. */
+  flex-shrink: 0;
   background: transparent;
   border: none;
   display: flex;
