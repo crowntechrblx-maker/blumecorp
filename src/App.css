@@ -94,13 +94,15 @@
 .desktop-icon-column {
   display: flex;
   flex-direction: column;
-  /* Every column fills from the top down (standard Mac behavior) — once
-     a column hits 8 icons, the next app starts a fresh column at the top,
-     not partway down. The 8-per-column cap in App.tsx is already sized to
-     fill the available height evenly, so the always-full first column's
-     top/bottom margins stay balanced; a trailing, partially-filled column
-     will simply have extra space below it instead of being centered. */
-  justify-content: flex-start;
+  /* Icons within a column always stack top-down in order (that ordering
+     comes from the chunking logic in App.tsx — the first 8 apps fill
+     column 1, the next 8 fill column 2, etc — justify-content here has no
+     effect on that order). What this DOES control is where the whole
+     stack sits in the leftover vertical space: "center" splits any slack
+     evenly above and below, so the gap from the top icon to the menu bar
+     matches the gap from the bottom icon to the screen edge, even when a
+     column isn't perfectly full. */
+  justify-content: center;
   gap: 6px;
 }
 
