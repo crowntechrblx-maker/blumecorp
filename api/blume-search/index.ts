@@ -40,17 +40,29 @@ interface VehicleTag {
   createdAt: number;
 }
 
-// One row per Roblox user ever swept up by a Group Search scan — their full
-// group membership list plus whatever the records API knows, so Group
-// Viewer can answer "who in this subgroup have we already seen" without
-// re-scanning anything.
+// One row per Roblox user ever swept up by a group search — their full
+// group membership list, friends who are ALSO already in this same cache
+// (never a friend who's never been scanned/searched), plus whatever the
+// records API knows. `changed` records what was different from the last
+// time this same person was scanned, so Person Search can flag it.
 interface GroupScanEntry {
   userId: string;
   username: string;
   avatarUrl: string | null;
   customPlate: string | null;
   groupIds: number[];
+  friends: { userId: string; username: string }[];
   scannedAt: number;
+  changed?: { username: boolean; groups: boolean; friends: boolean; at: number } | null;
+}
+
+// Groups users have added on top of the built-in PERSON_SEARCH_GROUPS list,
+// via the Group Settings tab. Stored separately so the built-in list never
+// needs a code change to extend.
+interface CustomGroup {
+  id: number;
+  name: string;
+  tier: "red" | "white";
 }
 
 const HISTORY_PER_PERSON_CAP = 20;
@@ -59,10 +71,20 @@ const HISTORY_PER_PERSON_CAP = 20;
 // stop and re-run a big group scan without redoing all the finished work.
 const GROUP_SCAN_FRESH_MS = 6 * 60 * 60 * 1000;
 
-function relevantGroups(groupIds: number[]) {
+async function getGroupCatalog(): Promise<Record<number, { name: string; tier: "red" | "white" }>> {
+  const custom = (await kv.get<CustomGroup[]>("blumeCustomGroups")) || [];
+  const merged: Record<number, { name: string; tier: "red" | "white" }> = { ...PERSON_SEARCH_GROUPS };
+  for (const c of custom) merged[c.id] = { name: c.name, tier: c.tier };
+  return merged;
+}
+
+function relevantGroups(
+  groupIds: number[],
+  catalog: Record<number, { name: string; tier: "red" | "white" }>
+) {
   return groupIds
-    .filter((id) => id in PERSON_SEARCH_GROUPS)
-    .map((id) => ({ id, ...PERSON_SEARCH_GROUPS[id] }))
+    .filter((id) => id in catalog)
+    .map((id) => ({ id, ...catalog[id] }))
     .sort((a, b) => (a.tier === b.tier ? 0 : a.tier === "red" ? -1 : 1));
 }
 
@@ -188,10 +210,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
       try {
+        const catalog = await getGroupCatalog();
         const inGame = await findInGamePresence(candidates, gamePlaceId);
         const users = inGame
           .map((m) => {
-            const redGroup = relevantGroups(m.groupIds).find((g) => g.tier === "red");
+            const redGroup = relevantGroups(m.groupIds, catalog).find((g) => g.tier === "red");
             const role =
               AGENT_GROUPS.filter((g) => m.groupIds.includes(g.id))
                 .map((g) => g.label)
@@ -214,15 +237,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Group Search: page through a Roblox group's member list. Restricted to
-    // the 3 super users since this is the on-ramp for bulk-scanning real
-    // people's data, not a general Person Search capability.
+    // Every known group, built-in + anything added via the Group Settings
+    // tab — feeds that tab's list and the "browse a group" quick-picks.
+    if (req.query.groupCatalog) {
+      const catalog = await getGroupCatalog();
+      const groups = Object.entries(catalog)
+        .map(([id, g]) => ({ id: Number(id), name: g.name, tier: g.tier }))
+        .sort((a, b) => (a.tier === b.tier ? a.name.localeCompare(b.name) : a.tier === "red" ? -1 : 1));
+      res.status(200).json({ groups });
+      return;
+    }
+
+    // Group Search: page through a Roblox group's member list. Open to
+    // anyone with Blume clearance (not just the 3 super users) — Group
+    // Search and Group Viewer are now one consolidated feature.
     const groupMembersOf = (req.query.groupMembers as string) || "";
     if (groupMembersOf) {
-      if (!isBlumeSuperUser(session.userId)) {
-        res.status(403).send("Group Search is restricted to Blume operators.");
-        return;
-      }
       const cursor = (req.query.cursor as string) || "";
       const groupId = extractGroupId(groupMembersOf);
       try {
@@ -249,19 +279,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Group Viewer: which already-scanned members belong to a given group.
+    // Group Viewer half of the consolidated feature: which already-scanned
+    // members belong to a given group. Open to anyone with Blume clearance.
     const groupScanOf = (req.query.groupScan as string) || "";
     if (groupScanOf) {
-      if (!isBlumeSuperUser(session.userId)) {
-        res.status(403).send("Group Viewer is restricted to Blume operators.");
-        return;
-      }
+      const catalog = await getGroupCatalog();
       const groupId = Number(extractGroupId(groupScanOf));
       const all = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
       const members = all
         .filter((m) => m.groupIds.includes(groupId))
         .sort((a, b) => b.scannedAt - a.scannedAt)
-        .map((m) => ({ ...m, relevantGroups: relevantGroups(m.groupIds) }));
+        .map((m) => ({ ...m, relevantGroups: relevantGroups(m.groupIds, catalog) }));
       res.status(200).json({ members });
       return;
     }
@@ -289,11 +317,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const { userId, username } = resolved;
 
+    const catalog = await getGroupCatalog();
     const [avatarUrl, groupIds] = await Promise.all([
       getRobloxAvatarUrl(userId),
       getUserGroupIds(userId),
     ]);
-    const groups = relevantGroups(groupIds);
+    const groups = relevantGroups(groupIds, catalog);
 
     let customPlate: string | null = null;
     let arrestHistory: unknown = null;
@@ -338,10 +367,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const knownAvatarByUserId = new Map<string, string | null>();
     for (const h of historyList) knownAvatarByUserId.set(h.userId, h.avatarUrl);
     for (const s of scanList) knownAvatarByUserId.set(s.userId, s.avatarUrl);
+    const scanByUserId = new Map<string, GroupScanEntry>();
+    for (const s of scanList) scanByUserId.set(s.userId, s);
     const knownIds = new Set<string>([...historyList.map((h) => h.userId), ...scanList.map((s) => s.userId)]);
+    // A friend flagged in red if THEY belong to a red-tier group — we only
+    // know a friend's groups if they've themselves been through a group
+    // scan (search history alone doesn't carry group membership).
     const knownFriends = friends
       .filter((f) => f.userId !== userId && knownIds.has(f.userId))
-      .map((f) => ({ userId: f.userId, username: f.username, avatarUrl: knownAvatarByUserId.get(f.userId) ?? null }));
+      .map((f) => {
+        const scanEntry = scanByUserId.get(f.userId);
+        const redGroupNames = scanEntry
+          ? relevantGroups(scanEntry.groupIds, catalog)
+              .filter((g) => g.tier === "red")
+              .map((g) => g.name)
+          : [];
+        return {
+          userId: f.userId,
+          username: f.username,
+          avatarUrl: knownAvatarByUserId.get(f.userId) ?? null,
+          redGroupNames,
+        };
+      });
+
+    // If this person has themselves been through a group scan before, carry
+    // forward whatever changed the last time they were re-scanned (username,
+    // groups, or their known-friends list), so Person Search can flag it.
+    const ownScanEntry = scanList.find((s) => s.userId === userId);
+    const groupScanChange = ownScanEntry?.changed || null;
 
     // Cache a snapshot of the photo + plate for "View Previous" — only when
     // we actually got something worth remembering, and only when it's
@@ -389,6 +442,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       groups,
       vehicleTags,
       knownFriends,
+      groupScanChange,
       apiError,
     });
     return;
@@ -403,8 +457,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id?: string;
         force?: boolean;
         placeId?: string;
+        groupId?: string;
+        groupName?: string;
+        groupTier?: string;
       };
       const action = body.action || "";
+
+      if (action === "addCustomGroup") {
+        const groupId = Number((body.groupId || "").toString().trim());
+        const groupName = (body.groupName || "").toString().trim();
+        const groupTier = (body.groupTier || "").toString().trim();
+        if (!groupId || Number.isNaN(groupId)) {
+          res.status(400).send("Group ID must be numeric.");
+          return;
+        }
+        if (!groupName) {
+          res.status(400).send("Missing group name.");
+          return;
+        }
+        if (groupName.length > 80) {
+          res.status(400).send("Group name is too long (max 80 characters).");
+          return;
+        }
+        if (groupTier !== "red" && groupTier !== "white") {
+          res.status(400).send('Tier must be "red" or "white".');
+          return;
+        }
+        if (containsBlockedLanguage(groupName)) {
+          res.status(400).send(MODERATION_REJECTION_MESSAGE);
+          return;
+        }
+        const custom = (await kv.get<CustomGroup[]>("blumeCustomGroups")) || [];
+        const next = [
+          ...custom.filter((c) => c.id !== groupId),
+          { id: groupId, name: groupName, tier: groupTier as "red" | "white" },
+        ];
+        await kv.set("blumeCustomGroups", next);
+        await appendAuditLog({
+          type: "blume_group_added",
+          username: session.username,
+          detail: `Added ${groupTier} group "${groupName}" (${groupId})`,
+        });
+        res.status(200).json({ group: { id: groupId, name: groupName, tier: groupTier } });
+        return;
+      }
 
       if (action === "setActiveGamePlaceId") {
         if (!isBlumeSuperUser(session.userId)) {
@@ -424,10 +520,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (action === "scanMember") {
-        if (!isBlumeSuperUser(session.userId)) {
-          res.status(403).send("Group Search is restricted to Blume operators.");
-          return;
-        }
         const userId = (body.userId || "").toString().trim();
         if (!userId) {
           res.status(400).send("Missing userId.");
@@ -442,10 +534,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const resolved = await resolveRobloxUserId(userId);
         const username = resolved?.username || existing?.username || userId;
-        const [avatarUrl, groupIds] = await Promise.all([
+        const [avatarUrl, groupIds, friendsRaw] = await Promise.all([
           getRobloxAvatarUrl(userId),
           getUserGroupIds(userId),
+          getRobloxFriends(userId),
         ]);
+
+        // Only keep friends who've ALSO already been through a group scan —
+        // never a friend we've never otherwise encountered.
+        const knownScanIds = new Set(all.map((m) => m.userId));
+        const friends = friendsRaw
+          .filter((f) => f.userId !== userId && knownScanIds.has(f.userId))
+          .map((f) => ({ userId: f.userId, username: f.username }));
 
         let customPlate: string | null = null;
         try {
@@ -465,13 +565,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // groups + photo rather than failing the whole member.
         }
 
+        // Compare against whatever we had on file before, so a re-scan can
+        // flag exactly what changed (surfaced later on Person Search).
+        let changed: GroupScanEntry["changed"] = null;
+        if (existing) {
+          const usernameChanged = existing.username !== username;
+          const oldGroupIds = new Set(existing.groupIds);
+          const newGroupIds = new Set(groupIds);
+          const groupsChanged =
+            oldGroupIds.size !== newGroupIds.size ||
+            [...newGroupIds].some((id) => !oldGroupIds.has(id));
+          const oldFriendIds = new Set((existing.friends || []).map((f) => f.userId));
+          const newFriendIds = new Set(friends.map((f) => f.userId));
+          const friendsChanged =
+            oldFriendIds.size !== newFriendIds.size ||
+            [...newFriendIds].some((id) => !oldFriendIds.has(id));
+          if (usernameChanged || groupsChanged || friendsChanged) {
+            changed = { username: usernameChanged, groups: groupsChanged, friends: friendsChanged, at: Date.now() };
+          }
+        }
+
         const entry: GroupScanEntry = {
           userId,
           username,
           avatarUrl,
           customPlate,
           groupIds,
+          friends,
           scannedAt: Date.now(),
+          changed,
         };
         const next = [...all.filter((m) => m.userId !== userId), entry];
         await kv.set("blumeGroupScanCache", next);

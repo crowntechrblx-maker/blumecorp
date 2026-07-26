@@ -39,6 +39,14 @@ interface KnownFriend {
   userId: string;
   username: string;
   avatarUrl: string | null;
+  redGroupNames: string[];
+}
+
+interface GroupScanChange {
+  username: boolean;
+  groups: boolean;
+  friends: boolean;
+  at: number;
 }
 
 interface PersonSearchResult {
@@ -50,6 +58,7 @@ interface PersonSearchResult {
   groups: PersonGroup[];
   vehicleTags: VehicleTag[];
   knownFriends: KnownFriend[];
+  groupScanChange: GroupScanChange | null;
   apiError: string | null;
 }
 
@@ -163,49 +172,6 @@ function ArrestRecord({ data }: { data: unknown }) {
     </div>
   );
 }
-
-// Mirrors lib/roblox.ts's PERSON_SEARCH_GROUPS exactly — used here just to
-// give Group Viewer a clickable list of every group it's worth browsing,
-// instead of making the user go find and paste each numeric ID by hand.
-const GROUP_VIEWER_SECTIONS: PersonGroup[] = [
-  { id: 10742221, name: "G-Block", tier: "red" },
-  { id: 223035360, name: "Shadow District", tier: "red" },
-  { id: 679403020, name: "Harakat", tier: "red" },
-  { id: 16684944, name: "Irish", tier: "red" },
-  { id: 34067916, name: "CHS", tier: "red" },
-  { id: 541807, name: "UK | United Kingdom", tier: "red" },
-  { id: 14641286, name: "TUI Airways | Roblox", tier: "red" },
-  { id: 696897291, name: "Motorway Roleplay Community", tier: "red" },
-  { id: 11939831, name: "Nottinghamshire, England", tier: "red" },
-  { id: 16339807, name: "Liber Studios", tier: "red" },
-  { id: 34544324, name: "UK | Sandford Studios", tier: "red" },
-  { id: 12982639, name: "NEMG | North East Medical Group", tier: "red" },
-  { id: 8103, name: "UK Explorium Studios", tier: "red" },
-  { id: 32650605, name: "London Air Ambulance", tier: "white" },
-  { id: 879056831, name: "London Ambulance Service", tier: "white" },
-  { id: 493990898, name: "Metropolitan Police Service", tier: "white" },
-  { id: 360230741, name: "London Fire Brigade", tier: "white" },
-  { id: 931656944, name: "British Forces", tier: "white" },
-  { id: 820909258, name: "British Transport Police", tier: "white" },
-  { id: 743983922, name: "Greater Manchester Police", tier: "white" },
-  { id: 987422423, name: "Police Service of Northern Ireland", tier: "white" },
-  { id: 154853936, name: "MI5", tier: "white" },
-  { id: 142915989, name: "National Crime Agency", tier: "white" },
-  { id: 685466511, name: "SIS (MI6)", tier: "white" },
-  { id: 34974741, name: "Immigration Enforcement", tier: "white" },
-  { id: 11086948, name: "Hatzola", tier: "white" },
-  { id: 35167585, name: "Royal Households", tier: "white" },
-  { id: 841518502, name: "Home Office", tier: "white" },
-  { id: 278125181, name: "National Police Air Service", tier: "white" },
-  { id: 740750486, name: "Kent Police", tier: "white" },
-  { id: 567563234, name: "HM Revenue and Customs", tier: "white" },
-  { id: 187507831, name: "Central Intelligence Agency", tier: "white" },
-  { id: 963189576, name: "JTF2", tier: "white" },
-  { id: 315987361, name: "Regional Organised Crime Unit", tier: "white" },
-  { id: 496716538, name: "U.S Marshals Service", tier: "white" },
-  { id: 841282433, name: "London Freemasons", tier: "white" },
-  { id: 1033941381, name: "Consulate of the People's Republic of China", tier: "white" },
-];
 
 const INDUSTRIES = [
   {
@@ -432,17 +398,29 @@ export function BlumeApp({
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const [groupSearchId, setGroupSearchId] = useState("");
+  // Group Search and Group Viewer are now one consolidated feature: a
+  // single group ID/URL drives both "show me who we already know in this
+  // group" (view) and "go fetch/refresh everyone in this group" (scan).
+  const [groupsTab, setGroupsTab] = useState<"search" | "settings">("search");
+  const [groupQuery, setGroupQuery] = useState("");
   const [groupScanning, setGroupScanning] = useState(false);
   const [groupScanProgress, setGroupScanProgress] = useState({ scanned: 0, total: 0 });
   const [groupScanLog, setGroupScanLog] = useState<string[]>([]);
   const [groupScanError, setGroupScanError] = useState<string | null>(null);
   const groupScanStopRef = useRef(false);
 
-  const [viewerGroupId, setViewerGroupId] = useState("");
   const [viewerResults, setViewerResults] = useState<GroupScanMember[]>([]);
   const [viewerLoading, setViewerLoading] = useState(false);
   const [viewerError, setViewerError] = useState<string | null>(null);
+
+  // Group Settings tab: every known group (built-in + user-added), plus the
+  // form for adding a new one.
+  const [groupCatalog, setGroupCatalog] = useState<PersonGroup[]>([]);
+  const [newGroupId, setNewGroupId] = useState("");
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupTier, setNewGroupTier] = useState<"red" | "white">("white");
+  const [addingGroup, setAddingGroup] = useState(false);
+  const { error: addGroupError, fading: addGroupFading, setError: setAddGroupError } = useFadingError();
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -525,6 +503,11 @@ export function BlumeApp({
       loadInGameUsers();
     }, 45000);
     return () => window.clearInterval(id);
+  }, [loggedIn]);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    loadGroupCatalog();
   }, [loggedIn]);
 
   function handleLogin() {
@@ -715,17 +698,13 @@ export function BlumeApp({
   // just flips a ref the loop checks between steps; resuming later re-runs
   // the same group and the backend skips anyone scanned recently.
   async function startGroupScan() {
-    const groupId = groupSearchId.trim();
+    const groupId = groupQuery.trim();
     if (!groupId || groupScanning) return;
     setGroupScanning(true);
     setGroupScanError(null);
     setGroupScanLog([]);
     setGroupScanProgress({ scanned: 0, total: 0 });
     groupScanStopRef.current = false;
-    // Group Viewer always looks at whatever group was just searched — no
-    // need to go find and retype the ID again. It's still an editable field
-    // if they want to drill into a different (sub)group afterwards.
-    setViewerGroupId(groupId);
     try {
       const allMembers: { userId: string; username: string }[] = [];
       let cursor = "";
@@ -794,8 +773,9 @@ export function BlumeApp({
   }
 
   async function runGroupViewer(overrideGroupId?: string) {
-    const groupId = (overrideGroupId ?? viewerGroupId).trim();
+    const groupId = (overrideGroupId ?? groupQuery).trim();
     if (!groupId) return;
+    if (overrideGroupId) setGroupQuery(overrideGroupId);
     setViewerLoading(true);
     setViewerError(null);
     try {
@@ -811,6 +791,47 @@ export function BlumeApp({
       setViewerError("Couldn't reach Group Viewer.");
     } finally {
       setViewerLoading(false);
+    }
+  }
+
+  async function loadGroupCatalog() {
+    try {
+      const res = await fetch("/api/blume-search?groupCatalog=1");
+      const data = await res.json();
+      setGroupCatalog(data.groups || []);
+    } catch {
+      // Group Settings tab just shows an empty list — not worth its own
+      // error state for a background refresh.
+    }
+  }
+
+  async function handleAddCustomGroup() {
+    if (!newGroupId.trim() || !newGroupName.trim()) return;
+    setAddingGroup(true);
+    setAddGroupError(null);
+    try {
+      const res = await fetch("/api/blume-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "addCustomGroup",
+          groupId: newGroupId.trim(),
+          groupName: newGroupName.trim(),
+          groupTier: newGroupTier,
+        }),
+      });
+      if (!res.ok) {
+        setAddGroupError(await res.text());
+        return;
+      }
+      setNewGroupId("");
+      setNewGroupName("");
+      setNewGroupTier("white");
+      await loadGroupCatalog();
+    } catch {
+      setAddGroupError("Couldn't reach Group Settings.");
+    } finally {
+      setAddingGroup(false);
     }
   }
 
@@ -1339,6 +1360,20 @@ export function BlumeApp({
                     <p className="blume-error">{personResult.apiError}</p>
                   )}
 
+                  {personResult.groupScanChange && (
+                    <div className="blume-scan-change-banner">
+                      Changed since the last group scan (
+                      {new Date(personResult.groupScanChange.at).toLocaleString()}):{" "}
+                      {[
+                        personResult.groupScanChange.username && "username",
+                        personResult.groupScanChange.groups && "group memberships",
+                        personResult.groupScanChange.friends && "known friends",
+                      ]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </div>
+                  )}
+
                   <div className="blume-person-row">
                     <span className="blume-person-label">Equipped plate</span>
                     <span className="blume-person-value">
@@ -1463,12 +1498,19 @@ export function BlumeApp({
                         {personResult.knownFriends.map((f) => (
                           <button
                             key={f.userId}
-                            className="blume-friend-chip"
+                            className={`blume-friend-chip${f.redGroupNames.length > 0 ? " blume-friend-chip-red" : ""}`}
                             onClick={() => handlePersonSearch(f.username)}
-                            title={`Search ${f.username}`}
+                            title={
+                              f.redGroupNames.length > 0
+                                ? `${f.username} — in ${f.redGroupNames.join(", ")}`
+                                : `Search ${f.username}`
+                            }
                           >
                             {f.avatarUrl && <img src={f.avatarUrl} alt="" />}
                             <span>{f.username}</span>
+                            {f.redGroupNames.length > 0 && (
+                              <span className="blume-ingame-red-group">{f.redGroupNames[0]}</span>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -1508,161 +1550,205 @@ export function BlumeApp({
               )}
             </div>
 
-            {canEditBlog && (
-              <div className={`blume-panel blume-group-search-panel${collapsedPanels.groupSearch ? " blume-panel-collapsed" : ""}`}>
-                <button
-                  className="blume-panel-header blume-panel-header-toggle"
-                  onClick={() => togglePanel("groupSearch")}
-                >
-                  <span>Group Search</span>
-                  <span className="blume-panel-toggle-icon">{collapsedPanels.groupSearch ? "▸" : "▾"}</span>
-                </button>
-                {!collapsedPanels.groupSearch && (
-                  <>
-                    <p className="blume-muted blume-search-hint">
-                      Paste a group ID and every member is scanned for their groups, photo, and
-                      plate. This respects the records API's rate limit, so large groups take a
-                      while — keep this tab open until it finishes.
-                    </p>
-                    <div className="blume-search-form">
-                      <input
-                        placeholder="Group ID…"
-                        value={groupSearchId}
-                        onChange={(e) => setGroupSearchId(e.target.value)}
-                        disabled={groupScanning}
-                      />
-                      {groupScanning ? (
-                        <button className="blume-cta-btn" onClick={stopGroupScan}>
-                          Stop
-                        </button>
-                      ) : (
+            <div className={`blume-panel blume-group-search-panel${collapsedPanels.groups ? " blume-panel-collapsed" : ""}`}>
+              <button
+                className="blume-panel-header blume-panel-header-toggle"
+                onClick={() => togglePanel("groups")}
+              >
+                <span>Group Search</span>
+                <span className="blume-panel-toggle-icon">{collapsedPanels.groups ? "▸" : "▾"}</span>
+              </button>
+              {!collapsedPanels.groups && (
+                <>
+                  <div className="blume-groups-tabs">
+                    <button
+                      className={`blume-groups-tab-btn${groupsTab === "search" ? " blume-groups-tab-active" : ""}`}
+                      onClick={() => setGroupsTab("search")}
+                    >
+                      Search
+                    </button>
+                    <button
+                      className={`blume-groups-tab-btn${groupsTab === "settings" ? " blume-groups-tab-active" : ""}`}
+                      onClick={() => setGroupsTab("settings")}
+                    >
+                      Group Settings
+                    </button>
+                  </div>
+
+                  {groupsTab === "search" && (
+                    <>
+                      <div className="blume-group-sections">
+                        <span className="blume-person-label">Browse a group</span>
+                        <div className="blume-group-list">
+                          {groupCatalog.map((g) => (
+                            <button
+                              key={g.id}
+                              className={`blume-group-chip blume-group-section-btn ${
+                                g.tier === "red" ? "blume-group-red" : ""
+                              } ${groupQuery === String(g.id) ? "blume-group-section-active" : ""}`}
+                              onClick={() => {
+                                setGroupQuery(String(g.id));
+                                runGroupViewer(String(g.id));
+                              }}
+                              disabled={viewerLoading}
+                            >
+                              {g.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="blume-muted blume-search-hint">
+                        Search shows anyone we already know in this group. Scan fetches everyone
+                        in the group fresh (respecting the records API's rate limit, so large
+                        groups take a while — keep this tab open until it finishes).
+                      </p>
+                      <div className="blume-search-form">
+                        <input
+                          placeholder="Group ID or URL…"
+                          value={groupQuery}
+                          onChange={(e) => setGroupQuery(e.target.value)}
+                          disabled={groupScanning}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !viewerLoading) runGroupViewer();
+                          }}
+                        />
                         <button
                           className="blume-cta-btn"
-                          disabled={!groupSearchId.trim()}
-                          onClick={startGroupScan}
+                          disabled={!groupQuery.trim() || viewerLoading}
+                          onClick={() => runGroupViewer()}
                         >
-                          Start scan
+                          {viewerLoading ? "Searching…" : "Search"}
                         </button>
-                      )}
-                    </div>
-                    {groupScanError && <p className="blume-error">{groupScanError}</p>}
-                    {(groupScanning || groupScanProgress.total > 0) && (
-                      <div className="blume-group-scan-progress">
-                        <span>
-                          {groupScanProgress.scanned} / {groupScanProgress.total || "…"} scanned
-                          {groupScanning ? "…" : groupScanProgress.total ? " — done" : ""}
-                        </span>
-                        {groupScanProgress.total > 0 && (
-                          <div className="blume-group-scan-bar">
-                            <div
-                              className="blume-group-scan-bar-fill"
-                              style={{
-                                width: `${Math.min(
-                                  100,
-                                  (groupScanProgress.scanned / Math.max(1, groupScanProgress.total)) * 100
-                                )}%`,
-                              }}
-                            />
-                          </div>
+                        {groupScanning ? (
+                          <button className="blume-cta-btn" onClick={stopGroupScan}>
+                            Stop
+                          </button>
+                        ) : (
+                          <button
+                            className="blume-cta-btn"
+                            disabled={!groupQuery.trim()}
+                            onClick={startGroupScan}
+                          >
+                            Scan
+                          </button>
                         )}
                       </div>
-                    )}
-                    {groupScanLog.length > 0 && (
-                      <div className="blume-group-scan-log">
-                        {groupScanLog.map((line, i) => (
-                          <div key={i}>{line}</div>
+                      {groupScanError && <p className="blume-error">{groupScanError}</p>}
+                      {(groupScanning || groupScanProgress.total > 0) && (
+                        <div className="blume-group-scan-progress">
+                          <span>
+                            {groupScanProgress.scanned} / {groupScanProgress.total || "…"} scanned
+                            {groupScanning ? "…" : groupScanProgress.total ? " — done" : ""}
+                          </span>
+                          {groupScanProgress.total > 0 && (
+                            <div className="blume-group-scan-bar">
+                              <div
+                                className="blume-group-scan-bar-fill"
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    (groupScanProgress.scanned / Math.max(1, groupScanProgress.total)) * 100
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {groupScanLog.length > 0 && (
+                        <div className="blume-group-scan-log">
+                          {groupScanLog.map((line, i) => (
+                            <div key={i}>{line}</div>
+                          ))}
+                        </div>
+                      )}
+
+                      {viewerError && <p className="blume-error">{viewerError}</p>}
+                      {!viewerLoading && !viewerError && viewerResults.length === 0 && (
+                        <p className="blume-muted">
+                          No scanned members found in that group yet — run a scan first.
+                        </p>
+                      )}
+                      <div className="blume-group-viewer-list">
+                        {viewerResults.map((m) => (
+                          <div className="blume-group-viewer-row" key={m.userId}>
+                            {m.avatarUrl && <img src={m.avatarUrl} alt="" />}
+                            <div>
+                              <strong>{m.username}</strong>
+                              <span className="blume-history-meta">
+                                {m.customPlate || "No plate on file"} · scanned{" "}
+                                {new Date(m.scannedAt).toLocaleDateString()}
+                              </span>
+                              {m.relevantGroups && m.relevantGroups.length > 0 && (
+                                <div className="blume-group-list blume-group-list-compact">
+                                  {m.relevantGroups.map((g) => (
+                                    <span
+                                      key={g.id}
+                                      className={`blume-group-chip ${g.tier === "red" ? "blume-group-red" : ""}`}
+                                    >
+                                      {g.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         ))}
                       </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
+                    </>
+                  )}
 
-            {canEditBlog && (
-              <div className={`blume-panel blume-group-viewer-panel${collapsedPanels.groupViewer ? " blume-panel-collapsed" : ""}`}>
-                <button
-                  className="blume-panel-header blume-panel-header-toggle"
-                  onClick={() => togglePanel("groupViewer")}
-                >
-                  <span>Group Viewer</span>
-                  <span className="blume-panel-toggle-icon">{collapsedPanels.groupViewer ? "▸" : "▾"}</span>
-                </button>
-                {!collapsedPanels.groupViewer && (
-                  <>
-                    <div className="blume-group-sections">
-                      <span className="blume-person-label">Browse a group</span>
+                  {groupsTab === "settings" && (
+                    <>
+                      <p className="blume-muted blume-search-hint">
+                        Every group Blume knows about, and whether it's flagged red or white. Add
+                        one below — it's picked up everywhere groups are shown (Person Search,
+                        Group Search, Field Activity).
+                      </p>
+                      <div className="blume-add-group-form">
+                        <input
+                          placeholder="Group ID…"
+                          value={newGroupId}
+                          onChange={(e) => setNewGroupId(e.target.value)}
+                        />
+                        <input
+                          placeholder="Group name…"
+                          value={newGroupName}
+                          onChange={(e) => setNewGroupName(e.target.value)}
+                        />
+                        <select
+                          value={newGroupTier}
+                          onChange={(e) => setNewGroupTier(e.target.value as "red" | "white")}
+                        >
+                          <option value="white">White</option>
+                          <option value="red">Red</option>
+                        </select>
+                        <button
+                          className="blume-cta-btn"
+                          disabled={!newGroupId.trim() || !newGroupName.trim() || addingGroup}
+                          onClick={handleAddCustomGroup}
+                        >
+                          {addingGroup ? "Adding…" : "Add group"}
+                        </button>
+                      </div>
+                      {addGroupError && (
+                        <p className={`blume-error${addGroupFading ? " fading-out" : ""}`}>{addGroupError}</p>
+                      )}
                       <div className="blume-group-list">
-                        {GROUP_VIEWER_SECTIONS.map((g) => (
-                          <button
+                        {groupCatalog.map((g) => (
+                          <span
                             key={g.id}
-                            className={`blume-group-chip blume-group-section-btn ${
-                              g.tier === "red" ? "blume-group-red" : ""
-                            } ${viewerGroupId === String(g.id) ? "blume-group-section-active" : ""}`}
-                            onClick={() => {
-                              setViewerGroupId(String(g.id));
-                              runGroupViewer(String(g.id));
-                            }}
-                            disabled={viewerLoading}
+                            className={`blume-group-chip ${g.tier === "red" ? "blume-group-red" : ""}`}
                           >
                             {g.name}
-                          </button>
+                          </span>
                         ))}
                       </div>
-                    </div>
-                    <div className="blume-search-form">
-                      <input
-                        placeholder="Or paste a group ID…"
-                        value={viewerGroupId}
-                        onChange={(e) => setViewerGroupId(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !viewerLoading) runGroupViewer();
-                        }}
-                      />
-                      <button
-                        className="blume-cta-btn"
-                        disabled={!viewerGroupId.trim() || viewerLoading}
-                        onClick={() => runGroupViewer()}
-                      >
-                        {viewerLoading ? "Searching…" : "Search"}
-                      </button>
-                    </div>
-                    {viewerError && <p className="blume-error">{viewerError}</p>}
-                    {!viewerLoading && !viewerError && viewerResults.length === 0 && (
-                      <p className="blume-muted">
-                        No scanned members found in that group yet — run a Group Search first.
-                      </p>
-                    )}
-                    <div className="blume-group-viewer-list">
-                      {viewerResults.map((m) => (
-                        <div className="blume-group-viewer-row" key={m.userId}>
-                          {m.avatarUrl && <img src={m.avatarUrl} alt="" />}
-                          <div>
-                            <strong>{m.username}</strong>
-                            <span className="blume-history-meta">
-                              {m.customPlate || "No plate on file"} · scanned{" "}
-                              {new Date(m.scannedAt).toLocaleDateString()}
-                            </span>
-                            {m.relevantGroups && m.relevantGroups.length > 0 && (
-                              <div className="blume-group-list blume-group-list-compact">
-                                {m.relevantGroups.map((g) => (
-                                  <span
-                                    key={g.id}
-                                    className={`blume-group-chip ${g.tier === "red" ? "blume-group-red" : ""}`}
-                                  >
-                                    {g.name}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

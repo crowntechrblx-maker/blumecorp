@@ -1936,9 +1936,13 @@
   flex-shrink: 0;
 }
 .blume-panel-header-toggle {
+  /* `all: unset` wipes out .blume-panel-header's margin-bottom too (same
+     specificity, later rule wins), which is why the title used to butt
+     right up against the panel's content — restated explicitly below. */
   all: unset;
   box-sizing: border-box;
   width: 100%;
+  margin-bottom: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1950,7 +1954,10 @@
 }
 .blume-panel-toggle-icon {
   color: #6b7280;
-  font-size: 10px;
+  font-size: 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
 }
 .blume-panel-collapsed .blume-panel-header-toggle {
@@ -2447,6 +2454,57 @@
 .blume-group-section-btn:disabled {
   cursor: default;
   opacity: 0.5;
+}
+.blume-groups-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.blume-groups-tab-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 5px 12px;
+  color: #9ca3af;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.blume-groups-tab-active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e5e7eb;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.blume-add-group-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.blume-add-group-form input {
+  flex: 1;
+  min-width: 100px;
+}
+.blume-add-group-form select {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: #e5e7eb;
+  font-size: 12.5px;
+}
+.blume-scan-change-banner {
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
+  font-size: 11.5px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+.blume-friend-chip-red {
+  border-color: rgba(248, 113, 113, 0.35);
 }
 .blume-group-section-active {
   background: var(--blume-accent) !important;

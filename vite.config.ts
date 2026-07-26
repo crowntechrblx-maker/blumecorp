@@ -1793,6 +1793,7 @@ function saveBlumeSettings(settings: BlumeSettings) {
   fs.writeFileSync(BLUME_SETTINGS_DB, JSON.stringify(settings, null, 2));
 }
 const BLUME_GROUP_SCAN_DB = path.resolve(process.cwd(), "blume-group-scan-data.json");
+const BLUME_CUSTOM_GROUPS_DB = path.resolve(process.cwd(), "blume-custom-groups-data.json");
 const HISTORY_PER_PERSON_CAP = 20;
 const GROUP_SCAN_FRESH_MS = 6 * 60 * 60 * 1000;
 
@@ -1820,7 +1821,26 @@ interface GroupScanEntry {
   avatarUrl: string | null;
   customPlate: string | null;
   groupIds: number[];
+  friends: { userId: string; username: string }[];
   scannedAt: number;
+  changed?: { username: boolean; groups: boolean; friends: boolean; at: number } | null;
+}
+
+interface CustomGroup {
+  id: number;
+  name: string;
+  tier: "red" | "white";
+}
+
+function loadCustomGroupsDb(): CustomGroup[] {
+  try {
+    return JSON.parse(fs.readFileSync(BLUME_CUSTOM_GROUPS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveCustomGroupsDb(entries: CustomGroup[]) {
+  fs.writeFileSync(BLUME_CUSTOM_GROUPS_DB, JSON.stringify(entries, null, 2));
 }
 
 function loadGroupScanDb(): GroupScanEntry[] {
@@ -1855,10 +1875,20 @@ function saveVehicleTagsDb(entries: VehicleTag[]) {
   fs.writeFileSync(BLUME_VEHICLE_TAGS_DB, JSON.stringify(entries, null, 2));
 }
 
-function relevantGroups(groupIds: number[]) {
+async function getGroupCatalog(): Promise<Record<number, { name: string; tier: "red" | "white" }>> {
+  const custom = loadCustomGroupsDb();
+  const merged: Record<number, { name: string; tier: "red" | "white" }> = { ...PERSON_SEARCH_GROUPS };
+  for (const c of custom) merged[c.id] = { name: c.name, tier: c.tier };
+  return merged;
+}
+
+function relevantGroups(
+  groupIds: number[],
+  catalog: Record<number, { name: string; tier: "red" | "white" }>
+) {
   return groupIds
-    .filter((id) => id in PERSON_SEARCH_GROUPS)
-    .map((id) => ({ id, ...PERSON_SEARCH_GROUPS[id] }))
+    .filter((id) => id in catalog)
+    .map((id) => ({ id, ...catalog[id] }))
     .sort((a, b) => (a.tier === b.tier ? 0 : a.tier === "red" ? -1 : 1));
 }
 
@@ -1969,10 +1999,11 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               return;
             }
             try {
+              const catalog = await getGroupCatalog();
               const inGame = await findInGamePresence(candidates, gamePlaceId);
               const users = inGame
                 .map((m) => {
-                  const redGroup = relevantGroups(m.groupIds).find((g) => g.tier === "red");
+                  const redGroup = relevantGroups(m.groupIds, catalog).find((g) => g.tier === "red");
                   const role =
                     AGENT_GROUPS.filter((g) => m.groupIds.includes(g.id))
                       .map((g) => g.label)
@@ -1997,13 +2028,18 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
 
+          if (url.searchParams.get("groupCatalog")) {
+            const catalog = await getGroupCatalog();
+            const groups = Object.entries(catalog)
+              .map(([id, g]) => ({ id: Number(id), name: g.name, tier: g.tier }))
+              .sort((a, b) => (a.tier === b.tier ? a.name.localeCompare(b.name) : a.tier === "red" ? -1 : 1));
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ groups }));
+            return;
+          }
+
           const groupMembersOf = url.searchParams.get("groupMembers") || "";
           if (groupMembersOf) {
-            if (!isBlumeSuperUser(session.userId)) {
-              res.statusCode = 403;
-              res.end("Group Search is restricted to Blume operators.");
-              return;
-            }
             const cursor = url.searchParams.get("cursor") || "";
             const groupId = extractGroupId(groupMembersOf);
             try {
@@ -2035,16 +2071,12 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
           const groupScanOf = url.searchParams.get("groupScan") || "";
           if (groupScanOf) {
-            if (!isBlumeSuperUser(session.userId)) {
-              res.statusCode = 403;
-              res.end("Group Viewer is restricted to Blume operators.");
-              return;
-            }
+            const catalog = await getGroupCatalog();
             const groupId = Number(extractGroupId(groupScanOf));
             const members = loadGroupScanDb()
               .filter((m) => m.groupIds.includes(groupId))
               .sort((a, b) => b.scannedAt - a.scannedAt)
-              .map((m) => ({ ...m, relevantGroups: relevantGroups(m.groupIds) }));
+              .map((m) => ({ ...m, relevantGroups: relevantGroups(m.groupIds, catalog) }));
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ members }));
             return;
@@ -2075,11 +2107,12 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           }
           const { userId, username } = resolved;
 
+          const catalog = await getGroupCatalog();
           const [avatarUrl, groupIds] = await Promise.all([
             getRobloxAvatarUrl(userId),
             getUserGroupIds(userId),
           ]);
-          const groups = relevantGroups(groupIds);
+          const groups = relevantGroups(groupIds, catalog);
 
           let customPlate: string | null = null;
           let arrestHistory: unknown = null;
@@ -2117,17 +2150,31 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           const knownAvatarByUserId = new Map<string, string | null>();
           for (const h of historyListForFriends) knownAvatarByUserId.set(h.userId, h.avatarUrl);
           for (const s of scanListForFriends) knownAvatarByUserId.set(s.userId, s.avatarUrl);
+          const scanByUserId = new Map<string, GroupScanEntry>();
+          for (const s of scanListForFriends) scanByUserId.set(s.userId, s);
           const knownIds = new Set<string>([
             ...historyListForFriends.map((h) => h.userId),
             ...scanListForFriends.map((s) => s.userId),
           ]);
           const knownFriends = friendsRaw
             .filter((f) => f.userId !== userId && knownIds.has(f.userId))
-            .map((f) => ({
-              userId: f.userId,
-              username: f.username,
-              avatarUrl: knownAvatarByUserId.get(f.userId) ?? null,
-            }));
+            .map((f) => {
+              const scanEntry = scanByUserId.get(f.userId);
+              const redGroupNames = scanEntry
+                ? relevantGroups(scanEntry.groupIds, catalog)
+                    .filter((g) => g.tier === "red")
+                    .map((g) => g.name)
+                : [];
+              return {
+                userId: f.userId,
+                username: f.username,
+                avatarUrl: knownAvatarByUserId.get(f.userId) ?? null,
+                redGroupNames,
+              };
+            });
+
+          const ownScanEntry = scanListForFriends.find((s) => s.userId === userId);
+          const groupScanChange = ownScanEntry?.changed || null;
 
           if (avatarUrl || customPlate) {
             const allHistory = loadSearchHistoryDb();
@@ -2172,6 +2219,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               groups,
               vehicleTags,
               knownFriends,
+              groupScanChange,
               apiError,
             })
           );
@@ -2203,12 +2251,52 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               return;
             }
 
-            if (action === "scanMember") {
-              if (!isBlumeSuperUser(session.userId)) {
-                res.statusCode = 403;
-                res.end("Group Search is restricted to Blume operators.");
+            if (action === "addCustomGroup") {
+              const groupId = Number((body.groupId || "").toString().trim());
+              const groupName = (body.groupName || "").toString().trim();
+              const groupTier = (body.groupTier || "").toString().trim();
+              if (!groupId || Number.isNaN(groupId)) {
+                res.statusCode = 400;
+                res.end("Group ID must be numeric.");
                 return;
               }
+              if (!groupName) {
+                res.statusCode = 400;
+                res.end("Missing group name.");
+                return;
+              }
+              if (groupName.length > 80) {
+                res.statusCode = 400;
+                res.end("Group name is too long (max 80 characters).");
+                return;
+              }
+              if (groupTier !== "red" && groupTier !== "white") {
+                res.statusCode = 400;
+                res.end('Tier must be "red" or "white".');
+                return;
+              }
+              if (containsBlockedLanguage(groupName)) {
+                res.statusCode = 400;
+                res.end(MODERATION_REJECTION_MESSAGE);
+                return;
+              }
+              const custom = loadCustomGroupsDb();
+              const next = [
+                ...custom.filter((c) => c.id !== groupId),
+                { id: groupId, name: groupName, tier: groupTier as "red" | "white" },
+              ];
+              saveCustomGroupsDb(next);
+              appendAuditLog({
+                type: "blume_group_added",
+                username: session.username,
+                detail: `Added ${groupTier} group "${groupName}" (${groupId})`,
+              });
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ group: { id: groupId, name: groupName, tier: groupTier } }));
+              return;
+            }
+
+            if (action === "scanMember") {
               const userId = (body.userId || "").toString().trim();
               if (!userId) {
                 res.statusCode = 400;
@@ -2225,10 +2313,16 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
               const resolved = await resolveRobloxUserId(userId);
               const username = resolved?.username || existing?.username || userId;
-              const [avatarUrl, groupIds] = await Promise.all([
+              const [avatarUrl, groupIds, friendsRawScan] = await Promise.all([
                 getRobloxAvatarUrl(userId),
                 getUserGroupIds(userId),
+                getRobloxFriends(userId),
               ]);
+
+              const knownScanIds = new Set(all.map((m) => m.userId));
+              const friends = friendsRawScan
+                .filter((f) => f.userId !== userId && knownScanIds.has(f.userId))
+                .map((f) => ({ userId: f.userId, username: f.username }));
 
               let customPlate: string | null = null;
               try {
@@ -2247,13 +2341,38 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 // Best-effort.
               }
 
+              let changed: GroupScanEntry["changed"] = null;
+              if (existing) {
+                const usernameChanged = existing.username !== username;
+                const oldGroupIds = new Set(existing.groupIds);
+                const newGroupIds = new Set(groupIds);
+                const groupsChanged =
+                  oldGroupIds.size !== newGroupIds.size ||
+                  [...newGroupIds].some((id) => !oldGroupIds.has(id));
+                const oldFriendIds = new Set((existing.friends || []).map((f) => f.userId));
+                const newFriendIds = new Set(friends.map((f) => f.userId));
+                const friendsChanged =
+                  oldFriendIds.size !== newFriendIds.size ||
+                  [...newFriendIds].some((id) => !oldFriendIds.has(id));
+                if (usernameChanged || groupsChanged || friendsChanged) {
+                  changed = {
+                    username: usernameChanged,
+                    groups: groupsChanged,
+                    friends: friendsChanged,
+                    at: Date.now(),
+                  };
+                }
+              }
+
               const entry: GroupScanEntry = {
                 userId,
                 username,
                 avatarUrl,
                 customPlate,
                 groupIds,
+                friends,
                 scannedAt: Date.now(),
+                changed,
               };
               const next = [...all.filter((m) => m.userId !== userId), entry];
               saveGroupScanDb(next);
