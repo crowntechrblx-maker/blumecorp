@@ -164,6 +164,8 @@ interface BlumeReportEntry {
   body: string;
   authorUsername: string;
   createdAt: number;
+  linkedUserId?: string;
+  linkedUsername?: string;
 }
 
 // Blume clearance: any of these Roblox groups, or one of the three
@@ -1322,7 +1324,11 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             res.end(JSON.stringify({ reports: [], canAccess: false }));
             return;
           }
-          const reports = loadBlumeReportsDb().sort((a, b) => b.createdAt - a.createdAt);
+          let reports = loadBlumeReportsDb().sort((a, b) => b.createdAt - a.createdAt);
+          const personId = url.searchParams.get("personId") || "";
+          if (personId) {
+            reports = reports.filter((r) => r.linkedUserId === personId);
+          }
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ reports, canAccess: true }));
           return;
@@ -1343,6 +1349,7 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             const body = await readJsonBody(req);
             const title = (body.title || "").toString().trim();
             const content = (body.content || "").toString().trim();
+            const linkedPersonQuery = (body.linkedPerson || "").toString().trim();
             if (!title || !content) {
               res.statusCode = 400;
               res.end("Title and report body are required.");
@@ -1363,12 +1370,25 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
               res.end(MODERATION_REJECTION_MESSAGE);
               return;
             }
+            let linkedUserId: string | undefined;
+            let linkedUsername: string | undefined;
+            if (linkedPersonQuery) {
+              const resolved = await resolveRobloxUserId(linkedPersonQuery);
+              if (!resolved) {
+                res.statusCode = 400;
+                res.end(`Couldn't find a Roblox user matching "${linkedPersonQuery}" to link this report to.`);
+                return;
+              }
+              linkedUserId = resolved.userId;
+              linkedUsername = resolved.username;
+            }
             const entry: BlumeReportEntry = {
               id: crypto.randomBytes(12).toString("hex"),
               title,
               body: content,
               authorUsername: session.username,
               createdAt: Date.now(),
+              ...(linkedUserId ? { linkedUserId, linkedUsername } : {}),
             };
             const entries = loadBlumeReportsDb();
             entries.push(entry);
@@ -1786,7 +1806,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           const groups = relevantGroups(groupIds);
 
           let customPlate: string | null = null;
-          let arrests: unknown = null;
           let arrestHistory: unknown = null;
           let apiError: string | null = null;
 
@@ -1805,7 +1824,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               apiError = String(playerData.error);
             } else {
               customPlate = playerData.CustomPlate ?? null;
-              arrests = playerData.Arrests ?? null;
               arrestHistory = playerData.ArrestHistory ?? null;
             }
           } catch (err) {
@@ -1816,20 +1834,28 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
           if (avatarUrl || customPlate) {
             const allHistory = loadSearchHistoryDb();
-            const entry: SearchSnapshot = {
-              id: crypto.randomBytes(12).toString("hex"),
-              userId,
-              username,
-              avatarUrl,
-              customPlate,
-              searchedByUsername: session.username,
-              createdAt: Date.now(),
-            };
-            const others = allHistory.filter((h) => h.userId !== userId);
-            const mine = [entry, ...allHistory.filter((h) => h.userId === userId)]
-              .sort((a, b) => b.createdAt - a.createdAt)
-              .slice(0, HISTORY_PER_PERSON_CAP);
-            saveSearchHistoryDb([...others, ...mine]);
+            const existingForPerson = allHistory
+              .filter((h) => h.userId === userId)
+              .sort((a, b) => b.createdAt - a.createdAt);
+            const mostRecent = existingForPerson[0];
+            const unchanged =
+              mostRecent &&
+              mostRecent.avatarUrl === avatarUrl &&
+              mostRecent.customPlate === customPlate;
+            if (!unchanged) {
+              const entry: SearchSnapshot = {
+                id: crypto.randomBytes(12).toString("hex"),
+                userId,
+                username,
+                avatarUrl,
+                customPlate,
+                searchedByUsername: session.username,
+                createdAt: Date.now(),
+              };
+              const others = allHistory.filter((h) => h.userId !== userId);
+              const mine = [entry, ...existingForPerson].slice(0, HISTORY_PER_PERSON_CAP);
+              saveSearchHistoryDb([...others, ...mine]);
+            }
           }
 
           appendAuditLog({
@@ -1845,7 +1871,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               username,
               avatarUrl,
               customPlate,
-              arrests,
               arrestHistory,
               groups,
               vehicleTags,

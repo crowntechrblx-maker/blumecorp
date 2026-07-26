@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { kv } from "../../lib/kv.js";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
-import { isBlumeAuthorized, isBlumeSuperUser } from "../../lib/roblox.js";
+import { isBlumeAuthorized, isBlumeSuperUser, resolveRobloxUserId } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
 
@@ -13,6 +13,8 @@ interface BlumeReport {
   body: string;
   authorUsername: string;
   createdAt: number;
+  linkedUserId?: string;
+  linkedUsername?: string;
 }
 
 interface BlumeBlogPost {
@@ -136,9 +138,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(200).json({ reports: [], canAccess: false });
       return;
     }
-    const reports = ((await kv.get<BlumeReport[]>("blumeReports")) || []).sort(
+    let reports = ((await kv.get<BlumeReport[]>("blumeReports")) || []).sort(
       (a, b) => b.createdAt - a.createdAt
     );
+    const personId = (req.query.personId as string) || "";
+    if (personId) {
+      reports = reports.filter((r) => r.linkedUserId === personId);
+    }
     res.status(200).json({ reports, canAccess: true });
     return;
   }
@@ -153,9 +159,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     try {
-      const body = req.body as { title?: string; content?: string };
+      const body = req.body as { title?: string; content?: string; linkedPerson?: string };
       const title = (body.title || "").toString().trim();
       const content = (body.content || "").toString().trim();
+      const linkedPersonQuery = (body.linkedPerson || "").toString().trim();
       if (!title || !content) {
         res.status(400).send("Title and report body are required.");
         return;
@@ -172,12 +179,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(400).send(MODERATION_REJECTION_MESSAGE);
         return;
       }
+      let linkedUserId: string | undefined;
+      let linkedUsername: string | undefined;
+      if (linkedPersonQuery) {
+        const resolved = await resolveRobloxUserId(linkedPersonQuery);
+        if (!resolved) {
+          res
+            .status(400)
+            .send(`Couldn't find a Roblox user matching "${linkedPersonQuery}" to link this report to.`);
+          return;
+        }
+        linkedUserId = resolved.userId;
+        linkedUsername = resolved.username;
+      }
       const entry: BlumeReport = {
         id: crypto.randomBytes(12).toString("hex"),
         title,
         body: content,
         authorUsername: session.username,
         createdAt: Date.now(),
+        ...(linkedUserId ? { linkedUserId, linkedUsername } : {}),
       };
       const reports = (await kv.get<BlumeReport[]>("blumeReports")) || [];
       reports.push(entry);

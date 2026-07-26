@@ -8,6 +8,8 @@ interface BlumeReport {
   body: string;
   authorUsername: string;
   createdAt: number;
+  linkedUserId?: string;
+  linkedUsername?: string;
 }
 
 interface BlumeBlogPost {
@@ -38,7 +40,6 @@ interface PersonSearchResult {
   username: string;
   avatarUrl: string | null;
   customPlate: string | null;
-  arrests: unknown;
   arrestHistory: unknown;
   groups: PersonGroup[];
   vehicleTags: VehicleTag[];
@@ -343,8 +344,18 @@ export function BlumeApp({
   const [loadingReports, setLoadingReports] = useState(true);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [linkedPerson, setLinkedPerson] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { error, fading, setError } = useFadingError();
+  const [reportSearchQuery, setReportSearchQuery] = useState("");
+
+  const [personLinkedReports, setPersonLinkedReports] = useState<BlumeReport[]>([]);
+  const [personLinkedReportsLoading, setPersonLinkedReportsLoading] = useState(false);
+
+  const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
+  function togglePanel(key: string) {
+    setCollapsedPanels((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
 
   const [blogPosts, setBlogPosts] = useState<BlumeBlogPost[]>([]);
   const [canEditBlog, setCanEditBlog] = useState(false);
@@ -409,7 +420,11 @@ export function BlumeApp({
       const res = await fetch("/api/blume-content?type=report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), content: body.trim() }),
+        body: JSON.stringify({
+          title: title.trim(),
+          content: body.trim(),
+          linkedPerson: linkedPerson.trim() || undefined,
+        }),
       });
       if (!res.ok) {
         setError(await res.text());
@@ -417,9 +432,24 @@ export function BlumeApp({
       }
       setTitle("");
       setBody("");
+      setLinkedPerson("");
       await loadAccess();
+      if (personResult) await loadPersonLinkedReports(personResult.userId);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function loadPersonLinkedReports(userId: string) {
+    setPersonLinkedReportsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/blume-content?type=report&personId=${encodeURIComponent(userId)}`
+      );
+      const data = await res.json();
+      setPersonLinkedReports(data.reports || []);
+    } finally {
+      setPersonLinkedReportsLoading(false);
     }
   }
 
@@ -465,6 +495,7 @@ export function BlumeApp({
     setPersonError(null);
     setShowPreviousPhotos(false);
     setShowPreviousPlates(false);
+    setPersonLinkedReports([]);
     try {
       const res = await fetch(`/api/blume-search?query=${encodeURIComponent(personQuery.trim())}`);
       if (!res.ok) {
@@ -474,6 +505,7 @@ export function BlumeApp({
       }
       const data: PersonSearchResult = await res.json();
       setPersonResult(data);
+      await loadPersonLinkedReports(data.userId);
     } catch {
       setPersonError("Couldn't reach Person Search.");
     } finally {
@@ -878,77 +910,128 @@ export function BlumeApp({
           </div>
 
           <div className="blume-columns">
-            <div className="blume-panel blume-reports-panel">
-              <div className="blume-panel-header">Intelligence Reports</div>
-              <div className="blume-report-form">
-                <input
-                  placeholder="Report title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                />
-                <textarea
-                  placeholder="Report details…"
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  rows={3}
-                />
-                <button
-                  className="blume-cta-btn"
-                  disabled={!title.trim() || !body.trim() || submitting}
-                  onClick={handleAddReport}
-                >
-                  {submitting ? "Filing…" : "File report"}
-                </button>
-                {error && <p className={`blume-error${fading ? " fading-out" : ""}`}>{error}</p>}
-              </div>
-              <div className="blume-reports-list">
-                {loadingReports ? (
-                  <p className="blume-muted">Loading…</p>
-                ) : reports.length === 0 ? (
-                  <p className="blume-muted">No reports filed yet.</p>
-                ) : (
-                  reports.map((r) => (
-                    <div className="blume-report-card" key={r.id}>
-                      <div className="blume-report-card-head">
-                        <strong>{r.title}</strong>
-                        <button
-                          className="blume-report-delete"
-                          onClick={() => handleDeleteReport(r.id)}
-                          title="Delete report"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                      <p>{r.body}</p>
-                      <span className="blume-report-meta">
-                        Filed by {r.authorUsername} · {new Date(r.createdAt).toLocaleString()}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="blume-panel blume-map-panel">
-              <div className="blume-panel-header">Surveillance Grid</div>
-              <div className="blume-map">
-                <div className="blume-map-grid" />
-                {PLACEHOLDER_PINS.map((p) => (
-                  <div
-                    className="blume-map-pin"
-                    key={p.label}
-                    style={{ left: `${p.x}%`, top: `${p.y}%` }}
-                    title={p.label}
-                  >
-                    <span className="blume-map-pin-dot" />
-                    <span className="blume-map-pin-label">{p.label}</span>
+            <div className={`blume-panel blume-reports-panel${collapsedPanels.reports ? " blume-panel-collapsed" : ""}`}>
+              <button className="blume-panel-header blume-panel-header-toggle" onClick={() => togglePanel("reports")}>
+                <span>Intelligence Reports</span>
+                <span className="blume-panel-toggle-icon">{collapsedPanels.reports ? "▸" : "▾"}</span>
+              </button>
+              {!collapsedPanels.reports && (
+                <>
+                  <div className="blume-report-form">
+                    <input
+                      placeholder="Report title"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                    />
+                    <textarea
+                      placeholder="Report details…"
+                      value={body}
+                      onChange={(e) => setBody(e.target.value)}
+                      rows={3}
+                    />
+                    <input
+                      placeholder="Link to a person (optional) — name or ID"
+                      value={linkedPerson}
+                      onChange={(e) => setLinkedPerson(e.target.value)}
+                    />
+                    <button
+                      className="blume-cta-btn"
+                      disabled={!title.trim() || !body.trim() || submitting}
+                      onClick={handleAddReport}
+                    >
+                      {submitting ? "Filing…" : "File report"}
+                    </button>
+                    {error && <p className={`blume-error${fading ? " fading-out" : ""}`}>{error}</p>}
                   </div>
-                ))}
-              </div>
+                  <div className="blume-reports-search">
+                    <input
+                      placeholder="Search reports…"
+                      value={reportSearchQuery}
+                      onChange={(e) => setReportSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <div className="blume-reports-list">
+                    {loadingReports ? (
+                      <p className="blume-muted">Loading…</p>
+                    ) : reports.length === 0 ? (
+                      <p className="blume-muted">No reports filed yet.</p>
+                    ) : (
+                      (() => {
+                        const q = reportSearchQuery.trim().toLowerCase();
+                        const filtered = q
+                          ? reports.filter(
+                              (r) =>
+                                r.title.toLowerCase().includes(q) ||
+                                r.body.toLowerCase().includes(q) ||
+                                r.authorUsername.toLowerCase().includes(q) ||
+                                (r.linkedUsername || "").toLowerCase().includes(q)
+                            )
+                          : reports;
+                        return filtered.length === 0 ? (
+                          <p className="blume-muted">No reports match "{reportSearchQuery}".</p>
+                        ) : (
+                          filtered.map((r) => (
+                            <div className="blume-report-card" key={r.id}>
+                              <div className="blume-report-card-head">
+                                <strong>{r.title}</strong>
+                                <button
+                                  className="blume-report-delete"
+                                  onClick={() => handleDeleteReport(r.id)}
+                                  title="Delete report"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                              <p>{r.body}</p>
+                              <span className="blume-report-meta">
+                                Filed by {r.authorUsername} · {new Date(r.createdAt).toLocaleString()}
+                                {r.linkedUsername && (
+                                  <>
+                                    {" "}
+                                    · linked to <strong>{r.linkedUsername}</strong>
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                          ))
+                        );
+                      })()
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
-            <div className="blume-panel blume-search-panel">
-              <div className="blume-panel-header">Person Search</div>
+            <div className={`blume-panel blume-map-panel${collapsedPanels.map ? " blume-panel-collapsed" : ""}`}>
+              <button className="blume-panel-header blume-panel-header-toggle" onClick={() => togglePanel("map")}>
+                <span>Surveillance Grid</span>
+                <span className="blume-panel-toggle-icon">{collapsedPanels.map ? "▸" : "▾"}</span>
+              </button>
+              {!collapsedPanels.map && (
+                <div className="blume-map">
+                  <div className="blume-map-grid" />
+                  {PLACEHOLDER_PINS.map((p) => (
+                    <div
+                      className="blume-map-pin"
+                      key={p.label}
+                      style={{ left: `${p.x}%`, top: `${p.y}%` }}
+                      title={p.label}
+                    >
+                      <span className="blume-map-pin-dot" />
+                      <span className="blume-map-pin-label">{p.label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className={`blume-panel blume-search-panel${collapsedPanels.search ? " blume-panel-collapsed" : ""}`}>
+              <button className="blume-panel-header blume-panel-header-toggle" onClick={() => togglePanel("search")}>
+                <span>Person Search</span>
+                <span className="blume-panel-toggle-icon">{collapsedPanels.search ? "▸" : "▾"}</span>
+              </button>
+              {!collapsedPanels.search && (
+              <>
               <div className="blume-search-form">
                 <input
                   placeholder="Search by name or ID…"
@@ -1105,15 +1188,35 @@ export function BlumeApp({
                   </div>
 
                   <div className="blume-person-section">
-                    <span className="blume-person-label">Arrests</span>
-                    <ArrestRecord data={personResult.arrests} />
-                  </div>
-
-                  <div className="blume-person-section">
                     <span className="blume-person-label">Arrest history</span>
                     <ArrestRecord data={personResult.arrestHistory} />
                   </div>
+
+                  <div className="blume-person-section">
+                    <span className="blume-person-label">Linked intelligence reports</span>
+                    {personLinkedReportsLoading ? (
+                      <p className="blume-muted">Loading…</p>
+                    ) : personLinkedReports.length === 0 ? (
+                      <p className="blume-muted">No reports linked to this person.</p>
+                    ) : (
+                      <div className="blume-reports-list">
+                        {personLinkedReports.map((r) => (
+                          <div className="blume-report-card" key={r.id}>
+                            <div className="blume-report-card-head">
+                              <strong>{r.title}</strong>
+                            </div>
+                            <p>{r.body}</p>
+                            <span className="blume-report-meta">
+                              Filed by {r.authorUsername} · {new Date(r.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
+              )}
+              </>
               )}
             </div>
           </div>

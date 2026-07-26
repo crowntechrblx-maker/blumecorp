@@ -91,7 +91,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const groups = relevantGroups(groupIds);
 
     let customPlate: string | null = null;
-    let arrests: unknown = null;
     let arrestHistory: unknown = null;
     let apiError: string | null = null;
 
@@ -110,7 +109,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         apiError = String(playerData.error);
       } else {
         customPlate = playerData.CustomPlate ?? null;
-        arrests = playerData.Arrests ?? null;
         arrestHistory = playerData.ArrestHistory ?? null;
       }
     } catch (err) {
@@ -122,23 +120,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     // Cache a snapshot of the photo + plate for "View Previous" — only when
-    // we actually got something worth remembering.
+    // we actually got something worth remembering, and only when it's
+    // actually different from the last thing we cached for this person (no
+    // point logging a new entry every time someone searches and nothing
+    // about their photo or plate has changed).
     if (avatarUrl || customPlate) {
       const allHistory = (await kv.get<SearchSnapshot[]>("blumeSearchHistory")) || [];
-      const entry: SearchSnapshot = {
-        id: crypto.randomBytes(12).toString("hex"),
-        userId,
-        username,
-        avatarUrl,
-        customPlate,
-        searchedByUsername: session.username,
-        createdAt: Date.now(),
-      };
-      const others = allHistory.filter((h) => h.userId !== userId);
-      const mine = [entry, ...allHistory.filter((h) => h.userId === userId)]
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, HISTORY_PER_PERSON_CAP);
-      await kv.set("blumeSearchHistory", [...others, ...mine]);
+      const existingForPerson = allHistory
+        .filter((h) => h.userId === userId)
+        .sort((a, b) => b.createdAt - a.createdAt);
+      const mostRecent = existingForPerson[0];
+      const unchanged =
+        mostRecent &&
+        mostRecent.avatarUrl === avatarUrl &&
+        mostRecent.customPlate === customPlate;
+      if (!unchanged) {
+        const entry: SearchSnapshot = {
+          id: crypto.randomBytes(12).toString("hex"),
+          userId,
+          username,
+          avatarUrl,
+          customPlate,
+          searchedByUsername: session.username,
+          createdAt: Date.now(),
+        };
+        const others = allHistory.filter((h) => h.userId !== userId);
+        const mine = [entry, ...existingForPerson].slice(0, HISTORY_PER_PERSON_CAP);
+        await kv.set("blumeSearchHistory", [...others, ...mine]);
+      }
     }
 
     await appendAuditLog({
@@ -152,7 +161,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       username,
       avatarUrl,
       customPlate,
-      arrests,
       arrestHistory,
       groups,
       vehicleTags,
