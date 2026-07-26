@@ -88,11 +88,13 @@
   right: 18px;
   display: flex;
   flex-direction: column;
-  flex-wrap: wrap;
+  /* No wrapping into a second column — every icon stays in one straight
+     vertical line (so Backgrounds lines up directly under TFL instead of
+     spilling into a new column on shorter screens). */
+  flex-wrap: nowrap;
   justify-content: center;
   gap: 6px;
   height: calc(100vh - 58px);
-  align-content: flex-start;
 }
 
 .desktop-icon {
