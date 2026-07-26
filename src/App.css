@@ -829,11 +829,14 @@
 
 /* Royal Family */
 .royal-profiles-section {
-  background-image: url("/royal/family-meeting.png");
+  /* Bleed past .app-content's own 18px/20px padding so the photo fills
+     the full width edge-to-edge (and the top edge, since this is the
+     first thing in the window) with no border/frame around it. */
+  background-image: url("/royal/family-meeting-2.png");
   background-size: cover;
-  background-position: center 35%;
-  border-radius: 10px;
-  padding: 14px;
+  background-position: center 40%;
+  margin: -18px -20px 0;
+  padding: 18px 20px 14px;
 }
 .royal-profiles-section h2 {
   display: inline-block;
@@ -847,9 +850,8 @@
   gap: 10px;
 }
 .royal-profile-card {
-  /* Slightly transparent so the room photo behind the section shows
-     through, rather than a flat opaque panel. */
-  background: rgba(246, 246, 247, 0.62);
+  /* Less transparent than before, but still lets the photo read through. */
+  background: rgba(246, 246, 247, 0.8);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   border-radius: 8px;
@@ -858,7 +860,8 @@
 .royal-divider {
   border: none;
   border-top: 1px solid #e5e5e7;
-  margin: 16px 0;
+  /* Bleed to the same full width as the photo section above it. */
+  margin: 16px -20px;
 }
 .royal-profile-header {
   display: flex;
