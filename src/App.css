@@ -75,29 +75,25 @@
 }
 
 /* Desktop icons — Mac-style: first column anchored to the right edge,
-   holding up to 9 icons; any overflow starts a new column to the LEFT of
-   it (row-reverse below), never spilling toward the menu bar clock. */
+   holding up to 8 icons; any overflow starts a new column to the LEFT of
+   it (row-reverse below), never spilling toward the menu bar clock.
+   `top` and `height` are set inline from App.tsx: the block is sized to
+   its real content height and centered in the reserved area, so the gap
+   above the top icons matches the gap below the bottom icons, while
+   align-items: flex-start below keeps every column's first icon flush
+   with the others (no per-column centering). */
 .desktop-icons {
   position: absolute;
-  /* Menu bar is 26px, then a 16px gap — same 16px gap is left at the
-     bottom of the viewport below, so the reserved area is evenly framed
-     now that the dock isn't eating into the bottom margin. */
-  top: 42px;
   right: 18px;
-  bottom: 16px;
   display: flex;
   flex-direction: row-reverse;
-  align-items: stretch;
+  align-items: flex-start;
   gap: 8px;
 }
 
 .desktop-icon-column {
   display: flex;
   flex-direction: column;
-  /* Every column starts flush at the top and fills downward — a new
-     (overflow) column lines up its first icon with the first icon of the
-     column before it, rather than being vertically centered. */
-  justify-content: flex-start;
   gap: 6px;
 }
 

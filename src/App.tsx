@@ -158,12 +158,24 @@ function App() {
     iconColumns.push(visibleApps.slice(i, i + ICONS_PER_COLUMN));
   }
 
+  // The tallest column is always the first one (columns fill to capacity
+  // before overflowing), so its content height is what actually needs to
+  // be framed. Rather than stretching the icon block across the whole
+  // reserved area (which leaves top-aligned icons flush at the top but
+  // with a bigger gap below), size the block to its real content height
+  // and center THAT block in the reserved area — so the gap above the top
+  // icons equals the gap below the bottom icons, while every column still
+  // starts flush with the others at the block's top edge.
+  const tallestColumnCount = iconColumns[0]?.length ?? 0;
+  const contentHeight = Math.max(0, tallestColumnCount * ICON_SLOT_HEIGHT - 6);
+  const topOffset = 42 + Math.max(0, (availableHeight - contentHeight) / 2);
+
   return (
     <div className="desktop-root" style={{ backgroundImage: `url(${wallpaperUrl})` }}>
       <MessageToast />
       <MenuBar activeAppName={activeAppName} username={user.username} />
 
-      <div className="desktop-icons">
+      <div className="desktop-icons" style={{ top: topOffset, height: contentHeight }}>
         {iconColumns.map((column, columnIndex) => (
           <div className="desktop-icon-column" key={columnIndex}>
             {column.map((app) => (
