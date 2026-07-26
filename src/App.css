@@ -497,29 +497,146 @@
 }
 
 /* Maps */
-.maps .map-toolbar {
-  margin-bottom: 10px;
+.maps-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px 14px 14px;
+  gap: 8px;
 }
-.map-canvas {
+.maps-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.maps-search {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid #d1d1d6;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+.maps-zoom-controls {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.maps-zoom-controls button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  font-size: 16px;
+  line-height: 1;
+}
+.maps-directions {
+  flex-shrink: 0;
+  background: #f6f6f7;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.maps-directions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.maps-directions-row label {
+  width: 38px;
+  font-size: 12px;
+  color: #666;
+  flex-shrink: 0;
+}
+.maps-directions-row select {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid #d1d1d6;
+  border-radius: 6px;
+  font-size: 12.5px;
+  background: #fff;
+}
+.maps-directions-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.maps-pick-hint {
+  font-size: 11px;
+  color: #888;
+}
+.maps-reset-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  background: rgba(0, 0, 0, 0.06);
+  color: #333;
+  flex-shrink: 0;
+}
+.maps-route-info {
+  margin: 0;
+  font-size: 12.5px;
+  color: #1c1c1e;
+}
+.maps-search-results {
+  flex-shrink: 0;
+  max-height: 140px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 6px;
+}
+.maps-search-result {
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: none;
+  border: none;
+  font-size: 12.5px;
+  color: #1c1c1e;
+}
+.maps-search-result:hover {
+  background: #f0f0f2;
+}
+.maps-canvas {
   position: relative;
-  height: calc(100% - 50px);
+  flex: 1;
+  min-height: 0;
   background: #dceadd;
   border-radius: 8px;
   overflow: hidden;
+  cursor: grab;
 }
-.map-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
-  background-size: 28px 28px;
+.maps-canvas:active {
+  cursor: grabbing;
 }
-.map-pin {
+.maps-canvas-inner {
   position: absolute;
-  top: 45%;
-  left: 48%;
-  font-size: 28px;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+.maps-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  pointer-events: none;
+}
+.maps-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+.maps-overlay circle {
+  pointer-events: all;
 }
 
 /* Royal Family */

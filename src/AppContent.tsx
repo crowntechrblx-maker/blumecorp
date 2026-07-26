@@ -6,6 +6,7 @@ import { MessagesApp } from "./MessagesApp";
 import { RoyalFamilyApp } from "./RoyalFamilyApp";
 import { BlumeApp } from "./BlumeApp";
 import { SettingsApp } from "./SettingsApp";
+import { MapsApp } from "./MapsApp";
 
 function TflContent() {
   const lines = [
@@ -185,20 +186,6 @@ function SwiftCorporateContent() {
   );
 }
 
-function MapsContent() {
-  return (
-    <div className="app-content maps">
-      <div className="map-toolbar">
-        <input placeholder="Search Maps" />
-      </div>
-      <div className="map-canvas">
-        <div className="map-pin">📍</div>
-        <div className="map-grid" />
-      </div>
-    </div>
-  );
-}
-
 function PsRollsContent() {
   const practiceAreas = [
     {
@@ -299,7 +286,7 @@ export function AppContent({
     case "swiftCorporate":
       return <SwiftCorporateContent />;
     case "maps":
-      return <MapsContent />;
+      return <MapsApp />;
     case "psRolls":
       return <PsRollsContent />;
     case "royalFamily":

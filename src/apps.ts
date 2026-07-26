@@ -46,7 +46,7 @@ export const APPS: AppDef[] = [
     name: "Maps",
     icon: "",
     color: "#ff0000",
-    defaultSize: { width: 640, height: 520 },
+    defaultSize: { width: 900, height: 680 },
   },
   {
     id: "psRolls",
