@@ -94,9 +94,13 @@
 .desktop-icon-column {
   display: flex;
   flex-direction: column;
-  /* Centers each column's icons vertically in the reserved area, so the
-     gap above the first icon and below the last icon match. */
-  justify-content: center;
+  /* Every column fills from the top down (standard Mac behavior) — once
+     a column hits 8 icons, the next app starts a fresh column at the top,
+     not partway down. The 8-per-column cap in App.tsx is already sized to
+     fill the available height evenly, so the always-full first column's
+     top/bottom margins stay balanced; a trailing, partially-filled column
+     will simply have extra space below it instead of being centered. */
+  justify-content: flex-start;
   gap: 6px;
 }
 
