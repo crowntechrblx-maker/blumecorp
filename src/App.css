@@ -83,7 +83,9 @@
   flex-direction: column;
   flex-wrap: wrap;
   gap: 6px;
-  height: calc(100vh - 120px);
+  /* No dock reserving space at the bottom anymore — use nearly the full
+     height below the menu bar. */
+  height: calc(100vh - 56px);
   align-content: flex-start;
 }
 
@@ -2614,10 +2616,10 @@
 }
 .background-delete-btn {
   position: absolute;
-  top: 26px;
-  left: 4px;
-  width: 18px;
-  height: 18px;
+  bottom: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border-radius: 50%;
   border: none;
@@ -2697,9 +2699,8 @@
   border: none;
   border-radius: 6px;
   padding: 8px 14px;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
+  font-size: 13px;
+  font-family: inherit;
   color: #fff;
 }
 .visibility-toggle-btn.public {

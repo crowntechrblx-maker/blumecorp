@@ -84,13 +84,15 @@ function App() {
 
   function maximizeApp(id: AppId) {
     const width = Math.min(window.innerWidth - 60, window.innerWidth * 0.94);
-    const height = Math.min(window.innerHeight - 100, window.innerHeight * 0.88);
+    // No dock to leave room for anymore — just the 26px menu bar plus a
+    // little breathing room top and bottom.
+    const height = Math.min(window.innerHeight - 56, window.innerHeight * 0.94);
     setWindows((prev) => ({
       ...prev,
       [id]: {
         ...prev[id]!,
         x: Math.max(16, (window.innerWidth - width) / 2),
-        y: Math.max(32, (window.innerHeight - height) / 2 - 10),
+        y: Math.max(30, (window.innerHeight - height) / 2),
         width,
         height,
         animating: true,
