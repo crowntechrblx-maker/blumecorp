@@ -134,14 +134,27 @@ function App() {
 
   const visibleApps = APPS.filter((app) => app.id !== "settings" || user.isAdmin);
 
+  // Mac-style desktop icon layout: fill a column top-to-bottom, and once it
+  // holds 9 icons, start a new column to the LEFT of it (never to the right,
+  // which would run off toward the menu bar clock).
+  const ICONS_PER_COLUMN = 9;
+  const iconColumns: (typeof visibleApps)[] = [];
+  for (let i = 0; i < visibleApps.length; i += ICONS_PER_COLUMN) {
+    iconColumns.push(visibleApps.slice(i, i + ICONS_PER_COLUMN));
+  }
+
   return (
     <div className="desktop-root" style={{ backgroundImage: `url(${wallpaperUrl})` }}>
       <MessageToast />
       <MenuBar activeAppName={activeAppName} username={user.username} />
 
       <div className="desktop-icons">
-        {visibleApps.map((app) => (
-          <DesktopIcon key={app.id} app={app} onOpen={() => openApp(app.id)} />
+        {iconColumns.map((column, columnIndex) => (
+          <div className="desktop-icon-column" key={columnIndex}>
+            {column.map((app) => (
+              <DesktopIcon key={app.id} app={app} onOpen={() => openApp(app.id)} />
+            ))}
+          </div>
         ))}
       </div>
 

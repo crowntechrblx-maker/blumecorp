@@ -74,27 +74,30 @@
   opacity: 0.85;
 }
 
-/* Desktop icons */
+/* Desktop icons — Mac-style: first column anchored to the right edge,
+   holding up to 9 icons; any overflow starts a new column to the LEFT of
+   it (row-reverse below), never spilling toward the menu bar clock. */
 .desktop-icons {
   position: absolute;
   /* Menu bar is 26px, then a 16px gap — same 16px gap is left at the
      bottom of the viewport below, so the reserved area is evenly framed
-     now that the dock isn't eating into the bottom margin. Icons are then
-     centered vertically inside that area (justify-content below) so the
-     gap above the first icon and below the last icon end up equal too,
-     instead of packing to the top and leaving all the slack at the
-     bottom. */
+     now that the dock isn't eating into the bottom margin. */
   top: 42px;
   right: 18px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.desktop-icon-column {
   display: flex;
   flex-direction: column;
-  /* No wrapping into a second column — every icon stays in one straight
-     vertical line (so Backgrounds lines up directly under TFL instead of
-     spilling into a new column on shorter screens). */
-  flex-wrap: nowrap;
+  /* Centers each column's icons vertically in the reserved area, so the
+     gap above the first icon and below the last icon match. */
   justify-content: center;
   gap: 6px;
-  height: calc(100vh - 58px);
 }
 
 .desktop-icon {
