@@ -157,6 +157,49 @@ function ArrestRecord({ data }: { data: unknown }) {
   );
 }
 
+// Mirrors lib/roblox.ts's PERSON_SEARCH_GROUPS exactly — used here just to
+// give Group Viewer a clickable list of every group it's worth browsing,
+// instead of making the user go find and paste each numeric ID by hand.
+const GROUP_VIEWER_SECTIONS: PersonGroup[] = [
+  { id: 10742221, name: "G-Block", tier: "red" },
+  { id: 223035360, name: "Shadow District", tier: "red" },
+  { id: 679403020, name: "Harakat", tier: "red" },
+  { id: 16684944, name: "Irish", tier: "red" },
+  { id: 34067916, name: "CHS", tier: "red" },
+  { id: 541807, name: "UK | United Kingdom", tier: "red" },
+  { id: 14641286, name: "TUI Airways | Roblox", tier: "red" },
+  { id: 696897291, name: "Motorway Roleplay Community", tier: "red" },
+  { id: 11939831, name: "Nottinghamshire, England", tier: "red" },
+  { id: 16339807, name: "Liber Studios", tier: "red" },
+  { id: 34544324, name: "UK | Sandford Studios", tier: "red" },
+  { id: 12982639, name: "NEMG | North East Medical Group", tier: "red" },
+  { id: 8103, name: "UK Explorium Studios", tier: "red" },
+  { id: 32650605, name: "London Air Ambulance", tier: "white" },
+  { id: 879056831, name: "London Ambulance Service", tier: "white" },
+  { id: 493990898, name: "Metropolitan Police Service", tier: "white" },
+  { id: 360230741, name: "London Fire Brigade", tier: "white" },
+  { id: 931656944, name: "British Forces", tier: "white" },
+  { id: 820909258, name: "British Transport Police", tier: "white" },
+  { id: 743983922, name: "Greater Manchester Police", tier: "white" },
+  { id: 987422423, name: "Police Service of Northern Ireland", tier: "white" },
+  { id: 154853936, name: "MI5", tier: "white" },
+  { id: 142915989, name: "National Crime Agency", tier: "white" },
+  { id: 685466511, name: "SIS (MI6)", tier: "white" },
+  { id: 34974741, name: "Immigration Enforcement", tier: "white" },
+  { id: 11086948, name: "Hatzola", tier: "white" },
+  { id: 35167585, name: "Royal Households", tier: "white" },
+  { id: 841518502, name: "Home Office", tier: "white" },
+  { id: 278125181, name: "National Police Air Service", tier: "white" },
+  { id: 740750486, name: "Kent Police", tier: "white" },
+  { id: 567563234, name: "HM Revenue and Customs", tier: "white" },
+  { id: 187507831, name: "Central Intelligence Agency", tier: "white" },
+  { id: 963189576, name: "JTF2", tier: "white" },
+  { id: 315987361, name: "Regional Organised Crime Unit", tier: "white" },
+  { id: 496716538, name: "U.S Marshals Service", tier: "white" },
+  { id: 841282433, name: "London Freemasons", tier: "white" },
+  { id: 1033941381, name: "Consulate of the People's Republic of China", tier: "white" },
+];
+
 const PLACEHOLDER_ACTIVE = [
   { username: "n.harrow", role: "Field" },
   { username: "t.ackland", role: "Analyst" },
@@ -638,9 +681,17 @@ export function BlumeApp({
         setGroupScanProgress((p) => ({ ...p, total: allMembers.length }));
       } while (cursor && !groupScanStopRef.current);
 
+      // Paced right up against the records API's real 50/min cap (1200ms
+      // between calls, measured start-to-start rather than tacked on after
+      // each request finishes) instead of leaving a conservative margin.
+      // Cache hits (already-scanned-recently members) don't touch that API
+      // at all, so they skip the wait entirely.
+      const MIN_INTERVAL_MS = 1200;
       for (let i = 0; i < allMembers.length; i++) {
         if (groupScanStopRef.current) break;
         const m = allMembers[i];
+        const requestStart = Date.now();
+        let hitRecordsApi = true;
         try {
           const res = await fetch("/api/blume-search", {
             method: "POST",
@@ -649,6 +700,7 @@ export function BlumeApp({
           });
           if (res.ok) {
             const data = await res.json();
+            hitRecordsApi = !data.skipped;
             setGroupScanLog((log) =>
               [`${m.username}${data.skipped ? " (already cached)" : ""}`, ...log].slice(0, 8)
             );
@@ -659,8 +711,10 @@ export function BlumeApp({
           setGroupScanLog((log) => [`${m.username} — network error`, ...log].slice(0, 8));
         }
         setGroupScanProgress((p) => ({ ...p, scanned: i + 1 }));
-        if (!groupScanStopRef.current && i < allMembers.length - 1) {
-          await new Promise((r) => setTimeout(r, 1300));
+        if (!groupScanStopRef.current && hitRecordsApi && i < allMembers.length - 1) {
+          const elapsed = Date.now() - requestStart;
+          const remaining = MIN_INTERVAL_MS - elapsed;
+          if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
         }
       }
     } catch {
@@ -1419,9 +1473,29 @@ export function BlumeApp({
                 </button>
                 {!collapsedPanels.groupViewer && (
                   <>
+                    <div className="blume-group-sections">
+                      <span className="blume-person-label">Browse a group</span>
+                      <div className="blume-group-list">
+                        {GROUP_VIEWER_SECTIONS.map((g) => (
+                          <button
+                            key={g.id}
+                            className={`blume-group-chip blume-group-section-btn ${
+                              g.tier === "red" ? "blume-group-red" : ""
+                            } ${viewerGroupId === String(g.id) ? "blume-group-section-active" : ""}`}
+                            onClick={() => {
+                              setViewerGroupId(String(g.id));
+                              runGroupViewer(String(g.id));
+                            }}
+                            disabled={viewerLoading}
+                          >
+                            {g.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div className="blume-search-form">
                       <input
-                        placeholder="Group ID to look up…"
+                        placeholder="Or paste a group ID…"
                         value={viewerGroupId}
                         onChange={(e) => setViewerGroupId(e.target.value)}
                         onKeyDown={(e) => {

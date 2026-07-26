@@ -2165,6 +2165,32 @@
   padding: 2px 8px;
   font-size: 10px;
 }
+.blume-group-sections {
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.blume-group-sections .blume-group-list {
+  margin-top: 6px;
+}
+.blume-group-section-btn {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.blume-group-section-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+.blume-group-section-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.blume-group-section-active {
+  background: var(--blume-accent) !important;
+  color: #05122a !important;
+  border-color: var(--blume-accent);
+  font-weight: 600;
+}
 .blume-arrest-list {
   display: flex;
   flex-direction: column;
