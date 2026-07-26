@@ -77,15 +77,16 @@
 /* Desktop icons */
 .desktop-icons {
   position: absolute;
-  top: 40px;
+  /* Menu bar is 26px, then a 16px gap — same 16px gap is left at the
+     bottom of the viewport below, so the icon column is evenly framed
+     now that the dock isn't eating into the bottom margin. */
+  top: 42px;
   right: 18px;
   display: flex;
   flex-direction: column;
   flex-wrap: wrap;
   gap: 6px;
-  /* No dock reserving space at the bottom anymore — use nearly the full
-     height below the menu bar. */
-  height: calc(100vh - 56px);
+  height: calc(100vh - 58px);
   align-content: flex-start;
 }
 
