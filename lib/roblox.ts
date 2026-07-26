@@ -150,7 +150,14 @@ export async function getRobloxFriends(
 
 // Blume clearance: any of these Roblox groups, or one of the three
 // explicitly-allowed user IDs, unlocks the Blume dashboard.
-export const BLUME_GROUP_IDS = [154853936, 142915989, 685466511, 187507831];
+export const BLUME_GROUP_IDS = [
+  154853936, // MI5
+  142915989, // National Crime Agency
+  685466511, // MI6
+  187507831, // CIA
+  315987361, // ROCU
+  496716538, // U.S. Marshals Service
+];
 export const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759", "2322187718"];
 
 export async function isBlumeAuthorized(userId: string): Promise<boolean> {
