@@ -1818,6 +1818,37 @@ const AGENT_GROUPS: { id: number; label: string }[] = [
   { id: 315987361, label: "ROCU" },
 ];
 
+async function findInGamePresence(
+  candidates: GroupScanEntry[],
+  gamePlaceId: number | null
+): Promise<GroupScanEntry[]> {
+  const inGame: GroupScanEntry[] = [];
+  for (let i = 0; i < candidates.length; i += 100) {
+    const batch = candidates.slice(i, i + 100);
+    const presRes = await fetch("https://presence.roblox.com/v1/presence/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...robloxHeaders() },
+      body: JSON.stringify({ userIds: batch.map((m) => Number(m.userId)) }),
+    });
+    if (!presRes.ok) continue;
+    const data = (await presRes.json()) as {
+      userPresences?: {
+        userId?: number;
+        userPresenceType?: number;
+        rootPlaceId?: number;
+        placeId?: number;
+      }[];
+    };
+    for (const p of data.userPresences || []) {
+      if (p.userPresenceType !== 2) continue;
+      if (gamePlaceId && p.rootPlaceId !== gamePlaceId && p.placeId !== gamePlaceId) continue;
+      const member = batch.find((m) => Number(m.userId) === p.userId);
+      if (member) inGame.push(member);
+    }
+  }
+  return inGame;
+}
+
 function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
   return {
     name: "blume-search-api",
@@ -1859,36 +1890,40 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               return;
             }
             try {
-              const agents: { username: string; role: string }[] = [];
-              for (let i = 0; i < candidates.length; i += 100) {
-                const batch = candidates.slice(i, i + 100);
-                const presRes = await fetch("https://presence.roblox.com/v1/presence/users", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", ...robloxHeaders() },
-                  body: JSON.stringify({ userIds: batch.map((m) => Number(m.userId)) }),
-                });
-                if (!presRes.ok) continue;
-                const data = (await presRes.json()) as {
-                  userPresences?: {
-                    userId?: number;
-                    userPresenceType?: number;
-                    rootPlaceId?: number;
-                    placeId?: number;
-                  }[];
-                };
-                for (const p of data.userPresences || []) {
-                  if (p.userPresenceType !== 2) continue;
-                  if (gamePlaceId && p.rootPlaceId !== gamePlaceId && p.placeId !== gamePlaceId) continue;
-                  const member = batch.find((m) => Number(m.userId) === p.userId);
-                  if (!member) continue;
-                  const roles = AGENT_GROUPS.filter((g) => member.groupIds.includes(g.id)).map(
-                    (g) => g.label
-                  );
-                  agents.push({ username: member.username, role: roles.join(" / ") });
-                }
-              }
+              const inGame = await findInGamePresence(candidates, gamePlaceId);
+              const agents = inGame.map((member) => ({
+                username: member.username,
+                role: AGENT_GROUPS.filter((g) => member.groupIds.includes(g.id))
+                  .map((g) => g.label)
+                  .join(" / "),
+              }));
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ agents, gamePlaceId: settings.activeGamePlaceId || null }));
+            } catch (err) {
+              res.statusCode = 500;
+              res.end("Couldn't reach Roblox's presence API: " + (err as Error).message);
+            }
+            return;
+          }
+
+          if (url.searchParams.get("activeInGame")) {
+            const settings = loadBlumeSettings();
+            const gamePlaceId = settings.activeGamePlaceId
+              ? Number(settings.activeGamePlaceId)
+              : null;
+            const candidates = loadGroupScanDb();
+            if (candidates.length === 0) {
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ users: [] }));
+              return;
+            }
+            try {
+              const inGame = await findInGamePresence(candidates, gamePlaceId);
+              const users = inGame
+                .map((m) => ({ username: m.username, avatarUrl: m.avatarUrl }))
+                .sort((a, b) => a.username.localeCompare(b.username));
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ users }));
             } catch (err) {
               res.statusCode = 500;
               res.end("Couldn't reach Roblox's presence API: " + (err as Error).message);

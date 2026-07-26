@@ -1932,10 +1932,45 @@
 .blume-map-panel .blume-panel-header {
   padding: 14px 16px 0;
 }
+.blume-map-body {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+  min-height: 0;
+  margin: 12px 16px 16px;
+}
+.blume-ingame-list {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.blume-ingame-users {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.blume-ingame-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #e5e7eb;
+}
+.blume-ingame-user img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+}
 .blume-map {
   position: relative;
-  flex: 1;
-  margin: 12px 16px 16px;
+  flex: 1.4;
   border-radius: 8px;
   background: var(--blume-navy);
   border: 1px solid rgba(255, 255, 255, 0.07);

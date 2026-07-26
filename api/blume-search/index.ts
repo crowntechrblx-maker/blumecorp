@@ -86,6 +86,41 @@ async function loadBlumeSettings(): Promise<BlumeSettings> {
   return (await kv.get<BlumeSettings>("blumeSettings")) || {};
 }
 
+// Shared by Active Users and the Surveillance Grid's in-game list: batches
+// candidates through Roblox's presence API (100 at a time, its own limit)
+// and returns whichever ones are actually in a game right now, optionally
+// narrowed to one specific game.
+async function findInGamePresence(
+  candidates: GroupScanEntry[],
+  gamePlaceId: number | null
+): Promise<GroupScanEntry[]> {
+  const inGame: GroupScanEntry[] = [];
+  for (let i = 0; i < candidates.length; i += 100) {
+    const batch = candidates.slice(i, i + 100);
+    const presRes = await fetch("https://presence.roblox.com/v1/presence/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...robloxHeaders() },
+      body: JSON.stringify({ userIds: batch.map((m) => Number(m.userId)) }),
+    });
+    if (!presRes.ok) continue;
+    const data = (await presRes.json()) as {
+      userPresences?: {
+        userId?: number;
+        userPresenceType?: number;
+        rootPlaceId?: number;
+        placeId?: number;
+      }[];
+    };
+    for (const p of data.userPresences || []) {
+      if (p.userPresenceType !== 2) continue; // 2 = actually in a game
+      if (gamePlaceId && p.rootPlaceId !== gamePlaceId && p.placeId !== gamePlaceId) continue;
+      const member = batch.find((m) => Number(m.userId) === p.userId);
+      if (member) inGame.push(member);
+    }
+  }
+  return inGame;
+}
+
 // This endpoint doubles up on both Person Search and its vehicle tagging
 // (via ?history= and the POST actions below) to avoid adding yet another
 // file under the Vercel Hobby 12-function cap.
@@ -121,35 +156,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
       try {
-        const agents: { username: string; role: string }[] = [];
-        for (let i = 0; i < candidates.length; i += 100) {
-          const batch = candidates.slice(i, i + 100);
-          const presRes = await fetch("https://presence.roblox.com/v1/presence/users", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...robloxHeaders() },
-            body: JSON.stringify({ userIds: batch.map((m) => Number(m.userId)) }),
-          });
-          if (!presRes.ok) continue;
-          const data = (await presRes.json()) as {
-            userPresences?: {
-              userId?: number;
-              userPresenceType?: number;
-              rootPlaceId?: number;
-              placeId?: number;
-            }[];
-          };
-          for (const p of data.userPresences || []) {
-            if (p.userPresenceType !== 2) continue; // 2 = actually in a game
-            if (gamePlaceId && p.rootPlaceId !== gamePlaceId && p.placeId !== gamePlaceId) continue;
-            const member = batch.find((m) => Number(m.userId) === p.userId);
-            if (!member) continue;
-            const roles = AGENT_GROUPS.filter((g) => member.groupIds.includes(g.id)).map(
-              (g) => g.label
-            );
-            agents.push({ username: member.username, role: roles.join(" / ") });
-          }
-        }
+        const inGame = await findInGamePresence(candidates, gamePlaceId);
+        const agents = inGame.map((member) => ({
+          username: member.username,
+          role: AGENT_GROUPS.filter((g) => member.groupIds.includes(g.id))
+            .map((g) => g.label)
+            .join(" / "),
+        }));
         res.status(200).json({ agents, gamePlaceId: settings.activeGamePlaceId || null });
+      } catch (err) {
+        res.status(500).send("Couldn't reach Roblox's presence API: " + (err as Error).message);
+      }
+      return;
+    }
+
+    // Surveillance Grid's side list: everyone we've ever scanned (any group,
+    // not just the agent ones) who's actually in a game right now.
+    if (req.query.activeInGame) {
+      const settings = await loadBlumeSettings();
+      const gamePlaceId = settings.activeGamePlaceId
+        ? Number(settings.activeGamePlaceId)
+        : null;
+      const candidates = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
+      if (candidates.length === 0) {
+        res.status(200).json({ users: [] });
+        return;
+      }
+      try {
+        const inGame = await findInGamePresence(candidates, gamePlaceId);
+        const users = inGame
+          .map((m) => ({ username: m.username, avatarUrl: m.avatarUrl }))
+          .sort((a, b) => a.username.localeCompare(b.username));
+        res.status(200).json({ users });
       } catch (err) {
         res.status(500).send("Couldn't reach Roblox's presence API: " + (err as Error).message);
       }

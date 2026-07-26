@@ -387,6 +387,9 @@ export function BlumeApp({
   const heroIndex = useHeroCycle(HERO_IMAGES.length, HERO_CYCLE_MS);
 
   const [activeAgents, setActiveAgents] = useState<{ username: string; role: string }[]>([]);
+  const [inGameUsers, setInGameUsers] = useState<{ username: string; avatarUrl: string | null }[]>(
+    []
+  );
   const [gamePlaceId, setGamePlaceId] = useState<string | null>(null);
   const [showPlaceIdForm, setShowPlaceIdForm] = useState(false);
   const [placeIdInput, setPlaceIdInput] = useState("");
@@ -499,12 +502,27 @@ export function BlumeApp({
     }
   }
 
+  async function loadInGameUsers() {
+    try {
+      const res = await fetch("/api/blume-search?activeInGame=1");
+      if (!res.ok) return;
+      const data = await res.json();
+      setInGameUsers(data.users || []);
+    } catch {
+      // Best-effort — the list just stays empty if this fails.
+    }
+  }
+
   // Presence changes constantly, so refresh it periodically while the
   // dashboard is actually open rather than fetching it once and going stale.
   useEffect(() => {
     if (!loggedIn) return;
     loadActiveAgents();
-    const id = window.setInterval(loadActiveAgents, 45000);
+    loadInGameUsers();
+    const id = window.setInterval(() => {
+      loadActiveAgents();
+      loadInGameUsers();
+    }, 45000);
     return () => window.clearInterval(id);
   }, [loggedIn]);
 
@@ -1258,19 +1276,36 @@ export function BlumeApp({
                 <span className="blume-panel-toggle-icon">{collapsedPanels.map ? "▸" : "▾"}</span>
               </button>
               {!collapsedPanels.map && (
-                <div className="blume-map">
-                  <div className="blume-map-grid" />
-                  {PLACEHOLDER_PINS.map((p) => (
-                    <div
-                      className="blume-map-pin"
-                      key={p.label}
-                      style={{ left: `${p.x}%`, top: `${p.y}%` }}
-                      title={p.label}
-                    >
-                      <span className="blume-map-pin-dot" />
-                      <span className="blume-map-pin-label">{p.label}</span>
-                    </div>
-                  ))}
+                <div className="blume-map-body">
+                  <div className="blume-map">
+                    <div className="blume-map-grid" />
+                    {PLACEHOLDER_PINS.map((p) => (
+                      <div
+                        className="blume-map-pin"
+                        key={p.label}
+                        style={{ left: `${p.x}%`, top: `${p.y}%` }}
+                        title={p.label}
+                      >
+                        <span className="blume-map-pin-dot" />
+                        <span className="blume-map-pin-label">{p.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="blume-ingame-list">
+                    <span className="blume-person-label">In game now</span>
+                    {inGameUsers.length === 0 ? (
+                      <p className="blume-muted">Nobody currently in-game.</p>
+                    ) : (
+                      <div className="blume-ingame-users">
+                        {inGameUsers.map((u) => (
+                          <div className="blume-ingame-user" key={u.username}>
+                            {u.avatarUrl && <img src={u.avatarUrl} alt="" />}
+                            <span>{u.username}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
