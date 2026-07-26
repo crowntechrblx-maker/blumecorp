@@ -72,6 +72,15 @@ async function isRobloxGroupMember(userId: string, groupId: number): Promise<boo
   }
 }
 
+// Accepts either a bare group ID or a full group URL and returns just the
+// numeric ID — mirrors lib/roblox.ts's extractGroupId exactly.
+function extractGroupId(input: string): string {
+  const trimmed = input.trim();
+  const urlMatch = /(?:communities|groups)\/(\d+)/i.exec(trimmed);
+  if (urlMatch) return urlMatch[1];
+  return trimmed;
+}
+
 async function getUserGroupIds(userId: string): Promise<number[]> {
   try {
     const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
@@ -1804,8 +1813,9 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               return;
             }
             const cursor = url.searchParams.get("cursor") || "";
+            const groupId = extractGroupId(groupMembersOf);
             try {
-              const gUrl = `https://groups.roblox.com/v1/groups/${encodeURIComponent(groupMembersOf)}/users?limit=100${
+              const gUrl = `https://groups.roblox.com/v1/groups/${encodeURIComponent(groupId)}/users?limit=100${
                 cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
               }`;
               const groupRes = await fetch(gUrl);
@@ -1838,10 +1848,11 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               res.end("Group Viewer is restricted to Blume operators.");
               return;
             }
-            const groupId = Number(groupScanOf);
+            const groupId = Number(extractGroupId(groupScanOf));
             const members = loadGroupScanDb()
               .filter((m) => m.groupIds.includes(groupId))
-              .sort((a, b) => b.scannedAt - a.scannedAt);
+              .sort((a, b) => b.scannedAt - a.scannedAt)
+              .map((m) => ({ ...m, relevantGroups: relevantGroups(m.groupIds) }));
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ members }));
             return;

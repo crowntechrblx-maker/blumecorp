@@ -10,6 +10,7 @@ import {
   getRobloxAvatarUrl,
   getUserGroupIds,
   resolveRobloxUserId,
+  extractGroupId,
   PERSON_SEARCH_GROUPS,
 } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
@@ -89,8 +90,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
       const cursor = (req.query.cursor as string) || "";
+      const groupId = extractGroupId(groupMembersOf);
       try {
-        const url = `https://groups.roblox.com/v1/groups/${encodeURIComponent(groupMembersOf)}/users?limit=100${
+        const url = `https://groups.roblox.com/v1/groups/${encodeURIComponent(groupId)}/users?limit=100${
           cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
         }`;
         const groupRes = await fetch(url);
@@ -120,11 +122,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(403).send("Group Viewer is restricted to Blume operators.");
         return;
       }
-      const groupId = Number(groupScanOf);
+      const groupId = Number(extractGroupId(groupScanOf));
       const all = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
       const members = all
         .filter((m) => m.groupIds.includes(groupId))
-        .sort((a, b) => b.scannedAt - a.scannedAt);
+        .sort((a, b) => b.scannedAt - a.scannedAt)
+        .map((m) => ({ ...m, relevantGroups: relevantGroups(m.groupIds) }));
       res.status(200).json({ members });
       return;
     }

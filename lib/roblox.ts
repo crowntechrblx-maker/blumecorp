@@ -46,6 +46,19 @@ export async function isRobloxGroupMember(userId: string, groupId: number): Prom
   }
 }
 
+// Accepts either a bare group ID or a full group URL (any of Roblox's past
+// and current URL shapes — /communities/ID-slug, /groups/ID/slug, etc.) and
+// returns just the numeric ID. Pasting the page URL is the obvious thing to
+// do here, so Group Search shouldn't 400 on it.
+export function extractGroupId(input: string): string {
+  const trimmed = input.trim();
+  const urlMatch = /(?:communities|groups)\/(\d+)/i.exec(trimmed);
+  if (urlMatch) return urlMatch[1];
+  const digitsOnly = /^\d+$/.exec(trimmed);
+  if (digitsOnly) return trimmed;
+  return trimmed;
+}
+
 // Every group ID this account belongs to, in one call — used by Person
 // Search to cross-reference against a known list, instead of making one
 // isRobloxGroupMember call per candidate group.

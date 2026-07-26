@@ -2198,6 +2198,14 @@
   color: #f87171;
   background: rgba(248, 113, 113, 0.1);
 }
+.blume-group-list-compact {
+  margin-top: 4px;
+  gap: 4px;
+}
+.blume-group-list-compact .blume-group-chip {
+  padding: 2px 8px;
+  font-size: 10px;
+}
 .blume-arrest-list {
   display: flex;
   flex-direction: column;

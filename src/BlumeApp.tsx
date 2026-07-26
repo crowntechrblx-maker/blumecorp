@@ -63,6 +63,7 @@ interface GroupScanMember {
   customPlate: string | null;
   groupIds: number[];
   scannedAt: number;
+  relevantGroups?: PersonGroup[];
 }
 
 // Renders whatever shape the arrest data actually turns out to be — a flat
@@ -614,6 +615,10 @@ export function BlumeApp({
     setGroupScanLog([]);
     setGroupScanProgress({ scanned: 0, total: 0 });
     groupScanStopRef.current = false;
+    // Group Viewer always looks at whatever group was just searched — no
+    // need to go find and retype the ID again. It's still an editable field
+    // if they want to drill into a different (sub)group afterwards.
+    setViewerGroupId(groupId);
     try {
       const allMembers: { userId: string; username: string }[] = [];
       let cursor = "";
@@ -662,6 +667,7 @@ export function BlumeApp({
       setGroupScanError("Couldn't reach Group Search.");
     } finally {
       setGroupScanning(false);
+      await runGroupViewer(groupId);
     }
   }
 
@@ -669,8 +675,8 @@ export function BlumeApp({
     groupScanStopRef.current = true;
   }
 
-  async function runGroupViewer() {
-    const groupId = viewerGroupId.trim();
+  async function runGroupViewer(overrideGroupId?: string) {
+    const groupId = (overrideGroupId ?? viewerGroupId).trim();
     if (!groupId) return;
     setViewerLoading(true);
     setViewerError(null);
@@ -1425,7 +1431,7 @@ export function BlumeApp({
                       <button
                         className="blume-cta-btn"
                         disabled={!viewerGroupId.trim() || viewerLoading}
-                        onClick={runGroupViewer}
+                        onClick={() => runGroupViewer()}
                       >
                         {viewerLoading ? "Searching…" : "Search"}
                       </button>
@@ -1446,6 +1452,18 @@ export function BlumeApp({
                               {m.customPlate || "No plate on file"} · scanned{" "}
                               {new Date(m.scannedAt).toLocaleDateString()}
                             </span>
+                            {m.relevantGroups && m.relevantGroups.length > 0 && (
+                              <div className="blume-group-list blume-group-list-compact">
+                                {m.relevantGroups.map((g) => (
+                                  <span
+                                    key={g.id}
+                                    className={`blume-group-chip ${g.tier === "red" ? "blume-group-red" : ""}`}
+                                  >
+                                    {g.name}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
