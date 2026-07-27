@@ -21,6 +21,12 @@ interface MessageEntry {
   toUsername: string;
   text: string;
   createdAt: number;
+  // Deletion never actually erases the row — it's flagged so Blume
+  // Monitoring can still surface it. Every ordinary read path (this file's
+  // own GET) filters deleted messages out, so nothing changes for regular
+  // users; only Monitoring reads the flag itself.
+  deleted?: boolean;
+  deletedAt?: number;
 }
 
 function conversationKey(a: string, b: string): string {
@@ -43,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const key = conversationKey(session.username, withUser);
     const messages = ((await kv.get<MessageEntry[]>("messages")) || [])
-      .filter((m) => m.conversationKey === key)
+      .filter((m) => m.conversationKey === key && !m.deleted)
       .sort((a, b) => a.createdAt - b.createdAt);
     res.status(200).json(
       messages.map((m) => ({
@@ -134,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(403).send("Only an admin can delete messages.");
       return;
     }
-    entries.splice(index, 1);
+    entries[index] = { ...message, deleted: true, deletedAt: Date.now() };
     await kv.set("messages", entries);
 
     await appendAuditLog({

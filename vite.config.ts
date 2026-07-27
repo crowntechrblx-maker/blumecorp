@@ -28,6 +28,8 @@ interface PostEntry {
   text: string;
   imageFilename?: string;
   createdAt: number;
+  deleted?: boolean;
+  deletedAt?: number;
 }
 
 interface KnownUser {
@@ -44,6 +46,8 @@ interface MessageEntry {
   toUsername: string;
   text: string;
   createdAt: number;
+  deleted?: boolean;
+  deletedAt?: number;
 }
 
 function conversationKey(a: string, b: string): string {
@@ -876,7 +880,9 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
         if (url.pathname === "/api/posts" && req.method === "GET") {
           const search = (url.searchParams.get("username") || "").trim().toLowerCase();
-          let posts = loadPostsDb().sort((a, b) => b.createdAt - a.createdAt);
+          let posts = loadPostsDb()
+            .filter((p) => !p.deleted)
+            .sort((a, b) => b.createdAt - a.createdAt);
           if (search) {
             posts = posts.filter((p) => p.authorUsername.toLowerCase().includes(search));
           }
@@ -1007,11 +1013,9 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             res.end("You can only delete your own posts.");
             return;
           }
-          if (post.imageFilename) {
-            const imagePath = path.join(POSTS_DIR, post.imageFilename);
-            fs.rm(imagePath, { force: true }, () => {});
-          }
-          entries.splice(index, 1);
+          // The image file is deliberately kept (not deleted) — Monitoring
+          // needs to still be able to show it.
+          entries[index] = { ...post, deleted: true, deletedAt: Date.now() };
           savePostsDb(entries);
           appendAuditLog({
             type: "instagram_post_deleted",
@@ -1110,7 +1114,7 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
           }
           const key = conversationKey(session.username, withUser);
           const messages = loadMessagesDb()
-            .filter((m) => m.conversationKey === key)
+            .filter((m) => m.conversationKey === key && !m.deleted)
             .sort((a, b) => a.createdAt - b.createdAt);
           res.setHeader("Content-Type", "application/json");
           res.end(
@@ -1216,7 +1220,7 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
             res.end("Only an admin can delete messages.");
             return;
           }
-          entries.splice(index, 1);
+          entries[index] = { ...message, deleted: true, deletedAt: Date.now() };
           saveMessagesDb(entries);
           appendAuditLog({
             type: "message_deleted",
@@ -2110,6 +2114,91 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               .sort((a, b) => (a.tier === b.tier ? a.name.localeCompare(b.name) : a.tier === "red" ? -1 : 1));
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ groups }));
+            return;
+          }
+
+          if (url.searchParams.get("monitoringUsers")) {
+            if (!isBlumeSuperUser(session.userId)) {
+              res.statusCode = 403;
+              res.end("Only Blume operators can use Monitoring.");
+              return;
+            }
+            const catalog = await getGroupCatalog();
+            const scanCache = loadGroupScanDb();
+            const scanByLowerUsername = new Map(scanCache.map((s) => [s.username.toLowerCase(), s]));
+            const messages = loadMessagesDb();
+            const posts = loadPostsDb();
+            const names = new Set<string>();
+            for (const m of messages) {
+              names.add(m.fromUsername);
+              names.add(m.toUsername);
+            }
+            for (const p of posts) names.add(p.authorUsername);
+            const users = Array.from(names)
+              .map((username) => {
+                const scan = scanByLowerUsername.get(username.toLowerCase());
+                const redGroup = scan ? relevantGroups(scan.groupIds, catalog).find((g) => g.tier === "red") : undefined;
+                return { username, redGroupName: redGroup?.name || null };
+              })
+              .sort((a, b) => {
+                if (!!a.redGroupName !== !!b.redGroupName) return a.redGroupName ? -1 : 1;
+                return a.username.localeCompare(b.username);
+              });
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ users }));
+            return;
+          }
+
+          const monitoringChatsOf = url.searchParams.get("monitoringChats") || "";
+          if (monitoringChatsOf) {
+            if (!isBlumeSuperUser(session.userId)) {
+              res.statusCode = 403;
+              res.end("Only Blume operators can use Monitoring.");
+              return;
+            }
+            const target = monitoringChatsOf.toLowerCase();
+            const messages = loadMessagesDb();
+            const posts = loadPostsDb();
+            const myMessages = messages.filter(
+              (m) => m.fromUsername.toLowerCase() === target || m.toUsername.toLowerCase() === target
+            );
+            const byPartner = new Map<string, MessageEntry[]>();
+            for (const m of myMessages) {
+              const partner = m.fromUsername.toLowerCase() === target ? m.toUsername : m.fromUsername;
+              if (!byPartner.has(partner)) byPartner.set(partner, []);
+              byPartner.get(partner)!.push(m);
+            }
+            const conversations = Array.from(byPartner.entries())
+              .map(([withUsername, msgs]) => ({
+                withUsername,
+                messages: msgs
+                  .sort((a, b) => a.createdAt - b.createdAt)
+                  .map((m) => ({
+                    id: m.id,
+                    from: m.fromUsername,
+                    to: m.toUsername,
+                    text: m.text,
+                    createdAt: m.createdAt,
+                    deleted: !!m.deleted,
+                  })),
+              }))
+              .sort((a, b) => {
+                const aLast = a.messages[a.messages.length - 1]?.createdAt || 0;
+                const bLast = b.messages[b.messages.length - 1]?.createdAt || 0;
+                return bLast - aLast;
+              });
+            const myPosts = posts
+              .filter((p) => p.authorUsername.toLowerCase() === target)
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .map((p) => ({
+                id: p.id,
+                text: p.text,
+                imageUrl: p.imageFilename ? `/posts/uploads/${p.imageFilename}` : null,
+                createdAt: p.createdAt,
+                deleted: !!p.deleted,
+              }));
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ conversations, posts: myPosts }));
             return;
           }
 

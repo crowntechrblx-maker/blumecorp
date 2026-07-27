@@ -3354,6 +3354,111 @@
   font-size: 12.5px;
   cursor: pointer;
 }
+.blume-monitoring-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.blume-monitoring-search {
+  width: 100%;
+}
+.blume-monitoring-user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.blume-monitoring-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: #e5e7eb;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+}
+.blume-monitoring-user-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.blume-monitoring-back {
+  background: none;
+  border: none;
+  color: var(--blume-accent, #9fc7ec);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  align-self: flex-start;
+}
+.blume-monitoring-target {
+  font-size: 14px;
+  color: #f4f6fb;
+}
+.blume-monitoring-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.blume-monitoring-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.blume-monitoring-card-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: none;
+  border: none;
+  color: #e5e7eb;
+  font-size: 12.5px;
+  padding: 9px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.blume-monitoring-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 12px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.blume-monitoring-msg {
+  font-size: 12px;
+  color: #d1d5db;
+  padding-top: 10px;
+}
+.blume-monitoring-msg p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.blume-monitoring-msg-meta {
+  font-size: 10.5px;
+  color: #6b7280;
+}
+.blume-monitoring-deleted {
+  border-left: 2px solid #f87171;
+  padding-left: 8px;
+}
+.blume-monitoring-deleted .blume-monitoring-msg-meta {
+  color: #f87171;
+}
+.blume-monitoring-img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin-top: 6px;
+  display: block;
+}
+
 .settings-modal-confirm {
   background: #d92626;
   color: #fff;

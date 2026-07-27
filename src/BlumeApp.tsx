@@ -423,6 +423,24 @@ export function BlumeApp({
   const [addingGroup, setAddingGroup] = useState(false);
   const { error: addGroupError, fading: addGroupFading, setError: setAddGroupError } = useFadingError();
 
+  // Monitoring — super-user only, reads private message/post content
+  // (including deleted rows), so it's kept separate from everything else.
+  const [monitoringUsers, setMonitoringUsers] = useState<
+    { username: string; redGroupName: string | null }[]
+  >([]);
+  const [monitoringLoading, setMonitoringLoading] = useState(false);
+  const [monitoringSearch, setMonitoringSearch] = useState("");
+  const [monitoringSelected, setMonitoringSelected] = useState<string | null>(null);
+  const [monitoringDetailLoading, setMonitoringDetailLoading] = useState(false);
+  const [monitoringData, setMonitoringData] = useState<{
+    conversations: {
+      withUsername: string;
+      messages: { id: string; from: string; to: string; text: string; createdAt: number; deleted: boolean }[];
+    }[];
+    posts: { id: string; text: string; imageUrl: string | null; createdAt: number; deleted: boolean }[];
+  } | null>(null);
+  const [expandedMonitoringCards, setExpandedMonitoringCards] = useState<Record<string, boolean>>({});
+
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   async function loadAccess() {
@@ -511,6 +529,11 @@ export function BlumeApp({
     if (!loggedIn) return;
     loadGroupCatalog();
   }, [loggedIn]);
+
+  useEffect(() => {
+    if (!loggedIn || !canEditBlog) return;
+    loadMonitoringUsers();
+  }, [loggedIn, canEditBlog]);
 
   function handleLogin() {
     if (!canAccess) return;
@@ -824,6 +847,37 @@ export function BlumeApp({
     } catch {
       // Group Settings tab just shows an empty list — not worth its own
       // error state for a background refresh.
+    }
+  }
+
+  async function loadMonitoringUsers() {
+    setMonitoringLoading(true);
+    try {
+      const res = await fetch("/api/blume-search?monitoringUsers=1");
+      if (!res.ok) return;
+      const data = await res.json();
+      setMonitoringUsers(data.users || []);
+    } catch {
+      // Best-effort — the list just stays empty if this fails.
+    } finally {
+      setMonitoringLoading(false);
+    }
+  }
+
+  async function loadMonitoringChats(target: string) {
+    setMonitoringSelected(target);
+    setMonitoringData(null);
+    setExpandedMonitoringCards({});
+    setMonitoringDetailLoading(true);
+    try {
+      const res = await fetch(`/api/blume-search?monitoringChats=${encodeURIComponent(target)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setMonitoringData(data);
+    } catch {
+      // Left as null — the panel shows "no data" rather than crashing.
+    } finally {
+      setMonitoringDetailLoading(false);
     }
   }
 
@@ -1757,8 +1811,8 @@ export function BlumeApp({
                           value={newGroupTier}
                           onChange={(e) => setNewGroupTier(e.target.value as "red" | "white")}
                         >
-                          <option value="white">White</option>
-                          <option value="red">Red</option>
+                          <option value="white">Standard</option>
+                          <option value="red">Marked</option>
                         </select>
                         <button
                           className="blume-cta-btn"
@@ -1786,6 +1840,176 @@ export function BlumeApp({
                 </>
               )}
             </div>
+
+            {canEditBlog && (
+              <div
+                className={`blume-panel blume-monitoring-panel${
+                  collapsedPanels.monitoring ? " blume-panel-collapsed" : ""
+                }`}
+              >
+                <button
+                  className="blume-panel-header blume-panel-header-toggle"
+                  onClick={() => togglePanel("monitoring")}
+                >
+                  <span>Monitoring</span>
+                  <span className="blume-panel-toggle-icon">
+                    {collapsedPanels.monitoring ? "▸" : "▾"}
+                  </span>
+                </button>
+                {!collapsedPanels.monitoring && (
+                  <div className="blume-monitoring-body">
+                    {!monitoringSelected ? (
+                      <>
+                        <input
+                          className="blume-monitoring-search"
+                          placeholder="Search a username…"
+                          value={monitoringSearch}
+                          onChange={(e) => setMonitoringSearch(e.target.value)}
+                        />
+                        {monitoringLoading ? (
+                          <p className="blume-muted">Loading…</p>
+                        ) : (
+                          <div className="blume-monitoring-user-list">
+                            {monitoringUsers.length === 0 && (
+                              <p className="blume-muted">
+                                Nobody's sent a message or posted yet.
+                              </p>
+                            )}
+                            {monitoringUsers
+                              .filter((u) =>
+                                u.username
+                                  .toLowerCase()
+                                  .includes(monitoringSearch.trim().toLowerCase())
+                              )
+                              .map((u) => (
+                                <button
+                                  key={u.username}
+                                  className="blume-monitoring-user-row"
+                                  onClick={() => loadMonitoringChats(u.username)}
+                                >
+                                  <span>{u.username}</span>
+                                  {u.redGroupName && (
+                                    <span className="blume-ingame-red-group">
+                                      {u.redGroupName}
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className="blume-monitoring-back"
+                          onClick={() => {
+                            setMonitoringSelected(null);
+                            setMonitoringData(null);
+                          }}
+                        >
+                          ← Back to list
+                        </button>
+                        <strong className="blume-monitoring-target">{monitoringSelected}</strong>
+                        {monitoringDetailLoading ? (
+                          <p className="blume-muted">Loading…</p>
+                        ) : monitoringData ? (
+                          <div className="blume-monitoring-cards">
+                            {monitoringData.conversations.length === 0 &&
+                              monitoringData.posts.length === 0 && (
+                                <p className="blume-muted">
+                                  No messages or posts found for this user.
+                                </p>
+                              )}
+                            {monitoringData.conversations.map((c) => {
+                              const cardKey = `conv:${c.withUsername}`;
+                              const expanded = !!expandedMonitoringCards[cardKey];
+                              return (
+                                <div className="blume-monitoring-card" key={cardKey}>
+                                  <button
+                                    className="blume-monitoring-card-head"
+                                    onClick={() =>
+                                      setExpandedMonitoringCards((prev) => ({
+                                        ...prev,
+                                        [cardKey]: !prev[cardKey],
+                                      }))
+                                    }
+                                  >
+                                    <span>Chat with {c.withUsername}</span>
+                                    <span className="blume-muted">
+                                      {c.messages.length} message{c.messages.length === 1 ? "" : "s"} ·{" "}
+                                      {expanded ? "▾" : "▸"}
+                                    </span>
+                                  </button>
+                                  {expanded && (
+                                    <div className="blume-monitoring-card-body">
+                                      {c.messages.map((m) => (
+                                        <div
+                                          className={`blume-monitoring-msg${
+                                            m.deleted ? " blume-monitoring-deleted" : ""
+                                          }`}
+                                          key={m.id}
+                                        >
+                                          <span className="blume-monitoring-msg-meta">
+                                            {m.from} → {m.to} · {new Date(m.createdAt).toLocaleString()}
+                                            {m.deleted && " · deleted"}
+                                          </span>
+                                          <p>{m.text}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {monitoringData.posts.length > 0 && (
+                              <div className="blume-monitoring-card">
+                                <button
+                                  className="blume-monitoring-card-head"
+                                  onClick={() =>
+                                    setExpandedMonitoringCards((prev) => ({
+                                      ...prev,
+                                      posts: !prev.posts,
+                                    }))
+                                  }
+                                >
+                                  <span>Posts</span>
+                                  <span className="blume-muted">
+                                    {monitoringData.posts.length} post
+                                    {monitoringData.posts.length === 1 ? "" : "s"} ·{" "}
+                                    {expandedMonitoringCards.posts ? "▾" : "▸"}
+                                  </span>
+                                </button>
+                                {expandedMonitoringCards.posts && (
+                                  <div className="blume-monitoring-card-body">
+                                    {monitoringData.posts.map((p) => (
+                                      <div
+                                        className={`blume-monitoring-msg${
+                                          p.deleted ? " blume-monitoring-deleted" : ""
+                                        }`}
+                                        key={p.id}
+                                      >
+                                        <span className="blume-monitoring-msg-meta">
+                                          {new Date(p.createdAt).toLocaleString()}
+                                          {p.deleted && " · deleted"}
+                                        </span>
+                                        {p.imageUrl && (
+                                          <img className="blume-monitoring-img" src={p.imageUrl} alt="" />
+                                        )}
+                                        {p.text && <p>{p.text}</p>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

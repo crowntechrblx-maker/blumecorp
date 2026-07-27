@@ -121,6 +121,26 @@ interface ServerPresenceReport {
 }
 const SERVER_PRESENCE_STALE_MS = 3 * 60 * 1000; // 3 min — script reports every 120s
 
+// Read-only mirrors of api/messages and api/posts' own KV record shapes,
+// used solely by Monitoring below — kept local rather than imported so this
+// file doesn't need to reach into another function's module.
+interface MonitoringMessageEntry {
+  id: string;
+  fromUsername: string;
+  toUsername: string;
+  text: string;
+  createdAt: number;
+  deleted?: boolean;
+}
+interface MonitoringPostEntry {
+  id: string;
+  authorUsername: string;
+  text: string;
+  imageUrl: string | null;
+  createdAt: number;
+  deleted?: boolean;
+}
+
 // Shared by Active Users and the Surveillance Grid's in-game list: batches
 // candidates through Roblox's presence API (100 at a time, its own limit)
 // and returns whichever ones are actually in a game right now, optionally
@@ -309,6 +329,103 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .map(([id, g]) => ({ id: Number(id), name: g.name, tier: g.tier }))
         .sort((a, b) => (a.tier === b.tier ? a.name.localeCompare(b.name) : a.tier === "red" ? -1 : 1));
       res.status(200).json({ groups });
+      return;
+    }
+
+    // Monitoring: every user who's ever sent a message or posted, read
+    // straight out of the messages/posts KV stores (including rows flagged
+    // deleted — nothing is ever actually erased from those two stores).
+    // Restricted to the 3 super users, unlike most of the rest of Blume —
+    // this reads private message content, not public Roblox data.
+    if (req.query.monitoringUsers) {
+      if (!isBlumeSuperUser(session.userId)) {
+        res.status(403).send("Only Blume operators can use Monitoring.");
+        return;
+      }
+      const catalog = await getGroupCatalog();
+      const scanCache = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
+      const scanByLowerUsername = new Map(scanCache.map((s) => [s.username.toLowerCase(), s]));
+      const [messages, posts] = await Promise.all([
+        kv.get<MonitoringMessageEntry[]>("messages"),
+        kv.get<MonitoringPostEntry[]>("posts"),
+      ]);
+      const names = new Set<string>();
+      for (const m of messages || []) {
+        names.add(m.fromUsername);
+        names.add(m.toUsername);
+      }
+      for (const p of posts || []) names.add(p.authorUsername);
+      const users = Array.from(names)
+        .map((username) => {
+          const scan = scanByLowerUsername.get(username.toLowerCase());
+          const redGroup = scan ? relevantGroups(scan.groupIds, catalog).find((g) => g.tier === "red") : undefined;
+          return { username, redGroupName: redGroup?.name || null };
+        })
+        .sort((a, b) => {
+          if (!!a.redGroupName !== !!b.redGroupName) return a.redGroupName ? -1 : 1;
+          return a.username.localeCompare(b.username);
+        });
+      res.status(200).json({ users });
+      return;
+    }
+
+    // Monitoring: everything a given username has ever sent — every DM
+    // conversation they're part of (grouped by the other person), and
+    // every post they've made. Includes deleted rows (flagged, not text
+    // shown separately so the reviewer can see exactly what was deleted).
+    const monitoringChatsOf = (req.query.monitoringChats as string) || "";
+    if (monitoringChatsOf) {
+      if (!isBlumeSuperUser(session.userId)) {
+        res.status(403).send("Only Blume operators can use Monitoring.");
+        return;
+      }
+      const target = monitoringChatsOf.toLowerCase();
+      const [messages, posts] = await Promise.all([
+        kv.get<MonitoringMessageEntry[]>("messages"),
+        kv.get<MonitoringPostEntry[]>("posts"),
+      ]);
+      const myMessages = (messages || []).filter(
+        (m) => m.fromUsername.toLowerCase() === target || m.toUsername.toLowerCase() === target
+      );
+      const byPartner = new Map<string, MonitoringMessageEntry[]>();
+      for (const m of myMessages) {
+        const partner =
+          m.fromUsername.toLowerCase() === target ? m.toUsername : m.fromUsername;
+        if (!byPartner.has(partner)) byPartner.set(partner, []);
+        byPartner.get(partner)!.push(m);
+      }
+      const conversations = Array.from(byPartner.entries())
+        .map(([withUsername, msgs]) => ({
+          withUsername,
+          messages: msgs
+            .sort((a, b) => a.createdAt - b.createdAt)
+            .map((m) => ({
+              id: m.id,
+              from: m.fromUsername,
+              to: m.toUsername,
+              text: m.text,
+              createdAt: m.createdAt,
+              deleted: !!m.deleted,
+            })),
+        }))
+        .sort((a, b) => {
+          const aLast = a.messages[a.messages.length - 1]?.createdAt || 0;
+          const bLast = b.messages[b.messages.length - 1]?.createdAt || 0;
+          return bLast - aLast;
+        });
+
+      const myPosts = (posts || [])
+        .filter((p) => p.authorUsername.toLowerCase() === target)
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map((p) => ({
+          id: p.id,
+          text: p.text,
+          imageUrl: p.imageUrl,
+          createdAt: p.createdAt,
+          deleted: !!p.deleted,
+        }));
+
+      res.status(200).json({ conversations, posts: myPosts });
       return;
     }
 

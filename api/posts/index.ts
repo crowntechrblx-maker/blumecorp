@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { kv } from "../../lib/kv.js";
-import { put, del } from "@vercel/blob";
+import { put } from "@vercel/blob";
 import crypto from "node:crypto";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
@@ -16,6 +16,11 @@ interface PostEntry {
   text: string;
   imageUrl: string | null;
   createdAt: number;
+  // Deletion never actually erases the row (or its image blob) — it's
+  // flagged so Blume Monitoring can still surface it. The public feed GET
+  // below filters deleted posts out, so nothing changes for regular users.
+  deleted?: boolean;
+  deletedAt?: number;
 }
 
 // DELETE is routed through this same file (via ?id=) rather than a separate
@@ -26,9 +31,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "GET") {
     const search = ((req.query.username as string) || "").trim().toLowerCase();
-    let posts = ((await kv.get<PostEntry[]>("posts")) || []).sort(
-      (a, b) => b.createdAt - a.createdAt
-    );
+    let posts = ((await kv.get<PostEntry[]>("posts")) || [])
+      .filter((p) => !p.deleted)
+      .sort((a, b) => b.createdAt - a.createdAt);
     if (search) {
       posts = posts.filter((p) => p.authorUsername.toLowerCase().includes(search));
     }
@@ -148,15 +153,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    if (post.imageUrl) {
-      try {
-        await del(post.imageUrl);
-      } catch {
-        // Ignore blob delete failures; the metadata removal below still succeeds.
-      }
-    }
-
-    entries.splice(index, 1);
+    // The image blob is deliberately kept (not deleted) — Monitoring needs
+    // to still be able to show it.
+    entries[index] = { ...post, deleted: true, deletedAt: Date.now() };
     await kv.set("posts", entries);
 
     await appendAuditLog({
