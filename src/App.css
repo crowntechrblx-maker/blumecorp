@@ -2113,6 +2113,18 @@
   gap: 6px;
   margin-top: 6px;
 }
+.blume-ingame-live-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
 .blume-ingame-user {
   display: flex;
   align-items: center;

@@ -109,6 +109,18 @@ async function loadBlumeSettings(): Promise<BlumeSettings> {
   return (await kv.get<BlumeSettings>("blumeSettings")) || {};
 }
 
+// Live server roster reported directly by an in-game script (HttpService),
+// via POST ?action=reportServerPlayers — a real player list rather than a
+// guess built from Roblox's presence API against a partial known-user
+// cache. Treated as stale (and ignored) if nothing's come in for a while,
+// so a stopped script doesn't leave a frozen roster on screen forever.
+interface ServerPresenceReport {
+  placeId: string | null;
+  players: { userId: string; username: string }[];
+  updatedAt: number;
+}
+const SERVER_PRESENCE_STALE_MS = 3 * 60 * 1000; // 3 min — script reports every 120s
+
 // Shared by Active Users and the Surveillance Grid's in-game list: batches
 // candidates through Roblox's presence API (100 at a time, its own limit)
 // and returns whichever ones are actually in a game right now, optionally
@@ -148,6 +160,39 @@ async function findInGamePresence(
 // (via ?history= and the POST actions below) to avoid adding yet another
 // file under the Vercel Hobby 12-function cap.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Server roster ingest: an in-game script (HttpService), not a logged-in
+  // dashboard user, calls this — so it's checked before the session/cookie
+  // gate below and authenticated by its own shared secret instead.
+  if (req.method === "POST") {
+    const rawBody = req.body as { action?: string } | undefined;
+    if (rawBody?.action === "reportServerPlayers") {
+      const providedKey = req.headers["x-ingest-key"];
+      const expectedKey = process.env.BLUME_INGEST_KEY;
+      if (!expectedKey || providedKey !== expectedKey) {
+        res.status(401).send("Invalid or missing ingest key.");
+        return;
+      }
+      const body = rawBody as { placeId?: string | number; players?: unknown };
+      const rawPlayers = Array.isArray(body.players) ? body.players : [];
+      const players = rawPlayers
+        .map((p) => {
+          const rec = p as { userId?: string | number; username?: string };
+          if (rec == null || rec.userId == null || !rec.username) return null;
+          return { userId: String(rec.userId), username: String(rec.username) };
+        })
+        .filter((p): p is { userId: string; username: string } => !!p)
+        .slice(0, 300); // sanity cap — no server realistically has more players than this
+      const report: ServerPresenceReport = {
+        placeId: body.placeId != null ? String(body.placeId) : null,
+        players,
+        updatedAt: Date.now(),
+      };
+      await kv.set("blumeServerPresence", report);
+      res.status(200).json({ ok: true, count: players.length });
+      return;
+    }
+  }
+
   const cookies = parseCookies(req);
   const session = decodeSession(cookies.wb_session);
 
@@ -200,37 +245,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // groups gets their role attached too — one merged list rather than a
     // separate "Active agents" section. Red-tier people sort to the top.
     if (req.query.activeInGame) {
+      const catalog = await getGroupCatalog();
+      const scanCache = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
+      const scanByUserId = new Map(scanCache.map((s) => [s.userId, s]));
+
+      const tagMember = (userId: string, username: string, fallbackAvatarUrl: string | null) => {
+        const scan = scanByUserId.get(userId);
+        const redGroup = scan ? relevantGroups(scan.groupIds, catalog).find((g) => g.tier === "red") : undefined;
+        const role = scan
+          ? AGENT_GROUPS.filter((g) => scan.groupIds.includes(g.id))
+              .map((g) => g.label)
+              .join(" / ") || null
+          : null;
+        return {
+          username,
+          avatarUrl: scan?.avatarUrl ?? fallbackAvatarUrl,
+          redGroupName: redGroup?.name || null,
+          role,
+        };
+      };
+      const sortUsers = <T extends { redGroupName: string | null; username: string }>(list: T[]) =>
+        list.sort((a, b) => {
+          if (!!a.redGroupName !== !!b.redGroupName) return a.redGroupName ? -1 : 1;
+          return a.username.localeCompare(b.username);
+        });
+
+      // Prefer the live roster an in-game script reports directly — it's
+      // the real server player list, not limited to people we've already
+      // scanned. Only trust it while it's still fresh.
+      const liveReport = await kv.get<ServerPresenceReport>("blumeServerPresence");
+      if (liveReport && Date.now() - liveReport.updatedAt < SERVER_PRESENCE_STALE_MS) {
+        const users = sortUsers(liveReport.players.map((p) => tagMember(p.userId, p.username, null)));
+        res.status(200).json({ users, live: true, updatedAt: liveReport.updatedAt });
+        return;
+      }
+
+      // Fallback: no live script feed available, so fall back to the old
+      // approach — everyone we've ever scanned, cross-referenced against
+      // Roblox's presence API.
       const settings = await loadBlumeSettings();
       const gamePlaceId = settings.activeGamePlaceId
         ? Number(settings.activeGamePlaceId)
         : null;
-      const candidates = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
-      if (candidates.length === 0) {
-        res.status(200).json({ users: [] });
+      if (scanCache.length === 0) {
+        res.status(200).json({ users: [], live: false });
         return;
       }
       try {
-        const catalog = await getGroupCatalog();
-        const inGame = await findInGamePresence(candidates, gamePlaceId);
-        const users = inGame
-          .map((m) => {
-            const redGroup = relevantGroups(m.groupIds, catalog).find((g) => g.tier === "red");
-            const role =
-              AGENT_GROUPS.filter((g) => m.groupIds.includes(g.id))
-                .map((g) => g.label)
-                .join(" / ") || null;
-            return {
-              username: m.username,
-              avatarUrl: m.avatarUrl,
-              redGroupName: redGroup?.name || null,
-              role,
-            };
-          })
-          .sort((a, b) => {
-            if (!!a.redGroupName !== !!b.redGroupName) return a.redGroupName ? -1 : 1;
-            return a.username.localeCompare(b.username);
-          });
-        res.status(200).json({ users });
+        const inGame = await findInGamePresence(scanCache, gamePlaceId);
+        const users = sortUsers(inGame.map((m) => tagMember(m.userId, m.username, m.avatarUrl)));
+        res.status(200).json({ users, live: false });
       } catch (err) {
         res.status(500).send("Couldn't reach Roblox's presence API: " + (err as Error).message);
       }

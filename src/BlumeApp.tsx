@@ -357,6 +357,7 @@ export function BlumeApp({
   const [inGameUsers, setInGameUsers] = useState<
     { username: string; avatarUrl: string | null; redGroupName: string | null; role: string | null }[]
   >([]);
+  const [inGameLive, setInGameLive] = useState(false);
   const [gamePlaceId, setGamePlaceId] = useState<string | null>(null);
   const [showPlaceIdForm, setShowPlaceIdForm] = useState(false);
   const [placeIdInput, setPlaceIdInput] = useState("");
@@ -487,6 +488,7 @@ export function BlumeApp({
       if (!res.ok) return;
       const data = await res.json();
       setInGameUsers(data.users || []);
+      setInGameLive(!!data.live);
     } catch {
       // Best-effort — the list just stays empty if this fails.
     }
@@ -501,7 +503,7 @@ export function BlumeApp({
     const id = window.setInterval(() => {
       loadActiveAgents();
       loadInGameUsers();
-    }, 45000);
+    }, 20000);
     return () => window.clearInterval(id);
   }, [loggedIn]);
 
@@ -1309,7 +1311,10 @@ export function BlumeApp({
               {!collapsedPanels.map && (
                 <div className="blume-map-body">
                   <div className="blume-ingame-list">
-                    <span className="blume-person-label">In game now</span>
+                    <span className="blume-person-label">
+                      In game now
+                      {inGameLive && <span className="blume-ingame-live-tag">LIVE</span>}
+                    </span>
                     {inGameUsers.length === 0 ? (
                       <p className="blume-muted">Nobody currently in-game.</p>
                     ) : (

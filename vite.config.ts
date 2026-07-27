@@ -1794,6 +1794,26 @@ function saveBlumeSettings(settings: BlumeSettings) {
 }
 const BLUME_GROUP_SCAN_DB = path.resolve(process.cwd(), "blume-group-scan-data.json");
 const BLUME_CUSTOM_GROUPS_DB = path.resolve(process.cwd(), "blume-custom-groups-data.json");
+const BLUME_SERVER_PRESENCE_DB = path.resolve(process.cwd(), "blume-server-presence-data.json");
+
+// Live server roster reported directly by an in-game script — mirrors the
+// prod KV-backed version in api/blume-search/index.ts.
+interface ServerPresenceReport {
+  placeId: string | null;
+  players: { userId: string; username: string }[];
+  updatedAt: number;
+}
+const SERVER_PRESENCE_STALE_MS = 3 * 60 * 1000;
+function loadServerPresence(): ServerPresenceReport | null {
+  try {
+    return JSON.parse(fs.readFileSync(BLUME_SERVER_PRESENCE_DB, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+function saveServerPresence(report: ServerPresenceReport) {
+  fs.writeFileSync(BLUME_SERVER_PRESENCE_DB, JSON.stringify(report, null, 2));
+}
 const HISTORY_PER_PERSON_CAP = 20;
 const GROUP_SCAN_FRESH_MS = 6 * 60 * 60 * 1000;
 
@@ -1941,6 +1961,48 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           return;
         }
 
+        // Server roster ingest: an in-game script, not a logged-in dashboard
+        // user, calls this — authenticated by its own shared secret instead
+        // of the session cookie checked below.
+        if (req.method === "POST") {
+          let peekBody: any;
+          try {
+            peekBody = await readJsonBody(req);
+          } catch {
+            res.statusCode = 400;
+            res.end("Invalid JSON body.");
+            return;
+          }
+          if (peekBody?.action === "reportServerPlayers") {
+            const providedKey = req.headers["x-ingest-key"];
+            const expectedKey = process.env.BLUME_INGEST_KEY;
+            if (!expectedKey || providedKey !== expectedKey) {
+              res.statusCode = 401;
+              res.end("Invalid or missing ingest key.");
+              return;
+            }
+            const rawPlayers = Array.isArray(peekBody.players) ? peekBody.players : [];
+            const players = rawPlayers
+              .map((p: any) => {
+                if (p == null || p.userId == null || !p.username) return null;
+                return { userId: String(p.userId), username: String(p.username) };
+              })
+              .filter((p: any): p is { userId: string; username: string } => !!p)
+              .slice(0, 300);
+            saveServerPresence({
+              placeId: peekBody.placeId != null ? String(peekBody.placeId) : null,
+              players,
+              updatedAt: Date.now(),
+            });
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ ok: true, count: players.length }));
+            return;
+          }
+          // Not the ingest action — fall through to the normal session-gated
+          // POST handling below, using the body already read off the stream.
+          (req as any)._parsedBody = peekBody;
+        }
+
         const cookies = parseCookies(req);
         const session = sessions.get(cookies.wb_session);
         if (!session) {
@@ -1988,39 +2050,52 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           }
 
           if (url.searchParams.get("activeInGame")) {
+            const catalog = await getGroupCatalog();
+            const scanCache = loadGroupScanDb();
+            const scanByUserId = new Map(scanCache.map((s) => [s.userId, s]));
+            const tagMember = (userId: string, username: string, fallbackAvatarUrl: string | null) => {
+              const scan = scanByUserId.get(userId);
+              const redGroup = scan ? relevantGroups(scan.groupIds, catalog).find((g) => g.tier === "red") : undefined;
+              const role = scan
+                ? AGENT_GROUPS.filter((g) => scan.groupIds.includes(g.id))
+                    .map((g) => g.label)
+                    .join(" / ") || null
+                : null;
+              return {
+                username,
+                avatarUrl: scan?.avatarUrl ?? fallbackAvatarUrl,
+                redGroupName: redGroup?.name || null,
+                role,
+              };
+            };
+            const sortUsers = (list: any[]) =>
+              list.sort((a, b) => {
+                if (!!a.redGroupName !== !!b.redGroupName) return a.redGroupName ? -1 : 1;
+                return a.username.localeCompare(b.username);
+              });
+
+            const liveReport = loadServerPresence();
+            if (liveReport && Date.now() - liveReport.updatedAt < SERVER_PRESENCE_STALE_MS) {
+              const users = sortUsers(liveReport.players.map((p) => tagMember(p.userId, p.username, null)));
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ users, live: true, updatedAt: liveReport.updatedAt }));
+              return;
+            }
+
             const settings = loadBlumeSettings();
             const gamePlaceId = settings.activeGamePlaceId
               ? Number(settings.activeGamePlaceId)
               : null;
-            const candidates = loadGroupScanDb();
-            if (candidates.length === 0) {
+            if (scanCache.length === 0) {
               res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ users: [] }));
+              res.end(JSON.stringify({ users: [], live: false }));
               return;
             }
             try {
-              const catalog = await getGroupCatalog();
-              const inGame = await findInGamePresence(candidates, gamePlaceId);
-              const users = inGame
-                .map((m) => {
-                  const redGroup = relevantGroups(m.groupIds, catalog).find((g) => g.tier === "red");
-                  const role =
-                    AGENT_GROUPS.filter((g) => m.groupIds.includes(g.id))
-                      .map((g) => g.label)
-                      .join(" / ") || null;
-                  return {
-                    username: m.username,
-                    avatarUrl: m.avatarUrl,
-                    redGroupName: redGroup?.name || null,
-                    role,
-                  };
-                })
-                .sort((a, b) => {
-                  if (!!a.redGroupName !== !!b.redGroupName) return a.redGroupName ? -1 : 1;
-                  return a.username.localeCompare(b.username);
-                });
+              const inGame = await findInGamePresence(scanCache, gamePlaceId);
+              const users = sortUsers(inGame.map((m) => tagMember(m.userId, m.username, m.avatarUrl)));
               res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ users }));
+              res.end(JSON.stringify({ users, live: false }));
             } catch (err) {
               res.statusCode = 500;
               res.end("Couldn't reach Roblox's presence API: " + (err as Error).message);
@@ -2228,7 +2303,10 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
         if (req.method === "POST") {
           try {
-            const body = await readJsonBody(req);
+            // Body's already been read once above (to check for the ingest
+            // action before the session gate) — reuse it instead of trying
+            // to read the now-drained request stream again.
+            const body = (req as any)._parsedBody ?? (await readJsonBody(req));
             const action = (body.action || "").toString();
 
             if (action === "setActiveGamePlaceId") {
@@ -2462,6 +2540,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   if (env.ROBLOX_SCAN_COOKIE) process.env.ROBLOX_SCAN_COOKIE = env.ROBLOX_SCAN_COOKIE;
+  if (env.BLUME_INGEST_KEY) process.env.BLUME_INGEST_KEY = env.BLUME_INGEST_KEY;
   const sessions = new Map<string, RobloxSession>();
   return {
     plugins: [

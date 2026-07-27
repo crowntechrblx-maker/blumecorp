@@ -41,6 +41,7 @@ blume-vehicle-tags-data.json
 blume-group-scan-data.json
 blume-settings-data.json
 blume-custom-groups-data.json
+blume-server-presence-data.json
 
 # Editor directories and files
 .vscode/*
