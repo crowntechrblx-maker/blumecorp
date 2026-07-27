@@ -13,7 +13,7 @@ export function RobloxLogin() {
 
   useEffect(() => {
     const t1 = window.setTimeout(() => setPhase("flying"), 900);
-    const t2 = window.setTimeout(() => setPhase("form"), 900 + 550);
+    const t2 = window.setTimeout(() => setPhase("form"), 900 + 900);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
