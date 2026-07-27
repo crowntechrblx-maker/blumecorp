@@ -20,7 +20,7 @@ export function RobloxLogin() {
           href="/api/auth/login"
           onClick={() => sessionStorage.setItem(LOGIN_SEQUENCE_FLAG, "1")}
         >
-          Sign In
+          Sign In to Westbridge OS
         </a>
       </div>
 
