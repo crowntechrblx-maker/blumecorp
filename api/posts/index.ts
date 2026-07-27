@@ -21,6 +21,8 @@ interface PostEntry {
   // below filters deleted posts out, so nothing changes for regular users.
   deleted?: boolean;
   deletedAt?: number;
+  likedBy?: string[];
+  dislikedBy?: string[];
 }
 
 // DELETE is routed through this same file (via ?id=) rather than a separate
@@ -37,16 +39,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (search) {
       posts = posts.filter((p) => p.authorUsername.toLowerCase().includes(search));
     }
-    const payload = posts.map((p) => ({
-      id: p.id,
-      authorUsername: p.authorUsername,
-      authorAvatarUrl: p.authorAvatarUrl ?? null,
-      text: p.text,
-      imageUrl: p.imageUrl ?? null,
-      createdAt: p.createdAt,
-      isMine: session ? p.authorId === session.userId : false,
-      canDelete: session ? p.authorId === session.userId || isPlatformAdmin(session.userId) : false,
-    }));
+    const payload = posts.map((p) => {
+      const likedBy = p.likedBy || [];
+      const dislikedBy = p.dislikedBy || [];
+      return {
+        id: p.id,
+        authorUsername: p.authorUsername,
+        authorAvatarUrl: p.authorAvatarUrl ?? null,
+        text: p.text,
+        imageUrl: p.imageUrl ?? null,
+        createdAt: p.createdAt,
+        isMine: session ? p.authorId === session.userId : false,
+        canDelete: session ? p.authorId === session.userId || isPlatformAdmin(session.userId) : false,
+        likes: likedBy.length,
+        dislikes: dislikedBy.length,
+        myReaction: session
+          ? likedBy.includes(session.userId)
+            ? "up"
+            : dislikedBy.includes(session.userId)
+              ? "down"
+              : null
+          : null,
+      };
+    });
     res.status(200).json(payload);
     return;
   }
@@ -130,6 +145,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (err) {
       res.status(500).send("Post failed: " + (err as Error).message);
     }
+    return;
+  }
+
+  if (req.method === "PATCH") {
+    if (!session) {
+      res.status(401).send("You must be signed in to react to a post.");
+      return;
+    }
+    const id = (req.query.id as string) || "";
+    const body = req.body as { reaction?: string };
+    const reaction = (body.reaction || "").toString();
+    if (reaction !== "up" && reaction !== "down") {
+      res.status(400).send('reaction must be "up" or "down".');
+      return;
+    }
+    const entries = (await kv.get<PostEntry[]>("posts")) || [];
+    const index = entries.findIndex((p) => p.id === id);
+    if (index === -1) {
+      res.status(404).send("Post not found.");
+      return;
+    }
+    const post = entries[index];
+    const uid = session.userId;
+    let likedBy = post.likedBy || [];
+    let dislikedBy = post.dislikedBy || [];
+    if (reaction === "up") {
+      likedBy = likedBy.includes(uid) ? likedBy.filter((x) => x !== uid) : [...likedBy, uid];
+      dislikedBy = dislikedBy.filter((x) => x !== uid);
+    } else {
+      dislikedBy = dislikedBy.includes(uid) ? dislikedBy.filter((x) => x !== uid) : [...dislikedBy, uid];
+      likedBy = likedBy.filter((x) => x !== uid);
+    }
+    entries[index] = { ...post, likedBy, dislikedBy };
+    await kv.set("posts", entries);
+    res.status(200).json({
+      likes: likedBy.length,
+      dislikes: dislikedBy.length,
+      myReaction: likedBy.includes(uid) ? "up" : dislikedBy.includes(uid) ? "down" : null,
+    });
     return;
   }
 

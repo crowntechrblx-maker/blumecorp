@@ -24,7 +24,7 @@ export function MenuBar({
   return (
     <div className="menubar">
       <div className="menubar-left">
-        <span className="apple-logo">◆</span>
+        <img className="apple-logo" src="/logo.png" alt="Westbridge OS" />
         <span className="menubar-app-name">{activeAppName}</span>
         <span className="menubar-item">File</span>
         <span className="menubar-item">Edit</span>

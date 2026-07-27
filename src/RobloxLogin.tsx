@@ -6,7 +6,7 @@ export function RobloxLogin() {
   return (
     <div className="login-screen" style={{ backgroundImage: `url(${wallpaperUrl})` }}>
       <div className="login-card">
-        <div className="login-glyph">W</div>
+        <img className="login-glyph" src="/logo.png" alt="Westbridge OS" />
         <h1>Westbridge OS</h1>
         <p>Sign in with your Roblox account to continue</p>
         <a className="login-button" href="/api/auth/login">

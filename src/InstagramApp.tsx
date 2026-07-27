@@ -12,6 +12,9 @@ interface Post {
   createdAt: number;
   isMine: boolean;
   canDelete: boolean;
+  likes: number;
+  dislikes: number;
+  myReaction: "up" | "down" | null;
 }
 
 function timeAgo(ts: number) {
@@ -88,6 +91,43 @@ export function InstagramApp({
       setError((err as Error).message || "Couldn't create post.");
     } finally {
       setPosting(false);
+    }
+  }
+
+  async function handleReact(id: string, reaction: "up" | "down") {
+    // Optimistic update — toggling off if the same reaction is clicked
+    // again, matching the backend's toggle logic.
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const wasSame = p.myReaction === reaction;
+        let likes = p.likes;
+        let dislikes = p.dislikes;
+        if (reaction === "up") {
+          likes += wasSame ? -1 : p.myReaction === "down" ? 1 : 1;
+          if (!wasSame && p.myReaction === "down") dislikes -= 1;
+        } else {
+          dislikes += wasSame ? -1 : p.myReaction === "up" ? 1 : 1;
+          if (!wasSame && p.myReaction === "up") likes -= 1;
+        }
+        return { ...p, likes, dislikes, myReaction: wasSame ? null : reaction };
+      })
+    );
+    try {
+      const res = await fetch(`/api/posts?id=${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reaction }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, likes: data.likes, dislikes: data.dislikes, myReaction: data.myReaction } : p
+        )
+      );
+    } catch {
+      loadPosts(); // resync on failure rather than leaving an optimistic guess on screen
     }
   }
 
@@ -171,6 +211,22 @@ export function InstagramApp({
             </div>
             {post.text && <p className="ig-post-text">{post.text}</p>}
             {post.imageUrl && <img className="ig-post-image" src={post.imageUrl} alt="" />}
+            <div className="ig-post-reactions">
+              <button
+                className={`ig-reaction-btn${post.myReaction === "up" ? " ig-reaction-active-up" : ""}`}
+                onClick={() => handleReact(post.id, "up")}
+                title="Thumbs up"
+              >
+                👍 {post.likes}
+              </button>
+              <button
+                className={`ig-reaction-btn${post.myReaction === "down" ? " ig-reaction-active-down" : ""}`}
+                onClick={() => handleReact(post.id, "down")}
+                title="Thumbs down"
+              >
+                👎 {post.dislikes}
+              </button>
+            </div>
           </div>
         ))}
       </div>

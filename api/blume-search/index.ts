@@ -335,13 +335,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Monitoring: every user who's ever sent a message or posted, read
     // straight out of the messages/posts KV stores (including rows flagged
     // deleted — nothing is ever actually erased from those two stores).
-    // Restricted to the 3 super users, unlike most of the rest of Blume —
-    // this reads private message content, not public Roblox data.
+    // Open to anyone with Blume clearance (same gate as the rest of the
+    // dashboard), not just the 3 super users.
     if (req.query.monitoringUsers) {
-      if (!isBlumeSuperUser(session.userId)) {
-        res.status(403).send("Only Blume operators can use Monitoring.");
-        return;
-      }
       const catalog = await getGroupCatalog();
       const scanCache = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
       const scanByLowerUsername = new Map(scanCache.map((s) => [s.username.toLowerCase(), s]));
@@ -375,10 +371,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // shown separately so the reviewer can see exactly what was deleted).
     const monitoringChatsOf = (req.query.monitoringChats as string) || "";
     if (monitoringChatsOf) {
-      if (!isBlumeSuperUser(session.userId)) {
-        res.status(403).send("Only Blume operators can use Monitoring.");
-        return;
-      }
       const target = monitoringChatsOf.toLowerCase();
       const [messages, posts] = await Promise.all([
         kv.get<MonitoringMessageEntry[]>("messages"),

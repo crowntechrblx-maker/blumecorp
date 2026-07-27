@@ -255,6 +255,17 @@ export const PERSON_SEARCH_GROUPS: Record<number, { name: string; tier: "red" | 
   496716538: { name: "U.S Marshals Service", tier: "white" },
   841282433: { name: "London Freemasons", tier: "white" },
   1033941381: { name: "Consulate of the People's Republic of China", tier: "white" },
+
+  1176461: { name: "Union Studios", tier: "red" },
+  2792847: { name: "Crown Studios", tier: "red" },
+  1059884: { name: "Imperium Studios", tier: "red" },
+  979414846: { name: "[IP] Interactive Productions", tier: "red" },
+  32324698: { name: "PHOENIX Studios Group", tier: "red" },
+  33392881: { name: "Aris Production", tier: "red" },
+  34564109: { name: "Liber Studios ND", tier: "red" },
+  35662128: { name: "United Establishment", tier: "red" },
+  5081986: { name: "Yaris United Kingdom", tier: "red" },
+  35273143: { name: "Explorium Studios", tier: "red" },
 };
 
 // Returns the display names of every known group the given user belongs to

@@ -531,9 +531,9 @@ export function BlumeApp({
   }, [loggedIn]);
 
   useEffect(() => {
-    if (!loggedIn || !canEditBlog) return;
+    if (!loggedIn) return;
     loadMonitoringUsers();
-  }, [loggedIn, canEditBlog]);
+  }, [loggedIn]);
 
   function handleLogin() {
     if (!canAccess) return;
@@ -1812,7 +1812,7 @@ export function BlumeApp({
                           onChange={(e) => setNewGroupTier(e.target.value as "red" | "white")}
                         >
                           <option value="white">Standard</option>
-                          <option value="red">Marked</option>
+                          <option value="red">Flagged</option>
                         </select>
                         <button
                           className="blume-cta-btn"
@@ -1841,21 +1841,20 @@ export function BlumeApp({
               )}
             </div>
 
-            {canEditBlog && (
-              <div
-                className={`blume-panel blume-monitoring-panel${
-                  collapsedPanels.monitoring ? " blume-panel-collapsed" : ""
-                }`}
+            <div
+              className={`blume-panel blume-monitoring-panel${
+                collapsedPanels.monitoring ? " blume-panel-collapsed" : ""
+              }`}
+            >
+              <button
+                className="blume-panel-header blume-panel-header-toggle"
+                onClick={() => togglePanel("monitoring")}
               >
-                <button
-                  className="blume-panel-header blume-panel-header-toggle"
-                  onClick={() => togglePanel("monitoring")}
-                >
-                  <span>Monitoring</span>
-                  <span className="blume-panel-toggle-icon">
-                    {collapsedPanels.monitoring ? "▸" : "▾"}
-                  </span>
-                </button>
+                <span>Monitoring</span>
+                <span className="blume-panel-toggle-icon">
+                  {collapsedPanels.monitoring ? "▸" : "▾"}
+                </span>
+              </button>
                 {!collapsedPanels.monitoring && (
                   <div className="blume-monitoring-body">
                     {!monitoringSelected ? (
@@ -1980,10 +1979,10 @@ export function BlumeApp({
                                   </span>
                                 </button>
                                 {expandedMonitoringCards.posts && (
-                                  <div className="blume-monitoring-card-body">
+                                  <div className="blume-monitoring-card-body blume-monitoring-post-grid">
                                     {monitoringData.posts.map((p) => (
                                       <div
-                                        className={`blume-monitoring-msg${
+                                        className={`blume-monitoring-post-mini${
                                           p.deleted ? " blume-monitoring-deleted" : ""
                                         }`}
                                         key={p.id}
@@ -2009,7 +2008,6 @@ export function BlumeApp({
                   </div>
                 )}
               </div>
-            )}
           </div>
         </div>
       )}

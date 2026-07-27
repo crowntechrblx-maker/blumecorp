@@ -30,6 +30,8 @@ interface PostEntry {
   createdAt: number;
   deleted?: boolean;
   deletedAt?: number;
+  likedBy?: string[];
+  dislikedBy?: string[];
 }
 
 interface KnownUser {
@@ -199,6 +201,17 @@ const PERSON_SEARCH_GROUPS: Record<number, { name: string; tier: "red" | "white"
   496716538: { name: "U.S Marshals Service", tier: "white" },
   841282433: { name: "London Freemasons", tier: "white" },
   1033941381: { name: "Consulate of the People's Republic of China", tier: "white" },
+
+  1176461: { name: "Union Studios", tier: "red" },
+  2792847: { name: "Crown Studios", tier: "red" },
+  1059884: { name: "Imperium Studios", tier: "red" },
+  979414846: { name: "[IP] Interactive Productions", tier: "red" },
+  32324698: { name: "PHOENIX Studios Group", tier: "red" },
+  33392881: { name: "Aris Production", tier: "red" },
+  34564109: { name: "Liber Studios ND", tier: "red" },
+  35662128: { name: "United Establishment", tier: "red" },
+  5081986: { name: "Yaris United Kingdom", tier: "red" },
+  35273143: { name: "Explorium Studios", tier: "red" },
 };
 
 interface BlumeReportEntry {
@@ -887,18 +900,78 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             posts = posts.filter((p) => p.authorUsername.toLowerCase().includes(search));
           }
           const isAdminOverride = !!(session && isPlatformAdmin(session.userId));
-          const payload = posts.map((p) => ({
-            id: p.id,
-            authorUsername: p.authorUsername,
-            authorAvatarUrl: p.authorAvatarUrl ?? null,
-            text: p.text,
-            imageUrl: p.imageFilename ? `/posts/uploads/${p.imageFilename}` : null,
-            createdAt: p.createdAt,
-            isMine: session ? p.authorId === session.userId : false,
-            canDelete: session ? p.authorId === session.userId || isAdminOverride : false,
-          }));
+          const payload = posts.map((p) => {
+            const likedBy = p.likedBy || [];
+            const dislikedBy = p.dislikedBy || [];
+            return {
+              id: p.id,
+              authorUsername: p.authorUsername,
+              authorAvatarUrl: p.authorAvatarUrl ?? null,
+              text: p.text,
+              imageUrl: p.imageFilename ? `/posts/uploads/${p.imageFilename}` : null,
+              createdAt: p.createdAt,
+              isMine: session ? p.authorId === session.userId : false,
+              canDelete: session ? p.authorId === session.userId || isAdminOverride : false,
+              likes: likedBy.length,
+              dislikes: dislikedBy.length,
+              myReaction: session
+                ? likedBy.includes(session.userId)
+                  ? "up"
+                  : dislikedBy.includes(session.userId)
+                    ? "down"
+                    : null
+                : null,
+            };
+          });
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(payload));
+          return;
+        }
+
+        if (url.pathname === "/api/posts" && req.method === "PATCH") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in to react to a post.");
+            return;
+          }
+          const id = url.searchParams.get("id") || "";
+          const body = await readJsonBody(req);
+          const reaction = (body.reaction || "").toString();
+          if (reaction !== "up" && reaction !== "down") {
+            res.statusCode = 400;
+            res.end('reaction must be "up" or "down".');
+            return;
+          }
+          const entries = loadPostsDb();
+          const index = entries.findIndex((p) => p.id === id);
+          if (index === -1) {
+            res.statusCode = 404;
+            res.end("Post not found.");
+            return;
+          }
+          const post = entries[index];
+          const uid = session.userId;
+          let likedBy = post.likedBy || [];
+          let dislikedBy = post.dislikedBy || [];
+          if (reaction === "up") {
+            likedBy = likedBy.includes(uid) ? likedBy.filter((x) => x !== uid) : [...likedBy, uid];
+            dislikedBy = dislikedBy.filter((x) => x !== uid);
+          } else {
+            dislikedBy = dislikedBy.includes(uid)
+              ? dislikedBy.filter((x) => x !== uid)
+              : [...dislikedBy, uid];
+            likedBy = likedBy.filter((x) => x !== uid);
+          }
+          entries[index] = { ...post, likedBy, dislikedBy };
+          savePostsDb(entries);
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              likes: likedBy.length,
+              dislikes: dislikedBy.length,
+              myReaction: likedBy.includes(uid) ? "up" : dislikedBy.includes(uid) ? "down" : null,
+            })
+          );
           return;
         }
 
@@ -2118,11 +2191,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           }
 
           if (url.searchParams.get("monitoringUsers")) {
-            if (!isBlumeSuperUser(session.userId)) {
-              res.statusCode = 403;
-              res.end("Only Blume operators can use Monitoring.");
-              return;
-            }
             const catalog = await getGroupCatalog();
             const scanCache = loadGroupScanDb();
             const scanByLowerUsername = new Map(scanCache.map((s) => [s.username.toLowerCase(), s]));
@@ -2151,11 +2219,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
           const monitoringChatsOf = url.searchParams.get("monitoringChats") || "";
           if (monitoringChatsOf) {
-            if (!isBlumeSuperUser(session.userId)) {
-              res.statusCode = 403;
-              res.end("Only Blume operators can use Monitoring.");
-              return;
-            }
             const target = monitoringChatsOf.toLowerCase();
             const messages = loadMessagesDb();
             const posts = loadPostsDb();
