@@ -2929,7 +2929,11 @@
   object-fit: cover;
   opacity: 1;
   transform: scale(1);
-  transition: transform 1.6s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.8s ease 0.05s;
+  /* Opacity fades out fast and starts immediately, so it dissolves to
+     transparent while still small — before the scale has grown enough to
+     turn it into a big flat crop of the image (which read as "fading to a
+     solid colour" rather than actually fading away). */
+  transition: transform 1.6s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
 }
 .boot-intro-fly .boot-intro-logo {
   transform: scale(400);
