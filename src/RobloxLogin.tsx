@@ -24,7 +24,7 @@ export function RobloxLogin() {
     <div className="login-screen">
       {phase !== "form" && (
         <div className={`boot-intro${phase === "flying" ? " boot-intro-fly" : ""}`}>
-          <img className="boot-intro-logo" src="/logo.png" alt="" />
+          <img className="boot-intro-logo" src="/boot-mark.svg" alt="" />
         </div>
       )}
       {phase === "form" && (
