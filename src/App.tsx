@@ -5,7 +5,8 @@ import { DesktopIcon } from "./DesktopIcon";
 import { Window, type WindowState } from "./Window";
 import { useAuth } from "./AuthContext";
 import { useWallpaper } from "./WallpaperContext";
-import { RobloxLogin } from "./RobloxLogin";
+import { RobloxLogin, LOGIN_SEQUENCE_FLAG } from "./RobloxLogin";
+import { LoginSequence } from "./LoginSequence";
 import { MessageToast } from "./MessageToast";
 import "./App.css";
 
@@ -17,6 +18,16 @@ function App() {
   const { user, loading, banned } = useAuth();
   const { wallpaperUrl } = useWallpaper();
   const [windows, setWindows] = useState<WindowsMap>({});
+  const [showLoginSequence, setShowLoginSequence] = useState(false);
+
+  // Only plays right after a real login (the "Sign in with Roblox" button
+  // sets this flag before navigating away) — not on every ordinary reload
+  // of an already-signed-in session.
+  useEffect(() => {
+    if (!loading && user && sessionStorage.getItem(LOGIN_SEQUENCE_FLAG) === "1") {
+      setShowLoginSequence(true);
+    }
+  }, [loading, user]);
   const [activeApp, setActiveApp] = useState<AppId | null>(null);
   const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
 
@@ -142,6 +153,18 @@ function App() {
 
   if (!user) {
     return <RobloxLogin />;
+  }
+
+  if (showLoginSequence) {
+    return (
+      <LoginSequence
+        username={user.username}
+        onDone={() => {
+          sessionStorage.removeItem(LOGIN_SEQUENCE_FLAG);
+          setShowLoginSequence(false);
+        }}
+      />
+    );
   }
 
   const visibleApps = APPS.filter((app) => app.id !== "settings" || user.isAdmin);
