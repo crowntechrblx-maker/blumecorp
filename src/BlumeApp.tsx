@@ -440,6 +440,7 @@ export function BlumeApp({
     posts: { id: string; text: string; imageUrl: string | null; createdAt: number; deleted: boolean }[];
   } | null>(null);
   const [expandedMonitoringCards, setExpandedMonitoringCards] = useState<Record<string, boolean>>({});
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -1343,7 +1344,13 @@ export function BlumeApp({
                                 {r.linkedUsername && (
                                   <>
                                     {" "}
-                                    · linked to <strong>{r.linkedUsername}</strong>
+                                    · linked to{" "}
+                                    <strong
+                                      className="blume-clickable-username"
+                                      onClick={() => handleUsernameClick(r.linkedUsername!)}
+                                    >
+                                      {r.linkedUsername}
+                                    </strong>
                                   </>
                                 )}
                               </span>
@@ -1987,13 +1994,22 @@ export function BlumeApp({
                                         }`}
                                         key={p.id}
                                       >
-                                        <span className="blume-monitoring-msg-meta">
-                                          {new Date(p.createdAt).toLocaleString()}
-                                          {p.deleted && " · deleted"}
-                                        </span>
-                                        {p.imageUrl && (
-                                          <img className="blume-monitoring-img" src={p.imageUrl} alt="" />
-                                        )}
+                                        <div className="blume-monitoring-post-top">
+                                          {p.imageUrl && (
+                                            <div className="blume-monitoring-img-frame">
+                                              <img
+                                                className="blume-monitoring-img"
+                                                src={p.imageUrl}
+                                                alt=""
+                                                onClick={() => setEnlargedImage(p.imageUrl)}
+                                              />
+                                            </div>
+                                          )}
+                                          <span className="blume-monitoring-msg-meta">
+                                            {new Date(p.createdAt).toLocaleString()}
+                                            {p.deleted && " · deleted"}
+                                          </span>
+                                        </div>
                                         {p.text && <p>{p.text}</p>}
                                       </div>
                                     ))}
@@ -2009,6 +2025,12 @@ export function BlumeApp({
                 )}
               </div>
           </div>
+        </div>
+      )}
+
+      {enlargedImage && (
+        <div className="blume-image-lightbox" onClick={() => setEnlargedImage(null)}>
+          <img src={enlargedImage} alt="" />
         </div>
       )}
     </div>

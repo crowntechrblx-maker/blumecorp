@@ -13,8 +13,7 @@ interface Post {
   isMine: boolean;
   canDelete: boolean;
   likes: number;
-  dislikes: number;
-  myReaction: "up" | "down" | null;
+  liked: boolean;
 }
 
 function timeAgo(ts: number) {
@@ -94,38 +93,16 @@ export function InstagramApp({
     }
   }
 
-  async function handleReact(id: string, reaction: "up" | "down") {
-    // Optimistic update — toggling off if the same reaction is clicked
-    // again, matching the backend's toggle logic.
+  async function handleToggleLike(id: string) {
+    // Optimistic update — flips instantly, resyncs from the server response.
     setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const wasSame = p.myReaction === reaction;
-        let likes = p.likes;
-        let dislikes = p.dislikes;
-        if (reaction === "up") {
-          likes += wasSame ? -1 : p.myReaction === "down" ? 1 : 1;
-          if (!wasSame && p.myReaction === "down") dislikes -= 1;
-        } else {
-          dislikes += wasSame ? -1 : p.myReaction === "up" ? 1 : 1;
-          if (!wasSame && p.myReaction === "up") likes -= 1;
-        }
-        return { ...p, likes, dislikes, myReaction: wasSame ? null : reaction };
-      })
+      prev.map((p) => (p.id === id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p))
     );
     try {
-      const res = await fetch(`/api/posts?id=${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reaction }),
-      });
+      const res = await fetch(`/api/posts?id=${encodeURIComponent(id)}`, { method: "PATCH" });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === id ? { ...p, likes: data.likes, dislikes: data.dislikes, myReaction: data.myReaction } : p
-        )
-      );
+      setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: data.likes, liked: data.liked } : p)));
     } catch {
       loadPosts(); // resync on failure rather than leaving an optimistic guess on screen
     }
@@ -213,18 +190,23 @@ export function InstagramApp({
             {post.imageUrl && <img className="ig-post-image" src={post.imageUrl} alt="" />}
             <div className="ig-post-reactions">
               <button
-                className={`ig-reaction-btn${post.myReaction === "up" ? " ig-reaction-active-up" : ""}`}
-                onClick={() => handleReact(post.id, "up")}
-                title="Thumbs up"
+                className={`ig-reaction-btn${post.liked ? " ig-reaction-active" : ""}`}
+                onClick={() => handleToggleLike(post.id)}
+                title={post.liked ? "Unlike" : "Like"}
               >
-                👍 {post.likes}
-              </button>
-              <button
-                className={`ig-reaction-btn${post.myReaction === "down" ? " ig-reaction-active-down" : ""}`}
-                onClick={() => handleReact(post.id, "down")}
-                title="Thumbs down"
-              >
-                👎 {post.dislikes}
+                <svg
+                  className="ig-reaction-icon"
+                  viewBox="0 0 24 24"
+                  fill={post.liked ? "currentColor" : "none"}
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M7 22h-3a1 1 0 0 1 -1 -1v-9a1 1 0 0 1 1 -1h3v11z" />
+                  <path d="M7 11l5 -8a2 2 0 0 1 2 2v5h5a2 2 0 0 1 2 2l-1.5 8a2 2 0 0 1 -2 1.5h-9.5" />
+                </svg>
+                {post.likes}
               </button>
             </div>
           </div>

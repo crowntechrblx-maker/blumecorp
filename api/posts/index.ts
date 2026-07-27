@@ -22,7 +22,6 @@ interface PostEntry {
   deleted?: boolean;
   deletedAt?: number;
   likedBy?: string[];
-  dislikedBy?: string[];
 }
 
 // DELETE is routed through this same file (via ?id=) rather than a separate
@@ -41,7 +40,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const payload = posts.map((p) => {
       const likedBy = p.likedBy || [];
-      const dislikedBy = p.dislikedBy || [];
       return {
         id: p.id,
         authorUsername: p.authorUsername,
@@ -52,14 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         isMine: session ? p.authorId === session.userId : false,
         canDelete: session ? p.authorId === session.userId || isPlatformAdmin(session.userId) : false,
         likes: likedBy.length,
-        dislikes: dislikedBy.length,
-        myReaction: session
-          ? likedBy.includes(session.userId)
-            ? "up"
-            : dislikedBy.includes(session.userId)
-              ? "down"
-              : null
-          : null,
+        liked: session ? likedBy.includes(session.userId) : false,
       };
     });
     res.status(200).json(payload);
@@ -150,16 +141,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "PATCH") {
     if (!session) {
-      res.status(401).send("You must be signed in to react to a post.");
+      res.status(401).send("You must be signed in to like a post.");
       return;
     }
     const id = (req.query.id as string) || "";
-    const body = req.body as { reaction?: string };
-    const reaction = (body.reaction || "").toString();
-    if (reaction !== "up" && reaction !== "down") {
-      res.status(400).send('reaction must be "up" or "down".');
-      return;
-    }
     const entries = (await kv.get<PostEntry[]>("posts")) || [];
     const index = entries.findIndex((p) => p.id === id);
     if (index === -1) {
@@ -168,22 +153,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const post = entries[index];
     const uid = session.userId;
-    let likedBy = post.likedBy || [];
-    let dislikedBy = post.dislikedBy || [];
-    if (reaction === "up") {
-      likedBy = likedBy.includes(uid) ? likedBy.filter((x) => x !== uid) : [...likedBy, uid];
-      dislikedBy = dislikedBy.filter((x) => x !== uid);
-    } else {
-      dislikedBy = dislikedBy.includes(uid) ? dislikedBy.filter((x) => x !== uid) : [...dislikedBy, uid];
-      likedBy = likedBy.filter((x) => x !== uid);
-    }
-    entries[index] = { ...post, likedBy, dislikedBy };
+    const likedBy = post.likedBy || [];
+    const nextLikedBy = likedBy.includes(uid) ? likedBy.filter((x) => x !== uid) : [...likedBy, uid];
+    entries[index] = { ...post, likedBy: nextLikedBy };
     await kv.set("posts", entries);
-    res.status(200).json({
-      likes: likedBy.length,
-      dislikes: dislikedBy.length,
-      myReaction: likedBy.includes(uid) ? "up" : dislikedBy.includes(uid) ? "down" : null,
-    });
+    res.status(200).json({ likes: nextLikedBy.length, liked: nextLikedBy.includes(uid) });
     return;
   }
 

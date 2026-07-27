@@ -31,7 +31,6 @@ interface PostEntry {
   deleted?: boolean;
   deletedAt?: number;
   likedBy?: string[];
-  dislikedBy?: string[];
 }
 
 interface KnownUser {
@@ -902,7 +901,6 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
           const isAdminOverride = !!(session && isPlatformAdmin(session.userId));
           const payload = posts.map((p) => {
             const likedBy = p.likedBy || [];
-            const dislikedBy = p.dislikedBy || [];
             return {
               id: p.id,
               authorUsername: p.authorUsername,
@@ -913,14 +911,7 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
               isMine: session ? p.authorId === session.userId : false,
               canDelete: session ? p.authorId === session.userId || isAdminOverride : false,
               likes: likedBy.length,
-              dislikes: dislikedBy.length,
-              myReaction: session
-                ? likedBy.includes(session.userId)
-                  ? "up"
-                  : dislikedBy.includes(session.userId)
-                    ? "down"
-                    : null
-                : null,
+              liked: session ? likedBy.includes(session.userId) : false,
             };
           });
           res.setHeader("Content-Type", "application/json");
@@ -931,17 +922,10 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
         if (url.pathname === "/api/posts" && req.method === "PATCH") {
           if (!session) {
             res.statusCode = 401;
-            res.end("You must be signed in to react to a post.");
+            res.end("You must be signed in to like a post.");
             return;
           }
           const id = url.searchParams.get("id") || "";
-          const body = await readJsonBody(req);
-          const reaction = (body.reaction || "").toString();
-          if (reaction !== "up" && reaction !== "down") {
-            res.statusCode = 400;
-            res.end('reaction must be "up" or "down".');
-            return;
-          }
           const entries = loadPostsDb();
           const index = entries.findIndex((p) => p.id === id);
           if (index === -1) {
@@ -951,27 +935,14 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
           }
           const post = entries[index];
           const uid = session.userId;
-          let likedBy = post.likedBy || [];
-          let dislikedBy = post.dislikedBy || [];
-          if (reaction === "up") {
-            likedBy = likedBy.includes(uid) ? likedBy.filter((x) => x !== uid) : [...likedBy, uid];
-            dislikedBy = dislikedBy.filter((x) => x !== uid);
-          } else {
-            dislikedBy = dislikedBy.includes(uid)
-              ? dislikedBy.filter((x) => x !== uid)
-              : [...dislikedBy, uid];
-            likedBy = likedBy.filter((x) => x !== uid);
-          }
-          entries[index] = { ...post, likedBy, dislikedBy };
+          const likedBy = post.likedBy || [];
+          const nextLikedBy = likedBy.includes(uid)
+            ? likedBy.filter((x) => x !== uid)
+            : [...likedBy, uid];
+          entries[index] = { ...post, likedBy: nextLikedBy };
           savePostsDb(entries);
           res.setHeader("Content-Type", "application/json");
-          res.end(
-            JSON.stringify({
-              likes: likedBy.length,
-              dislikes: dislikedBy.length,
-              myReaction: likedBy.includes(uid) ? "up" : dislikedBy.includes(uid) ? "down" : null,
-            })
-          );
+          res.end(JSON.stringify({ likes: nextLikedBy.length, liked: nextLikedBy.includes(uid) }));
           return;
         }
 
