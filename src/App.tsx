@@ -18,16 +18,13 @@ function App() {
   const { user, loading, banned } = useAuth();
   const { wallpaperUrl } = useWallpaper();
   const [windows, setWindows] = useState<WindowsMap>({});
-  const [showLoginSequence, setShowLoginSequence] = useState(false);
-
-  // Only plays right after a real login (the "Sign in with Roblox" button
-  // sets this flag before navigating away) — not on every ordinary reload
-  // of an already-signed-in session.
-  useEffect(() => {
-    if (!loading && user && sessionStorage.getItem(LOGIN_SEQUENCE_FLAG) === "1") {
-      setShowLoginSequence(true);
-    }
-  }, [loading, user]);
+  // Read synchronously (not in an effect) so this is already known on the
+  // very first render — otherwise the real desktop flashes on screen for a
+  // frame right after the OAuth redirect lands, before an effect had a
+  // chance to flip this to true.
+  const [showLoginSequence, setShowLoginSequence] = useState(
+    () => sessionStorage.getItem(LOGIN_SEQUENCE_FLAG) === "1"
+  );
   const [activeApp, setActiveApp] = useState<AppId | null>(null);
   const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
 
@@ -155,18 +152,6 @@ function App() {
     return <RobloxLogin />;
   }
 
-  if (showLoginSequence) {
-    return (
-      <LoginSequence
-        username={user.username}
-        onDone={() => {
-          sessionStorage.removeItem(LOGIN_SEQUENCE_FLAG);
-          setShowLoginSequence(false);
-        }}
-      />
-    );
-  }
-
   const visibleApps = APPS.filter((app) => app.id !== "settings" || user.isAdmin);
 
   // Mac-style desktop icon layout: fill a column top-to-bottom, and once
@@ -231,6 +216,16 @@ function App() {
           />
         );
       })}
+
+      {showLoginSequence && (
+        <LoginSequence
+          username={user.username}
+          onDone={() => {
+            sessionStorage.removeItem(LOGIN_SEQUENCE_FLAG);
+            setShowLoginSequence(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1942,7 +1942,7 @@ export function BlumeApp({
                                   >
                                     <span>Chat with {c.withUsername}</span>
                                     <span className="blume-muted">
-                                      {c.messages.length} message{c.messages.length === 1 ? "" : "s"} ·{" "}
+                                      {c.messages.length} message{c.messages.length === 1 ? "" : "s"}{" "}
                                       {expanded ? "▾" : "▸"}
                                     </span>
                                   </button>
@@ -1981,7 +1981,7 @@ export function BlumeApp({
                                   <span>Posts</span>
                                   <span className="blume-muted">
                                     {monitoringData.posts.length} post
-                                    {monitoringData.posts.length === 1 ? "" : "s"} ·{" "}
+                                    {monitoringData.posts.length === 1 ? "" : "s"}{" "}
                                     {expandedMonitoringCards.posts ? "▾" : "▸"}
                                   </span>
                                 </button>
@@ -1994,8 +1994,8 @@ export function BlumeApp({
                                         }`}
                                         key={p.id}
                                       >
-                                        <div className="blume-monitoring-post-top">
-                                          {p.imageUrl && (
+                                        {p.imageUrl ? (
+                                          <div className="blume-monitoring-post-row">
                                             <div className="blume-monitoring-img-frame">
                                               <img
                                                 className="blume-monitoring-img"
@@ -2004,13 +2004,17 @@ export function BlumeApp({
                                                 onClick={() => setEnlargedImage(p.imageUrl)}
                                               />
                                             </div>
-                                          )}
-                                          <span className="blume-monitoring-msg-meta">
-                                            {new Date(p.createdAt).toLocaleString()}
-                                            {p.deleted && " · deleted"}
-                                          </span>
-                                        </div>
-                                        {p.text && <p>{p.text}</p>}
+                                            {p.text && (
+                                              <p className="blume-monitoring-post-text">{p.text}</p>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          p.text && <p className="blume-monitoring-post-text">{p.text}</p>
+                                        )}
+                                        <span className="blume-monitoring-msg-meta">
+                                          {new Date(p.createdAt).toLocaleString()}
+                                          {p.deleted && " · deleted"}
+                                        </span>
                                       </div>
                                     ))}
                                   </div>
