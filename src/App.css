@@ -2929,13 +2929,12 @@
   object-fit: cover;
   opacity: 1;
   transform: scale(1);
-  /* Opacity is held at 1 until the transform is almost entirely done — the
-     scale itself fills the screen with solid color well before its own
-     transition ends (once it's past ~15x it already covers the viewport,
-     regardless of how high the final number goes), so the fade needs to be
-     delayed close to the end of the transform, not partway through it, or
-     it visibly starts while the logo still looks small. */
-  transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease 1.05s;
+  /* The logo is already covering the whole viewport with solid color well
+     before 0.6s (scale fills the screen fast once past ~15x, regardless of
+     how high the final number goes) — fading opacity out from there reveals
+     .login-screen's background, which is the same #0e0e0e, so this reads as
+     the logo dissolving into the background color rather than a hard cut. */
+  transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease 0.6s;
 }
 .boot-intro-fly .boot-intro-logo {
   transform: scale(400);
