@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import Beams from "./Beams";
 
 // Set right before navigating to the OAuth login endpoint, so App.tsx knows
 // to play the fake init sequence once the redirect lands back with a
@@ -7,49 +7,32 @@ import { useEffect, useState } from "react";
 export const LOGIN_SEQUENCE_FLAG = "wbos_login_sequence_pending";
 
 export function RobloxLogin() {
-  // "logo": centered logo on its own, "flying": logo scaling up and fading
-  // out, "form": the actual login card is in.
-  const [phase, setPhase] = useState<"logo" | "flying" | "form">("logo");
-
-  useEffect(() => {
-    const t1 = window.setTimeout(() => setPhase("flying"), 900);
-    const t2 = window.setTimeout(() => setPhase("form"), 900 + 1650);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, []);
-
   return (
     <div className="login-screen">
-      {phase !== "form" && (
-        <div className={`boot-intro${phase === "flying" ? " boot-intro-fly" : ""}`}>
-          <img className="boot-intro-logo" src="/logo.png" alt="" />
-        </div>
-      )}
-      {phase === "form" && (
-        <div className="login-card login-card-in">
-          <img className="login-glyph" src="/logo.png" alt="Westbridge OS" />
-          <h1>Westbridge OS</h1>
-          <p>Sign in with your Roblox account to continue</p>
-          <a
-            className="login-button"
-            href="/api/auth/login"
-            onClick={() => sessionStorage.setItem(LOGIN_SEQUENCE_FLAG, "1")}
-          >
-            Sign in with Roblox
-          </a>
-          <div className="login-legal">
-            <a href="/tos.html" target="_blank" rel="noopener noreferrer">
-              Terms of Service
-            </a>
-            <span aria-hidden="true">·</span>
-            <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
-              Privacy Policy
-            </a>
-          </div>
-        </div>
-      )}
+      <div className="login-beams-bg" aria-hidden="true">
+        <Beams beamWidth={2} beamHeight={30} beamNumber={14} lightColor="#ffffff" speed={2} noiseIntensity={1.75} scale={0.2} rotation={30} />
+      </div>
+
+      <div className="login-content">
+        <img className="login-glyph" src="/logo.png" alt="Westbridge OS" />
+        <a
+          className="login-button"
+          href="/api/auth/login"
+          onClick={() => sessionStorage.setItem(LOGIN_SEQUENCE_FLAG, "1")}
+        >
+          Sign In
+        </a>
+      </div>
+
+      <div className="login-legal-pill">
+        <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
+          Privacy Policy
+        </a>
+        <span aria-hidden="true">·</span>
+        <a href="/tos.html" target="_blank" rel="noopener noreferrer">
+          Terms of Service
+        </a>
+      </div>
     </div>
   );
 }

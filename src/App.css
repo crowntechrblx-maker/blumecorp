@@ -131,6 +131,12 @@
   justify-content: center;
   font-size: 24px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.desktop-icon-glyph-image {
+  width: 64%;
+  height: 64%;
+  object-fit: contain;
 }
 .desktop-icon-label {
   color: #fff;
@@ -1089,7 +1095,19 @@
   width: 16px;
   height: 16px;
   border-radius: 5px;
-  background: linear-gradient(135deg, var(--blume-accent), #fff);
+  background: var(--blume-navy);
+  object-fit: contain;
+  padding: 2px;
+  box-sizing: border-box;
+}
+.blume-active-brand-mark {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--blume-navy);
+  object-fit: contain;
+  padding: 3px;
+  box-sizing: border-box;
 }
 .blume-brand-name {
   font-family: "Inter Tight", sans-serif;
@@ -2913,34 +2931,25 @@
   align-items: center;
   justify-content: center;
   position: relative;
+  overflow: hidden;
   background: #0e0e0e;
 }
-.boot-intro {
+.login-beams-bg {
   position: absolute;
   inset: 0;
+  z-index: 0;
+}
+.login-beams-bg canvas {
+  display: block;
+}
+.login-content {
+  position: relative;
+  z-index: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-}
-.boot-intro-logo {
-  width: 120px;
-  height: 120px;
-  border-radius: 26px;
-  object-fit: cover;
-  opacity: 1;
-  transform: scale(1);
-  /* Opacity fades out fast and starts immediately, so it dissolves to
-     transparent while still small — before the scale has grown enough to
-     turn it into a big flat crop of the image (which read as "fading to a
-     solid colour" rather than actually fading away). */
-  transition: transform 1.6s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
-}
-.boot-intro-fly .boot-intro-logo {
-  transform: scale(400);
-  opacity: 0;
-}
-.login-card-in {
-  animation: loginCardIn 0.5s ease forwards;
+  gap: 18px;
+  animation: loginCardIn 0.6s ease forwards;
 }
 @keyframes loginCardIn {
   from {
@@ -2952,42 +2961,17 @@
     transform: translateY(0);
   }
 }
-.login-card {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 18px;
-  padding: 40px 44px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  color: #fff;
-  text-align: center;
-  min-width: 320px;
-}
 .login-glyph {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
+  width: 88px;
+  height: 88px;
+  border-radius: 20px;
   background: #1c1c1e;
   object-fit: cover;
-  margin-bottom: 6px;
-}
-.login-card h1 {
-  font-size: 20px;
-  margin: 0;
-}
-.login-card p {
-  font-size: 13px;
-  opacity: 0.85;
-  margin-bottom: 8px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
 }
 .login-button {
   display: inline-block;
-  margin-top: 6px;
-  padding: 10px 22px;
+  padding: 10px 28px;
   background: #00a2ff;
   color: #fff;
   border-radius: 8px;
@@ -2998,21 +2982,31 @@
 .login-button:hover {
   background: #0086d1;
 }
-.login-legal {
+.login-legal-pill {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 14px;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   font-size: 11.5px;
 }
-.login-legal a {
+.login-legal-pill a {
   color: rgba(255, 255, 255, 0.75);
   text-decoration: underline;
 }
-.login-legal a:hover {
+.login-legal-pill a:hover {
   color: #fff;
 }
-.login-legal span {
+.login-legal-pill span {
   color: rgba(255, 255, 255, 0.4);
 }
 
@@ -3033,6 +3027,51 @@
 .login-sequence-out {
   opacity: 0;
   pointer-events: none;
+}
+.login-sequence-form,
+.login-sequence-welcome {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.4s ease;
+}
+.login-sequence-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  opacity: 1;
+}
+.login-sequence-form-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.login-sequence-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+}
+.login-sequence-welcome-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.login-sequence-welcome h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.login-sequence-welcome p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 300;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.55);
 }
 .login-sequence-logo {
   width: 56px;

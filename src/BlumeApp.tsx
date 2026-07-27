@@ -924,7 +924,7 @@ export function BlumeApp({
           <header className="blume-navbar">
             <div className="blume-nav-inner">
               <span className="blume-brand">
-                <span className="blume-brand-mark" />
+                <img className="blume-brand-mark" src="/blume-logo.png" alt="" />
                 <span className="blume-brand-name">Blume</span>
               </span>
 
@@ -1228,6 +1228,7 @@ export function BlumeApp({
         <div className="blume-dashboard">
           <div className="blume-active-strip">
             <div className="blume-active-label-group">
+              <img className="blume-active-brand-mark" src="/blume-logo.png" alt="" />
               <span className="blume-active-label">{activeAgents.length} Active</span>
               {canEditBlog && (
                 <button

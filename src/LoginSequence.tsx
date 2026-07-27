@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 export function LoginSequence({ username, onDone }: { username: string; onDone: () => void }) {
   const [typedUser, setTypedUser] = useState("");
   const [typedPass, setTypedPass] = useState("");
-  const [stage, setStage] = useState<"user" | "pass" | "hold" | "out">("user");
+  const [stage, setStage] = useState<"user" | "pass" | "hold" | "welcome" | "out">("user");
   const passLength = useRef(8 + Math.floor(Math.random() * 9)).current; // 8-16 inclusive
 
   useEffect(() => {
@@ -38,7 +38,13 @@ export function LoginSequence({ username, onDone }: { username: string; onDone: 
 
   useEffect(() => {
     if (stage !== "hold") return;
-    const t1 = window.setTimeout(() => setStage("out"), 450);
+    const t1 = window.setTimeout(() => setStage("welcome"), 450);
+    return () => window.clearTimeout(t1);
+  }, [stage]);
+
+  useEffect(() => {
+    if (stage !== "welcome") return;
+    const t1 = window.setTimeout(() => setStage("out"), 1900);
     return () => window.clearTimeout(t1);
   }, [stage]);
 
@@ -48,22 +54,37 @@ export function LoginSequence({ username, onDone }: { username: string; onDone: 
     return () => window.clearTimeout(t);
   }, [stage, onDone]);
 
+  // Both blocks stay mounted the whole time and are layered on top of each
+  // other (absolutely positioned, see App.css); which one is visible is
+  // driven purely by an opacity class toggle. Conditionally mounting /
+  // unmounting them instead would mean the outgoing block vanishes
+  // instantly on the state flip (React doesn't animate unmounts), so the
+  // crossfade between the fake form and the welcome text would never
+  // actually be visible.
+  const welcomeVisible = stage === "welcome" || stage === "out";
+
   return (
     <div className={`login-sequence${stage === "out" ? " login-sequence-out" : ""}`}>
-      <img className="login-sequence-logo" src="/logo.png" alt="" />
-      <div className="login-sequence-field">
-        <span className="login-sequence-label">Username</span>
-        <div className="login-sequence-box">
-          <span>{typedUser}</span>
-          {stage === "user" && <span className="login-sequence-caret" />}
+      <div className={`login-sequence-form${welcomeVisible ? " login-sequence-form-hidden" : ""}`}>
+        <img className="login-sequence-logo" src="/logo.png" alt="" />
+        <div className="login-sequence-field">
+          <span className="login-sequence-label">Username</span>
+          <div className="login-sequence-box">
+            <span>{typedUser}</span>
+            {stage === "user" && <span className="login-sequence-caret" />}
+          </div>
+        </div>
+        <div className="login-sequence-field">
+          <span className="login-sequence-label">Password</span>
+          <div className="login-sequence-box">
+            <span>{typedPass}</span>
+            {stage === "pass" && <span className="login-sequence-caret" />}
+          </div>
         </div>
       </div>
-      <div className="login-sequence-field">
-        <span className="login-sequence-label">Password</span>
-        <div className="login-sequence-box">
-          <span>{typedPass}</span>
-          {stage === "pass" && <span className="login-sequence-caret" />}
-        </div>
+      <div className={`login-sequence-welcome${welcomeVisible ? " login-sequence-welcome-visible" : ""}`}>
+        <h1>Welcome to wbOS</h1>
+        <p>Powered by Blume Corporation</p>
       </div>
     </div>
   );

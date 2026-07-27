@@ -14,6 +14,10 @@ export interface AppDef {
   id: AppId;
   name: string;
   icon: string;
+  // Optional image rendered on top of the coloured icon badge (instead of
+  // the plain `icon` glyph text) — used for apps with a real brand logo,
+  // e.g. Blume's desktop icon.
+  iconImage?: string;
   color: string;
   defaultSize: { width: number; height: number };
 }
@@ -58,7 +62,8 @@ export const APPS: AppDef[] = [
     id: "blume",
     name: "Blume",
     icon: "",
-    color: "#ff0000",
+    iconImage: "/blume-logo.png",
+    color: "#07203b",
     defaultSize: { width: 720, height: 560 },
   },
   {
