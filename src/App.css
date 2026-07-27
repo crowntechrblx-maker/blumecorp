@@ -2929,10 +2929,16 @@
   object-fit: cover;
   opacity: 1;
   transform: scale(1);
-  transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease 0.9s;
+  /* Opacity is held at 1 until the transform is almost entirely done — the
+     scale itself fills the screen with solid color well before its own
+     transition ends (once it's past ~15x it already covers the viewport,
+     regardless of how high the final number goes), so the fade needs to be
+     delayed close to the end of the transform, not partway through it, or
+     it visibly starts while the logo still looks small. */
+  transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease 1.05s;
 }
 .boot-intro-fly .boot-intro-logo {
-  transform: scale(200);
+  transform: scale(400);
   opacity: 0;
 }
 .login-card-in {
