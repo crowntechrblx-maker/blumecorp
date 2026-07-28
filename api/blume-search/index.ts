@@ -290,9 +290,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return a.username.localeCompare(b.username);
         });
 
-      // Prefer the live roster an in-game script reports directly — it's
-      // the real server player list, not limited to people we've already
-      // scanned. Only trust it while it's still fresh.
+      // Only the live roster an in-game script reports directly counts as
+      // Field Activity now — the old presence-API scan fallback is gone,
+      // since it only ever reflected people we'd already scanned (not the
+      // real server list) and was showing up even with the new ingest
+      // still unused. Empty/stale report just means an empty list.
       const liveReport = await kv.get<ServerPresenceReport>("blumeServerPresence");
       if (liveReport && Date.now() - liveReport.updatedAt < SERVER_PRESENCE_STALE_MS) {
         const users = sortUsers(liveReport.players.map((p) => tagMember(p.userId, p.username, null)));
@@ -300,24 +302,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
-      // Fallback: no live script feed available, so fall back to the old
-      // approach — everyone we've ever scanned, cross-referenced against
-      // Roblox's presence API.
-      const settings = await loadBlumeSettings();
-      const gamePlaceId = settings.activeGamePlaceId
-        ? Number(settings.activeGamePlaceId)
-        : null;
-      if (scanCache.length === 0) {
-        res.status(200).json({ users: [], live: false });
-        return;
-      }
-      try {
-        const inGame = await findInGamePresence(scanCache, gamePlaceId);
-        const users = sortUsers(inGame.map((m) => tagMember(m.userId, m.username, m.avatarUrl)));
-        res.status(200).json({ users, live: false });
-      } catch (err) {
-        res.status(500).send("Couldn't reach Roblox's presence API: " + (err as Error).message);
-      }
+      res.status(200).json({ users: [], live: false });
       return;
     }
 
