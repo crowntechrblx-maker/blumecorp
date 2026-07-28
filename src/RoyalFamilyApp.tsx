@@ -111,29 +111,48 @@ export function RoyalFamilyApp() {
 
   return (
     <div className="app-content royal">
-      <div className="royal-profiles-section">
-        <h2>The Royal Family</h2>
-        <div className="royal-profiles">
+      <div className="royal-site-header">
+        <span className="royal-site-wordmark">The Royal Household</span>
+        <span className="royal-site-tag">Official Website</span>
+      </div>
+
+      <div className="royal-hero">
+        <div className="royal-hero-overlay">
+          <p className="royal-hero-eyebrow">Westbridge · The Monarchy</p>
+          <h1 className="royal-hero-title">The Royal Family</h1>
+          <p className="royal-hero-subtitle">
+            The official website of Their Majesties The King and Queen, and Members of the Royal Family.
+          </p>
+        </div>
+      </div>
+
+      <div className="royal-section">
+        <div className="royal-section-head">
+          <h2 className="royal-section-label">The Royal Family</h2>
+          <span className="royal-section-rule" aria-hidden="true" />
+        </div>
+        <div className="royal-cards">
           {ROYAL_PROFILES.map((p) => (
-            <div className="royal-profile-card" key={p.handle}>
-              <div className="royal-profile-header">
-                <div className="royal-avatar">👤</div>
-                <div>
-                  <h3 className="royal-profile-title">{p.title}</h3>
-                  <span className="royal-profile-handle">@{p.handle}</span>
-                </div>
+            <div className="royal-card" key={p.handle}>
+              <div className="royal-card-photo" aria-hidden="true">
+                👤
               </div>
-              <p className="royal-profile-bio">{p.bio}</p>
+              <div className="royal-card-body">
+                <h3 className="royal-card-name">{p.title}</h3>
+                <span className="royal-card-handle">@{p.handle}</span>
+                <p className="royal-card-bio">{p.bio}</p>
+              </div>
             </div>
           ))}
         </div>
       </div>
 
-      <hr className="royal-divider" />
-
       {canAdd && (
-        <div className="section royal-add-section">
-          <h3>Add a post</h3>
+        <div className="royal-section royal-add-section">
+          <div className="royal-section-head">
+            <h2 className="royal-section-label">Add a post</h2>
+            <span className="royal-section-rule" aria-hidden="true" />
+          </div>
           <div className="royal-add-form">
             <input
               placeholder="https://x.com/psroyalfamily/status/..."
@@ -154,8 +173,11 @@ export function RoyalFamilyApp() {
         </div>
       )}
 
-      <div className="section">
-        <h3>Posts</h3>
+      <div className="royal-section">
+        <div className="royal-section-head">
+          <h2 className="royal-section-label">Latest News</h2>
+          <span className="royal-section-rule" aria-hidden="true" />
+        </div>
         {loading ? (
           <p className="royal-loading">Loading...</p>
         ) : tweets.length === 0 ? (

@@ -49,6 +49,7 @@ interface MessageEntry {
   createdAt: number;
   deleted?: boolean;
   deletedAt?: number;
+  readAt?: number;
 }
 
 function conversationKey(a: string, b: string): string {
@@ -1150,6 +1151,22 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
             res.end("You must be signed in.");
             return;
           }
+
+          if (url.searchParams.get("unread") === "1") {
+            const me = session.username.toLowerCase();
+            const all = loadMessagesDb();
+            const counts: Record<string, number> = {};
+            for (const m of all) {
+              if (m.deleted || m.readAt) continue;
+              if (m.toUsername.toLowerCase() !== me) continue;
+              const from = m.fromUsername.toLowerCase();
+              counts[from] = (counts[from] || 0) + 1;
+            }
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(counts));
+            return;
+          }
+
           const withUser = (url.searchParams.get("with") || "").trim();
           if (!withUser) {
             res.statusCode = 400;
@@ -1157,7 +1174,27 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const key = conversationKey(session.username, withUser);
-          const messages = loadMessagesDb()
+          const all = loadMessagesDb();
+
+          const me = session.username.toLowerCase();
+          const otherLower = withUser.toLowerCase();
+          let mutated = false;
+          const now = Date.now();
+          for (const m of all) {
+            if (
+              m.conversationKey === key &&
+              !m.deleted &&
+              !m.readAt &&
+              m.toUsername.toLowerCase() === me &&
+              m.fromUsername.toLowerCase() === otherLower
+            ) {
+              m.readAt = now;
+              mutated = true;
+            }
+          }
+          if (mutated) saveMessagesDb(all);
+
+          const messages = all
             .filter((m) => m.conversationKey === key && !m.deleted)
             .sort((a, b) => a.createdAt - b.createdAt);
           res.setHeader("Content-Type", "application/json");

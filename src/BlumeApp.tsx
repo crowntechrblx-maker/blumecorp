@@ -285,21 +285,53 @@ function Reveal({ children, className = "" }: { children: ReactNode; className?:
   );
 }
 
-// Pure CSS loop — translateX(-50%) always shifts by exactly one set-width,
-// no matter what that width actually renders to, because percentages here
-// resolve against the track's own box at paint time. That's what makes this
-// version surefire: the earlier rAF versions had to measure the set's pixel
-// width in JS and race that measurement against web-font swap-in and layout
-// timing, and any staleness there (even briefly) showed up as a stutter or
-// a chunk of the second set appearing to "pop in" partway through — right
-// around the seam between the two sets, i.e. right after Financial
-// Services, the last item in the first set. Percentage-based transforms
-// don't need a measurement at all, so that whole class of bug is gone.
+// The loop distance is a CSS custom property (--marquee-set-width, in real
+// pixels) rather than a bare `translateX(-50%)`. A percentage transform is
+// only as reliable as each browser's willingness to keep re-resolving it
+// against the live box size — and this app's windows are user-resizable, so
+// the marquee's box is exactly the kind of thing that can change size after
+// the animation has already started. A ResizeObserver on the (real, visible)
+// set re-measures its actual width any time that changes for any reason —
+// a window resize, a font finishing its swap-in, anything — and writes it
+// into the CSS variable the keyframe reads from. The motion itself still
+// runs as a plain CSS animation (compositor-driven, not a per-frame JS
+// loop), so there's no measurement happening on the hot path either.
 function BlumeMarquee() {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const setRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const setEl = setRef.current;
+    const trackEl = trackRef.current;
+    if (!setEl || !trackEl) return;
+
+    function apply() {
+      if (!setEl || !trackEl) return;
+      const width = setEl.getBoundingClientRect().width;
+      if (width > 0) trackEl.style.setProperty("--marquee-set-width", `${width}px`);
+    }
+    apply();
+
+    const ro = new ResizeObserver(apply);
+    ro.observe(setEl);
+
+    let cancelled = false;
+    document.fonts?.ready
+      ?.then(() => {
+        if (!cancelled) apply();
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      ro.disconnect();
+    };
+  }, []);
+
   return (
     <section className="blume-marquee">
-      <div className="blume-marquee-track">
-        <div className="blume-marquee-set">
+      <div className="blume-marquee-track" ref={trackRef}>
+        <div className="blume-marquee-set" ref={setRef}>
           {INDUSTRIES.map((ind) => (
             <span className="blume-marquee-item" key={ind.title}>
               {ind.title}

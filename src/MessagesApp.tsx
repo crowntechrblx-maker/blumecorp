@@ -30,6 +30,7 @@ export function MessagesApp({
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const { error, fading, setError } = useFadingError();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const rosterPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -42,6 +43,13 @@ export function MessagesApp({
       .catch(() => setResults([]));
   }
 
+  function loadUnreadCounts() {
+    fetch(`/api/messages?unread=1`)
+      .then((r) => r.json())
+      .then((counts: Record<string, number>) => setUnreadCounts(counts))
+      .catch(() => {});
+  }
+
   useEffect(() => {
     const term = search.trim();
     const handle = setTimeout(() => loadRoster(term), 200);
@@ -51,7 +59,11 @@ export function MessagesApp({
   useEffect(() => {
     // Keeps the sidebar ordering fresh (whoever last messaged you jumps to
     // the top) even while you aren't actively watching a conversation.
-    rosterPollRef.current = setInterval(() => loadRoster(search.trim()), 5000);
+    loadUnreadCounts();
+    rosterPollRef.current = setInterval(() => {
+      loadRoster(search.trim());
+      loadUnreadCounts();
+    }, 5000);
     return () => {
       if (rosterPollRef.current) clearInterval(rosterPollRef.current);
     };
@@ -69,6 +81,13 @@ export function MessagesApp({
     setActive(user);
     setError(null);
     loadMessages(user.username);
+    // The GET above marks that person's messages as read on the backend —
+    // clear the badge immediately rather than waiting for the next poll.
+    setUnreadCounts((prev) => {
+      const next = { ...prev };
+      delete next[user.username.toLowerCase()];
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -132,18 +151,24 @@ export function MessagesApp({
                   : "No one has signed in during the past 7 days."}
               </p>
             )}
-            {results.map((u) => (
-              <button
-                key={u.username}
-                className={`message-item ${active?.username === u.username ? "active" : ""}`}
-                onClick={() => openConversation(u)}
-              >
-                <Avatar url={u.avatarUrl} size={28} />
-                <div>
-                  <strong>{u.username}</strong>
-                </div>
-              </button>
-            ))}
+            {results.map((u) => {
+              const unread = unreadCounts[u.username.toLowerCase()] || 0;
+              return (
+                <button
+                  key={u.username}
+                  className={`message-item ${active?.username === u.username ? "active" : ""}`}
+                  onClick={() => openConversation(u)}
+                >
+                  <Avatar url={u.avatarUrl} size={28} />
+                  <div>
+                    <strong>{u.username}</strong>
+                  </div>
+                  {unread > 0 && (
+                    <span className="message-unread-badge">{unread > 99 ? "99+" : unread}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 

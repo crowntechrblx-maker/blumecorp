@@ -20,14 +20,17 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(28, 28, 30, 0.92);
-  color: #fff;
+  /* Matches the menu bar's translucent glass look — a touch more opaque so
+     the black text underneath stays legible over any wallpaper. */
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  color: #1c1c1e;
   padding: 12px 18px;
   border-radius: 12px;
   font-size: 13.5px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 220ms ease, transform 220ms ease;
@@ -360,36 +363,14 @@
 }
 
 /* Uber */
-.ride-options {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 10px 0;
-}
-.ride-option {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 12px;
+.uber-not-ready {
+  margin-top: 14px;
+  padding: 12px 14px;
   background: #f6f6f7;
   border-radius: 8px;
   font-size: 13px;
-}
-.uber-confirmed {
-  text-align: center;
-  padding: 30px 10px 20px;
-}
-.uber-confirmed-icon {
-  font-size: 40px;
-  margin-bottom: 10px;
-}
-.uber-on-way {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-.uber-pickup-note {
-  font-size: 12.5px;
-  color: #666;
+  color: #333;
+  line-height: 1.5;
 }
 
 /* Uber launch splash — brief animated black wordmark before the real
@@ -872,70 +853,143 @@
   margin: 0 0 18px;
 }
 
-/* Royal Family */
-.royal-profiles-section {
-  /* Bleed past .app-content's own 18px/20px padding so the photo fills
-     the full width edge-to-edge (and the top edge, since this is the
-     first thing in the window) with no border/frame around it. */
+/* Royal Family — styled after royal.uk: white ground, black serif
+   headlines, thin hairline rules, uppercase tracked labels, a dramatic
+   full-bleed hero photo with a dark gradient and centered serif title. */
+.app-content.royal {
+  padding: 0;
+  background: #fff;
+  color: #14151a;
+  font-family: Georgia, "Times New Roman", serif;
+}
+.royal-site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  background: #14151a;
+  color: #fff;
+}
+.royal-site-wordmark {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+}
+.royal-site-tag {
+  font-family: "Inter Tight", sans-serif;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.royal-hero {
+  position: relative;
+  min-height: 220px;
   background-image: url("/royal/family-meeting-2.png");
   background-size: cover;
   background-position: center 40%;
-  margin: -18px -20px 0;
-  padding: 18px 20px 14px;
+  display: flex;
+  align-items: flex-end;
 }
-.royal-profiles-section h2 {
-  display: inline-block;
-  background: rgba(255, 255, 255, 0.82);
-  padding: 4px 10px;
-  border-radius: 6px;
+.royal-hero-overlay {
+  width: 100%;
+  padding: 40px 20px 20px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.78) 100%);
+  color: #fff;
 }
-.royal-profiles {
+.royal-hero-eyebrow {
+  margin: 0 0 6px;
+  font-family: "Inter Tight", sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+.royal-hero-title {
+  margin: 0 0 8px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+.royal-hero-subtitle {
+  margin: 0;
+  max-width: 440px;
+  font-family: "Inter Tight", sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
+}
+.royal-section {
+  padding: 22px 20px;
+  border-bottom: 1px solid #e5e5e7;
+}
+.royal-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.royal-section-label {
+  margin: 0;
+  flex-shrink: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  font-size: 17px;
+  letter-spacing: 0.01em;
+}
+.royal-section-rule {
+  flex: 1;
+  height: 1px;
+  background: #d8d8dc;
+}
+.royal-cards {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 18px;
 }
-.royal-profile-card {
-  /* Less transparent than before, but still lets the photo read through. */
-  background: rgba(246, 246, 247, 0.8);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  border-radius: 8px;
-  padding: 12px;
+.royal-card {
+  display: flex;
+  gap: 12px;
 }
-.royal-divider {
-  border: none;
-  border-top: 1px solid #e5e5e7;
-  /* Bleed to the same full width as the photo section above it. */
-  margin: 16px -20px;
-}
-.royal-profile-header {
+.royal-card-photo {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #f0f0f1;
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
+  justify-content: center;
+  font-size: 24px;
 }
-.app-content h3.royal-profile-title {
-  font-size: 13.5px;
+.royal-card-body {
+  min-width: 0;
+}
+.royal-card-name {
   margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  font-size: 15px;
 }
-.royal-profile-handle {
-  font-size: 11px;
+.royal-card-handle {
+  display: block;
+  margin: 1px 0 6px;
+  font-family: "Inter Tight", sans-serif;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: #8a8a8e;
 }
-.royal-profile-bio {
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: #3a3a3c;
+.royal-card-bio {
   margin: 0;
-}
-.royal-avatar {
-  font-size: 30px;
-  flex-shrink: 0;
+  font-family: "Inter Tight", sans-serif;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #3a3a3c;
 }
 .royal-add-section {
-  background: #f6f6f7;
-  border-radius: 8px;
-  padding: 12px;
+  background: #fafafa;
 }
 .royal-add-form {
   display: flex;
@@ -943,13 +997,7 @@
   gap: 8px;
 }
 .royal-add-form input {
-  /* Wide text field — this is the primary control, the button next to it
-     is just a small confirm action, matching the site's understated
-     dark-square icon buttons (e.g. its search button) rather than a big
-     pill CTA. box-sizing + zeroed margin here matter: the generic
-     .app-content input rule adds a bottom margin (meant for stacked form
-     fields) which, left in place, throws off align-items: center in this
-     row and makes the input look shifted relative to the button. */
+  font-family: "Inter Tight", sans-serif;
   box-sizing: border-box;
   margin: 0;
   flex: 1;
@@ -969,7 +1017,7 @@
   margin: 0;
   border: none;
   border-radius: 6px;
-  background: #1c1c1e;
+  background: #14151a;
   color: #fff;
   font-size: 16px;
   line-height: 1;
@@ -983,7 +1031,8 @@
   cursor: default;
 }
 .royal-add-error {
-  color: #d92c2c;
+  color: #b3261e;
+  font-family: "Inter Tight", sans-serif;
   font-size: 11.5px;
   margin: 8px 0 0;
 }
@@ -1010,6 +1059,7 @@
   gap: 8px;
 }
 .royal-tweet-meta {
+  font-family: "Inter Tight", sans-serif;
   font-size: 11px;
   color: #8a8a8e;
   margin: 6px 0 0;
@@ -1021,7 +1071,8 @@
   border: 1px solid #e5e5e7;
   border-radius: 6px;
   background: transparent;
-  color: #d92c2c;
+  color: #b3261e;
+  font-family: "Inter Tight", sans-serif;
   font-size: 11px;
 }
 .app-content button.royal-tweet-delete:disabled {
@@ -1029,6 +1080,7 @@
 }
 .royal-loading,
 .royal-empty {
+  font-family: "Inter Tight", sans-serif;
   font-size: 12.5px;
   color: #8a8a8e;
 }
@@ -1330,11 +1382,11 @@
     transform: translateX(0);
   }
   to {
-    /* Exactly one set-width, since the track holds two identical sets back
-       to back — a percentage here is resolved against the track's own
-       rendered box, so it's always correct regardless of font metrics or
-       content length. */
-    transform: translateX(-50%);
+    /* --marquee-set-width is kept in sync with the real rendered width of
+       one set via a ResizeObserver (see BlumeMarquee), so this stays exact
+       even if the window is resized mid-animation. The 50% fallback only
+       matters for the first frame or two before that JS has run. */
+    transform: translateX(calc(-1 * var(--marquee-set-width, 50%)));
   }
 }
 .blume-marquee-set {
@@ -2868,6 +2920,25 @@
 .message-item.active {
   background: #0a84ff;
   color: #fff;
+}
+.message-unread-badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ff3b30;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.message-item.active .message-unread-badge {
+  background: #fff;
+  color: #0a84ff;
 }
 .messages-empty-hint {
   font-size: 12px;

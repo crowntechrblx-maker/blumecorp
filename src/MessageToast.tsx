@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "./AuthContext";
 
-const VISIBLE_MS = 4500;
+const VISIBLE_MS = 6500;
 
 // A short two-tone "ding" synthesized with the Web Audio API, so there's no
 // audio asset to ship or fetch — it just plays instantly.

@@ -27,6 +27,9 @@ interface MessageEntry {
   // users; only Monitoring reads the flag itself.
   deleted?: boolean;
   deletedAt?: number;
+  // Set once the recipient has opened the conversation it belongs to.
+  // Used to compute the unread badge shown next to each contact.
+  readAt?: number;
 }
 
 function conversationKey(a: string, b: string): string {
@@ -42,13 +45,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(401).send("You must be signed in.");
       return;
     }
+
+    // Unread counts per sender, for the badge shown next to each contact
+    // in the sidebar — kept on this same endpoint rather than a new
+    // function file, since Vercel Hobby caps serverless functions at 12.
+    if (req.query.unread === "1") {
+      const me = session.username.toLowerCase();
+      const all = (await kv.get<MessageEntry[]>("messages")) || [];
+      const counts: Record<string, number> = {};
+      for (const m of all) {
+        if (m.deleted || m.readAt) continue;
+        if (m.toUsername.toLowerCase() !== me) continue;
+        const from = m.fromUsername.toLowerCase();
+        counts[from] = (counts[from] || 0) + 1;
+      }
+      res.status(200).json(counts);
+      return;
+    }
+
     const withUser = ((req.query.with as string) || "").trim();
     if (!withUser) {
       res.status(400).send("Missing 'with' query parameter.");
       return;
     }
     const key = conversationKey(session.username, withUser);
-    const messages = ((await kv.get<MessageEntry[]>("messages")) || [])
+    const all = (await kv.get<MessageEntry[]>("messages")) || [];
+
+    // Opening a conversation is what marks the other person's messages as
+    // read — same trigger a real chat app uses.
+    const me = session.username.toLowerCase();
+    const otherLower = withUser.toLowerCase();
+    let mutated = false;
+    const now = Date.now();
+    for (const m of all) {
+      if (
+        m.conversationKey === key &&
+        !m.deleted &&
+        !m.readAt &&
+        m.toUsername.toLowerCase() === me &&
+        m.fromUsername.toLowerCase() === otherLower
+      ) {
+        m.readAt = now;
+        mutated = true;
+      }
+    }
+    if (mutated) await kv.set("messages", all);
+
+    const messages = all
       .filter((m) => m.conversationKey === key && !m.deleted)
       .sort((a, b) => a.createdAt - b.createdAt);
     res.status(200).json(

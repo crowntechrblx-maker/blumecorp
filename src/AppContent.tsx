@@ -30,20 +30,38 @@ const TFL_BUS_ROUTES = [
   { number: "9", from: "Matlock Broadway Station", to: "Hilcox Road Station" },
 ];
 
-function randomBusDelay(): number {
-  // Weighted toward running on time, occasionally a real delay.
-  return Math.random() < 0.55 ? 0 : Math.floor(Math.random() * 14) + 1;
+const TFL_DELAY_BUCKET_MS = 5 * 60 * 1000;
+
+function tflDelayBucket(): number {
+  return Math.floor(Date.now() / TFL_DELAY_BUCKET_MS);
+}
+
+// Deterministic given (bucket, route index) — so every route's delay is
+// stable for the whole 5-minute window rather than re-rolling every time
+// the app is opened, and only actually changes once the real-world 5-minute
+// boundary passes.
+function busDelayForBucket(bucket: number, routeIndex: number): number {
+  const seed = bucket * 1000 + routeIndex;
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  const frac = x - Math.floor(x); // deterministic pseudo-random in [0, 1)
+  if (frac < 0.55) return 0; // weighted toward running on time
+  return 1 + Math.floor(((frac - 0.55) / 0.45) * 14);
 }
 
 function TflContent() {
-  const [delays, setDelays] = useState<number[]>(() => TFL_BUS_ROUTES.map(randomBusDelay));
+  const [bucket, setBucket] = useState(tflDelayBucket);
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      setDelays(TFL_BUS_ROUTES.map(randomBusDelay));
-    }, 25000);
+      setBucket((prev) => {
+        const next = tflDelayBucket();
+        return next === prev ? prev : next;
+      });
+    }, 15000);
     return () => window.clearInterval(id);
   }, []);
+
+  const delays = TFL_BUS_ROUTES.map((_, i) => busDelayForBucket(bucket, i));
 
   return (
     <div className="app-content tfl">
@@ -83,10 +101,9 @@ function TflContent() {
   );
 }
 
-function UberContent({ username }: { username: string }) {
+function UberContent() {
   const [location, setLocation] = useState("");
   const [requested, setRequested] = useState(false);
-  const [price, setPrice] = useState<number | null>(null);
   const [initializing, setInitializing] = useState(true);
 
   // Brief branded splash before the app is usable, like Uber's own
@@ -97,51 +114,10 @@ function UberContent({ username }: { username: string }) {
     return () => clearTimeout(timer);
   }, []);
 
-  // Wait for the person to finish typing the full location before showing a
-  // price, rather than flashing a number after every keystroke.
-  useEffect(() => {
-    if (!location.trim()) {
-      setPrice(null);
-      return;
-    }
-    const handle = setTimeout(() => {
-      setPrice(Math.random() * 20 + 8);
-    }, 500);
-    return () => clearTimeout(handle);
-  }, [location]);
-
-  function handleRequest() {
-    if (!location.trim() || price === null) return;
-    // No real dispatch API yet — auto-confirm locally for now.
-    setRequested(true);
-  }
-
-  function handleReset() {
-    setRequested(false);
-    setLocation("");
-    setPrice(null);
-  }
-
   if (initializing) {
     return (
       <div className="app-content uber uber-splash">
         <div className="uber-splash-logo">UBER</div>
-      </div>
-    );
-  }
-
-  if (requested) {
-    return (
-      <div className="app-content uber">
-        <div className="uber-confirmed">
-          <div className="uber-confirmed-icon">🚗</div>
-          <h2>Taxi confirmed</h2>
-          <p className="uber-on-way">{username} is on the way.</p>
-          <p className="uber-pickup-note">Pickup: {location}</p>
-        </div>
-        <button className="cta" onClick={handleReset}>
-          Request another
-        </button>
       </div>
     );
   }
@@ -153,18 +129,18 @@ function UberContent({ username }: { username: string }) {
         placeholder="Enter your location"
         value={location}
         onChange={(e) => setLocation(e.target.value)}
+        disabled={requested}
       />
-      {price !== null && (
-        <div className="ride-options">
-          <div className="ride-option">
-            <span>Standard</span>
-            <span>£{price.toFixed(2)}</span>
-          </div>
-        </div>
-      )}
-      <button className="cta" disabled={!location.trim() || price === null} onClick={handleRequest}>
+      <button
+        className="cta"
+        disabled={!location.trim() || requested}
+        onClick={() => setRequested(true)}
+      >
         Request a taxi
       </button>
+      {requested && (
+        <p className="uber-not-ready">Uber isn't ready yet. Once it is, we'll be sure to notify you.</p>
+      )}
     </div>
   );
 }
@@ -186,7 +162,7 @@ export function AppContent({
     case "tfl":
       return <TflContent />;
     case "uber":
-      return <UberContent username={username} />;
+      return <UberContent />;
     case "swiftCorporate":
       return <SwiftCorporateApp />;
     case "psRolls":
