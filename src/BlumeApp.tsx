@@ -233,7 +233,7 @@ const APPROACH = [
   },
 ];
 
-const REQUEST_ACCESS_URL = "https://discord.gg/ye7FsHsCTM";
+const REQUEST_ACCESS_URL = "https://discord.gg/DHs9HnQ3JE";
 
 // Drop uploaded hero images in public/blume/hero/ and list their paths here
 // (e.g. "/blume/hero/1.jpg") to cycle them behind the hero headline. Leave
@@ -293,31 +293,62 @@ function BlumeMarquee() {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const setRef = useRef<HTMLDivElement | null>(null);
   const offsetRef = useRef(0);
+  // Cached rather than re-measured every animation frame — calling
+  // getBoundingClientRect() inside the rAF loop forces a synchronous layout
+  // on every single tick, and that per-frame layout thrash is what showed up
+  // as a stall right as the loop reached the end of the set (Financial
+  // Services, the last item) and needed a fresh width reading to wrap
+  // seamlessly. Measuring once up front — and again only when the layout
+  // actually changes (resize, or the custom font finishing its swap-in) —
+  // removes that forced reflow from the hot path entirely.
+  const widthRef = useRef(0);
 
   useEffect(() => {
+    const setEl = setRef.current;
+    if (!setEl) return;
+
+    function measure() {
+      if (setEl) widthRef.current = setEl.getBoundingClientRect().width;
+    }
+    measure();
+
+    const ro = new ResizeObserver(measure);
+    ro.observe(setEl);
+
+    let cancelled = false;
+    document.fonts?.ready
+      ?.then(() => {
+        if (!cancelled) measure();
+      })
+      .catch(() => {});
+
     const SPEED = 36; // px per second
     let lastTime: number | null = null;
     let raf = 0;
 
     function tick(time: number) {
-      const setEl = setRef.current;
       const trackEl = trackRef.current;
-      if (setEl && trackEl) {
-        const setWidth = setEl.getBoundingClientRect().width;
-        if (setWidth > 0 && lastTime !== null) {
-          const dt = (time - lastTime) / 1000;
-          offsetRef.current -= SPEED * dt;
-          if (offsetRef.current <= -setWidth) {
-            offsetRef.current += setWidth;
-          }
-          trackEl.style.transform = `translateX(${offsetRef.current}px)`;
+      const setWidth = widthRef.current;
+      if (trackEl && setWidth > 0 && lastTime !== null) {
+        // Clamp so a dropped/delayed frame (tab backgrounded, heavy work
+        // elsewhere) can't produce one huge jump — it just animates a
+        // little faster to catch up over the next couple of frames.
+        const dt = Math.min((time - lastTime) / 1000, 0.1);
+        offsetRef.current -= SPEED * dt;
+        if (offsetRef.current <= -setWidth) {
+          offsetRef.current += setWidth;
         }
+        trackEl.style.transform = `translateX(${offsetRef.current}px)`;
       }
       lastTime = time;
       raf = requestAnimationFrame(tick);
     }
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   }, []);
 
   return (
@@ -1204,15 +1235,6 @@ export function BlumeApp({
                   <button onClick={() => scrollToSection("blume-company")}>About</button>
                   <a href={REQUEST_ACCESS_URL} target="_blank" rel="noopener noreferrer">
                     Contact
-                  </a>
-                </div>
-                <div className="blume-footer-col">
-                  <h4>Legal</h4>
-                  <a href="https://www.blumecorp.uk/privacy" target="_blank" rel="noopener noreferrer">
-                    Privacy
-                  </a>
-                  <a href="https://www.blumecorp.uk/tos" target="_blank" rel="noopener noreferrer">
-                    Terms
                   </a>
                 </div>
               </div>

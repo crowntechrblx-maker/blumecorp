@@ -9,6 +9,32 @@ import { SettingsApp } from "./SettingsApp";
 import { PsRollsApp } from "./PsRollsApp";
 import { SwiftCorporateApp } from "./SwiftCorporateApp";
 
+const TFL_STATIONS = [
+  { name: "King Edward Station", street: "Commercial Street" },
+  { name: "Westbridge Bus Station", street: "Commercial Street" },
+  { name: "Clayton Road Station", street: "Chittering Street" },
+  { name: "Hilcox Road Station", street: "Guildhall Street" },
+  { name: "Matlock Broadway Station", street: "St. James Street" },
+  { name: "Shopeton North Railway Station", street: "Tower Road" },
+  { name: "Oxbridge Bus Station", street: "Barking Street" },
+];
+
+// A handful of generic routes strung between the real stations above — not
+// tied to any particular line, just enough to make the board feel alive.
+const TFL_BUS_ROUTES = [
+  { number: "1", from: "King Edward Station", to: "Oxbridge Bus Station" },
+  { number: "7", from: "Westbridge Bus Station", to: "Matlock Broadway Station" },
+  { number: "12", from: "Clayton Road Station", to: "Shopeton North Railway Station" },
+  { number: "21", from: "Hilcox Road Station", to: "King Edward Station" },
+  { number: "34", from: "Oxbridge Bus Station", to: "Clayton Road Station" },
+  { number: "9", from: "Matlock Broadway Station", to: "Hilcox Road Station" },
+];
+
+function randomBusDelay(): number {
+  // Weighted toward running on time, occasionally a real delay.
+  return Math.random() < 0.55 ? 0 : Math.floor(Math.random() * 14) + 1;
+}
+
 function TflContent() {
   const lines = [
     { name: "Victoria", status: "Good service", color: "#0098d4" },
@@ -17,6 +43,16 @@ function TflContent() {
     { name: "Northern", status: "Good service", color: "#000000" },
     { name: "District", status: "Good service", color: "#00782a" },
   ];
+
+  const [delays, setDelays] = useState<number[]>(() => TFL_BUS_ROUTES.map(randomBusDelay));
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setDelays(TFL_BUS_ROUTES.map(randomBusDelay));
+    }, 25000);
+    return () => window.clearInterval(id);
+  }, []);
+
   return (
     <div className="app-content tfl">
       <h2>Line Status</h2>
@@ -29,11 +65,41 @@ function TflContent() {
           </li>
         ))}
       </ul>
+
       <div className="section">
-        <h3>Journey Planner</h3>
-        <input placeholder="From" />
-        <input placeholder="To" />
-        <button>Plan journey</button>
+        <h3>Stations</h3>
+        <ul className="tfl-station-list">
+          {TFL_STATIONS.map((s) => (
+            <li key={s.name}>
+              <span className="tfl-station-name">{s.name}</span>
+              <span className="tfl-station-street">{s.street}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="section">
+        <h3>Bus Routes</h3>
+        <ul className="tfl-route-list">
+          {TFL_BUS_ROUTES.map((r, i) => {
+            const delay = delays[i] ?? 0;
+            return (
+              <li key={r.number}>
+                <span className="tfl-route-number">{r.number}</span>
+                <span className="tfl-route-path">
+                  {r.from} <span aria-hidden="true">→</span> {r.to}
+                </span>
+                <span className={`tfl-route-delay${delay === 0 ? " tfl-route-on-time" : ""}`}>
+                  {delay === 0 ? "On time" : `Delayed ${delay} min`}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <div className="tfl-footer">
+        <img className="tfl-footer-logo" src="/blume-logo.png" alt="Blume" />
       </div>
     </div>
   );
