@@ -39,6 +39,52 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Keep-alive against renderer throttling. Chrome (heavily on macOS, via
+  // window-occlusion detection) can decide this tab isn't "really" visible
+  // even while it's on screen and focused, and pauses/throttles rAF, CSS
+  // animations, and repaints while that's in effect — then repaints the
+  // whole page in one shot once it lifts. That single mechanism explains
+  // every marquee "fix" failing identically regardless of implementation
+  // (CSS keyframes, transform, left) and matches the exact reported
+  // symptom of the *entire page* suddenly popping in at once partway
+  // through a scroll, not something specific to the marquee's own code.
+  // A held screen wake lock is the standard way to opt an active tab out
+  // of that throttling; failures (unsupported browser, denied, no HTTPS)
+  // are silently ignored since this is a best-effort perf nudge, not a
+  // feature the app depends on.
+  useEffect(() => {
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+
+    async function acquire() {
+      try {
+        if ("wakeLock" in navigator) {
+          const sentinel = await navigator.wakeLock.request("screen");
+          if (cancelled) {
+            sentinel.release().catch(() => {});
+            return;
+          }
+          lock = sentinel;
+        }
+      } catch {
+        // Ignore — e.g. denied, unsupported, or tab not visible yet.
+      }
+    }
+
+    acquire();
+
+    function handleVisibility() {
+      if (document.visibilityState === "visible" && !lock) acquire();
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibility);
+      lock?.release().catch(() => {});
+    };
+  }, []);
+
   function openApp(id: AppId) {
     const app = APPS.find((a) => a.id === id)!;
     setWindows((prev) => {
