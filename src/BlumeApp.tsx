@@ -305,23 +305,43 @@ function Reveal({ children, className = "" }: { children: ReactNode; className?:
 // that's a trivial amount of work, and paying it buys guaranteed painting:
 // there's no separate GPU raster pipeline here that can fall behind.
 function BlumeMarquee() {
+  const containerRef = useRef<HTMLElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const setRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef(0);
   const offsetRef = useRef(0);
+  // Two copies of the set is only enough to seamlessly cover a container
+  // narrower than one set's width — this app's windows are resizable, and
+  // widening one past that (e.g. maximizing) exposes a visible gap right
+  // at the wrap point, because there's no third copy queued up to slide
+  // in behind it. Render however many copies are actually needed to cover
+  // the current container width (plus one extra set as a buffer), and
+  // recompute it whenever either measurement changes.
+  const [copies, setCopies] = useState(2);
 
   useEffect(() => {
-    const trackEl = trackRef.current;
+    const containerEl = containerRef.current;
     const setEl = setRef.current;
-    if (!trackEl || !setEl) return;
+    if (!containerEl || !setEl) return;
+
+    function recomputeCopies() {
+      if (!containerEl) return;
+      const setWidth = widthRef.current;
+      const containerWidth = containerEl.getBoundingClientRect().width;
+      if (setWidth <= 0) return;
+      const needed = Math.ceil(containerWidth / setWidth) + 2;
+      setCopies((prev) => (prev !== needed ? needed : prev));
+    }
 
     function measure() {
       if (setEl) widthRef.current = setEl.getBoundingClientRect().width;
+      recomputeCopies();
     }
     measure();
 
     const ro = new ResizeObserver(measure);
     ro.observe(setEl);
+    ro.observe(containerEl);
 
     let cancelled = false;
     document.fonts?.ready
@@ -329,6 +349,16 @@ function BlumeMarquee() {
         if (!cancelled) measure();
       })
       .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      ro.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    const trackEl = trackRef.current;
+    if (!trackEl) return;
 
     const SPEED = 36; // px per second
     let lastTime: number | null = null;
@@ -348,29 +378,27 @@ function BlumeMarquee() {
     raf = requestAnimationFrame(tick);
 
     return () => {
-      cancelled = true;
       cancelAnimationFrame(raf);
-      ro.disconnect();
     };
   }, []);
 
   return (
-    <section className="blume-marquee">
+    <section className="blume-marquee" ref={containerRef}>
       <div className="blume-marquee-track" ref={trackRef}>
-        <div className="blume-marquee-set" ref={setRef}>
-          {INDUSTRIES.map((ind) => (
-            <span className="blume-marquee-item" key={ind.title}>
-              {ind.title}
-            </span>
-          ))}
-        </div>
-        <div className="blume-marquee-set" aria-hidden="true">
-          {INDUSTRIES.map((ind) => (
-            <span className="blume-marquee-item" key={ind.title}>
-              {ind.title}
-            </span>
-          ))}
-        </div>
+        {Array.from({ length: copies }).map((_, copyIndex) => (
+          <div
+            className="blume-marquee-set"
+            key={copyIndex}
+            ref={copyIndex === 0 ? setRef : undefined}
+            aria-hidden={copyIndex === 0 ? undefined : true}
+          >
+            {INDUSTRIES.map((ind) => (
+              <span className="blume-marquee-item" key={ind.title}>
+                {ind.title}
+              </span>
+            ))}
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -386,7 +414,6 @@ export function BlumeApp({
   const [loggedIn, setLoggedIn] = useState(false);
   const heroIndex = useHeroCycle(HERO_IMAGES.length, HERO_CYCLE_MS);
 
-  const [activeAgents, setActiveAgents] = useState<{ username: string; role: string }[]>([]);
   const [inGameUsers, setInGameUsers] = useState<
     { username: string; avatarUrl: string | null; redGroupName: string | null; role: string | null }[]
   >([]);
@@ -505,7 +532,6 @@ export function BlumeApp({
       const res = await fetch("/api/blume-search?activeAgents=1");
       if (!res.ok) return;
       const data = await res.json();
-      setActiveAgents(data.agents || []);
       setGamePlaceId(data.gamePlaceId || null);
     } catch {
       // Best-effort — the strip just stays empty if this fails.
@@ -1253,7 +1279,10 @@ export function BlumeApp({
           <div className="blume-active-strip">
             <div className="blume-active-label-group">
               <img className="blume-active-brand-mark" src="/blume-logo.png" alt="" />
-              <span className="blume-active-label">{activeAgents.length} Active</span>
+              {/* Old presence-scan count removed — it only ever reflected
+                  people we'd already scanned, not the real server roster,
+                  and was misleading before the live ingest feed exists.
+                  Left blank until that's wired up. */}
               {canEditBlog && (
                 <button
                   className="blume-active-config-btn"

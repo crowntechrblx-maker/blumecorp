@@ -1039,34 +1039,45 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
-  /* Default grid behaviour — stretches every item in a row to match the
-     tallest one, so two posts side by side always end up the same card
-     height even when their actual content is different lengths. */
+  /* Grid stretch alone only matches heights within a single row, so
+     enlarging the window could leave row 1 and row 2 sized differently
+     from each other. aspect-ratio on the cards below fixes every card to
+     the same height (scaled to the current column width) across the
+     whole grid, not just row by row, so they all grow together when the
+     window is resized. */
   align-items: stretch;
 }
 .royal-tweet-item {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  aspect-ratio: 4 / 5;
   border-bottom: 1px solid #e5e5e7;
   padding-bottom: 12px;
   /* The X embed widget has its own internal min-width and will overflow
      a narrow grid column rather than shrink — clip it instead of letting
-     it blow out the 2-column layout. */
+     it blow out the 2-column layout. Also clips embed content taller
+     than the fixed aspect-ratio card, which is the trade-off for every
+     card being the same size. */
   overflow: hidden;
 }
 .royal-tweet-item .tweet-embed {
-  /* Fills whatever extra height the grid gave this card to match its
-     taller row-mate — the embed itself can't reflow its own content
-     (it's X's iframe, not something this app can restyle), but the card
-     it sits in ends up sized the same either way. */
+  /* Takes up the space above the footer/divider, then centers the
+     embed's actual rendered content (whatever height X's iframe ends up
+     being) within that space, so short and tall posts alike sit centered
+     against the divider line rather than pinned to the top. */
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
 }
 .royal-tweet-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-top: auto;
 }
 .royal-tweet-meta {
   font-family: "Inter Tight", sans-serif;
