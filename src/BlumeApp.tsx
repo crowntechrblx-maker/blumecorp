@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useFadingError } from "./useFadingError";
 import { getChargeName } from "./pncCharges";
 
@@ -286,39 +286,56 @@ function Reveal({ children, className = "" }: { children: ReactNode; className?:
 }
 
 // The loop distance is a CSS custom property (--marquee-set-width, in real
-// pixels) rather than a bare `translateX(-50%)`. A percentage transform is
-// only as reliable as each browser's willingness to keep re-resolving it
-// against the live box size — and this app's windows are user-resizable, so
-// the marquee's box is exactly the kind of thing that can change size after
-// the animation has already started. A ResizeObserver on the (real, visible)
-// set re-measures its actual width any time that changes for any reason —
-// a window resize, a font finishing its swap-in, anything — and writes it
-// into the CSS variable the keyframe reads from. The motion itself still
-// runs as a plain CSS animation (compositor-driven, not a per-frame JS
-// loop), so there's no measurement happening on the hot path either.
+// pixels) rather than a bare `translateX(-50%)`. But that alone wasn't
+// enough: browsers don't reliably re-resolve a running animation's
+// keyframes when a custom property they reference changes mid-flight — the
+// already-playing iteration can keep using whatever value was in effect
+// when it started (often the CSS fallback, before JS has measured
+// anything), and only pick up the corrected value once a later iteration
+// gets a fresh keyframe resolution. That's exactly what showed up as a
+// stall partway through the loop, right around the Financial Services /
+// second-set seam. Two things fix that: (1) never start the animation
+// until the very first measurement is already in place — done via
+// useLayoutEffect, which runs before paint — and (2) whenever the
+// measurement changes later (resize, font swap-in), force the browser to
+// re-resolve the keyframes by dropping the animation for one frame and
+// reapplying it, rather than trusting a live update to reach an
+// already-running animation.
 function BlumeMarquee() {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const setRef = useRef<HTMLDivElement | null>(null);
+  const [ready, setReady] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const setEl = setRef.current;
     const trackEl = trackRef.current;
     if (!setEl || !trackEl) return;
 
-    function apply() {
+    function restartAnimation() {
+      if (!trackEl) return;
+      trackEl.style.animation = "none";
+      void trackEl.offsetWidth; // force a reflow so the browser drops the old keyframe resolution
+      trackEl.style.animation = "";
+    }
+
+    function apply(restart: boolean) {
       if (!setEl || !trackEl) return;
       const width = setEl.getBoundingClientRect().width;
-      if (width > 0) trackEl.style.setProperty("--marquee-set-width", `${width}px`);
+      if (width <= 0) return;
+      trackEl.style.setProperty("--marquee-set-width", `${width}px`);
+      if (restart) restartAnimation();
     }
-    apply();
 
-    const ro = new ResizeObserver(apply);
+    apply(false);
+    setReady(true);
+
+    const ro = new ResizeObserver(() => apply(true));
     ro.observe(setEl);
 
     let cancelled = false;
     document.fonts?.ready
       ?.then(() => {
-        if (!cancelled) apply();
+        if (!cancelled) apply(true);
       })
       .catch(() => {});
 
@@ -330,7 +347,10 @@ function BlumeMarquee() {
 
   return (
     <section className="blume-marquee">
-      <div className="blume-marquee-track" ref={trackRef}>
+      <div
+        className={`blume-marquee-track${ready ? " blume-marquee-animate" : ""}`}
+        ref={trackRef}
+      >
         <div className="blume-marquee-set" ref={setRef}>
           {INDUSTRIES.map((ind) => (
             <span className="blume-marquee-item" key={ind.title}>

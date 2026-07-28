@@ -182,7 +182,7 @@ export function MessagesApp({
                     <span className="bubble-text">{m.text}</span>
                     {m.isMine && (
                       <span className="bubble-tick" title="Delivered">
-                        ✓✓
+                        ✓
                       </span>
                     )}
                   </div>

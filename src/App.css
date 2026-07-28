@@ -859,7 +859,7 @@
 .app-content.royal {
   padding: 0;
   background: #fff;
-  color: #14151a;
+  color: #000;
   font-family: Georgia, "Times New Roman", serif;
 }
 .royal-site-header {
@@ -867,7 +867,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 18px;
-  background: #14151a;
+  background: #162275;
   color: #fff;
 }
 .royal-site-wordmark {
@@ -880,7 +880,12 @@
   font-size: 9.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+}
+.royal-site-tag:hover {
+  color: #fff;
+  text-decoration: underline;
 }
 .royal-hero {
   position: relative;
@@ -896,14 +901,6 @@
   padding: 40px 20px 20px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.78) 100%);
   color: #fff;
-}
-.royal-hero-eyebrow {
-  margin: 0 0 6px;
-  font-family: "Inter Tight", sans-serif;
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.75);
 }
 .royal-hero-title {
   margin: 0 0 8px;
@@ -937,6 +934,7 @@
   font-weight: 400;
   font-size: 17px;
   letter-spacing: 0.01em;
+  color: #162275;
 }
 .royal-section-rule {
   flex: 1;
@@ -971,6 +969,7 @@
   font-family: Georgia, "Times New Roman", serif;
   font-weight: 400;
   font-size: 15px;
+  color: #162275;
 }
 .royal-card-handle {
   display: block;
@@ -979,14 +978,14 @@
   font-size: 10.5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #8a8a8e;
+  color: #000;
 }
 .royal-card-bio {
   margin: 0;
   font-family: "Inter Tight", sans-serif;
   font-size: 12.5px;
   line-height: 1.55;
-  color: #3a3a3c;
+  color: #000;
 }
 .royal-add-section {
   background: #fafafa;
@@ -1037,20 +1036,19 @@
   margin: 8px 0 0;
 }
 .royal-tweet-list {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  align-items: start;
 }
 .royal-tweet-item {
-  /* X's embed widget maxes out around ~550px and won't stretch further,
-     so on a wide window just letting it sit flush-left leaves a big
-     awkward strip of blank space beside it. Centering a capped-width
-     column instead makes that look deliberate rather than broken. */
-  width: 100%;
-  max-width: 550px;
+  min-width: 0;
   border-bottom: 1px solid #e5e5e7;
   padding-bottom: 12px;
+  /* The X embed widget has its own internal min-width and will overflow
+     a narrow grid column rather than shrink — clip it instead of letting
+     it blow out the 2-column layout. */
+  overflow: hidden;
 }
 .royal-tweet-footer {
   display: flex;
@@ -1061,7 +1059,7 @@
 .royal-tweet-meta {
   font-family: "Inter Tight", sans-serif;
   font-size: 11px;
-  color: #8a8a8e;
+  color: #000;
   margin: 6px 0 0;
 }
 .app-content button.royal-tweet-delete {
@@ -1082,7 +1080,7 @@
 .royal-empty {
   font-family: "Inter Tight", sans-serif;
   font-size: 12.5px;
-  color: #8a8a8e;
+  color: #000;
 }
 
 /* Blume */
@@ -1179,22 +1177,14 @@
   flex-shrink: 0;
 }
 .blume-brand-mark {
-  width: 16px;
-  height: 16px;
-  border-radius: 5px;
-  background: var(--blume-navy);
+  width: 18px;
+  height: 18px;
   object-fit: contain;
-  padding: 2px;
-  box-sizing: border-box;
 }
 .blume-active-brand-mark {
   width: 20px;
   height: 20px;
-  border-radius: 6px;
-  background: var(--blume-navy);
   object-fit: contain;
-  padding: 3px;
-  box-sizing: border-box;
 }
 .blume-brand-name {
   font-family: "Inter Tight", sans-serif;
@@ -1375,6 +1365,10 @@
   font-weight: 500;
   letter-spacing: 0.04em;
   will-change: transform;
+}
+/* Only added once JS has already measured --marquee-set-width, so the
+   animation never gets a chance to start with a stale/fallback value. */
+.blume-marquee-track.blume-marquee-animate {
   animation: blumeMarqueeScroll 26s linear infinite;
 }
 @keyframes blumeMarqueeScroll {
@@ -1812,13 +1806,9 @@
   font-size: 14.5px;
 }
 .blume-footer-mark {
-  width: 16px;
-  height: 16px;
-  border-radius: 5px;
-  background: var(--blume-navy);
+  width: 18px;
+  height: 18px;
   object-fit: contain;
-  padding: 2px;
-  box-sizing: border-box;
 }
 .blume-footer-links {
   display: flex;

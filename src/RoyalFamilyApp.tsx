@@ -40,12 +40,9 @@ const ROYAL_PROFILES: RoyalProfile[] = [
     handle: "PhilipMountbatten",
     bio: "The Duke of Cambridge supports The King through charitable initiatives and official engagements across the UK and overseas, serving as Patron or President to organisations focused on community, wellbeing and service, and regularly undertakes key Royal and ceremonial duties.",
   },
-  {
-    title: "The Duke of Westminster",
-    handle: "HarryMountbatten",
-    bio: "The Duke of Westminster supports The King as Head of State, representing him at events and visits in the UK and abroad, receiving Heads of State and government officials, and attending state and ceremonial occasions, with a strong economic and business focus.",
-  },
 ];
+
+const ROYAL_WEBSITE_URL = "https://royal-communications-console.vercel.app/";
 
 export function RoyalFamilyApp() {
   const [tweets, setTweets] = useState<RoyalTweet[]>([]);
@@ -113,15 +110,16 @@ export function RoyalFamilyApp() {
     <div className="app-content royal">
       <div className="royal-site-header">
         <span className="royal-site-wordmark">The Royal Household</span>
-        <span className="royal-site-tag">Official Website</span>
+        <a className="royal-site-tag" href={ROYAL_WEBSITE_URL} target="_blank" rel="noopener noreferrer">
+          The Website
+        </a>
       </div>
 
       <div className="royal-hero">
         <div className="royal-hero-overlay">
-          <p className="royal-hero-eyebrow">Westbridge · The Monarchy</p>
           <h1 className="royal-hero-title">The Royal Family</h1>
           <p className="royal-hero-subtitle">
-            The official website of Their Majesties The King and Queen, and Members of the Royal Family.
+            The website of Their Majesties The King and Queen, and Members of the Royal Family.
           </p>
         </div>
       </div>
