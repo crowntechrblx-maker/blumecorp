@@ -1039,16 +1039,28 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
-  align-items: start;
+  /* Default grid behaviour — stretches every item in a row to match the
+     tallest one, so two posts side by side always end up the same card
+     height even when their actual content is different lengths. */
+  align-items: stretch;
 }
 .royal-tweet-item {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
   border-bottom: 1px solid #e5e5e7;
   padding-bottom: 12px;
   /* The X embed widget has its own internal min-width and will overflow
      a narrow grid column rather than shrink — clip it instead of letting
      it blow out the 2-column layout. */
   overflow: hidden;
+}
+.royal-tweet-item .tweet-embed {
+  /* Fills whatever extra height the grid gave this card to match its
+     taller row-mate — the embed itself can't reflow its own content
+     (it's X's iframe, not something this app can restyle), but the card
+     it sits in ends up sized the same either way. */
+  flex: 1;
 }
 .royal-tweet-footer {
   display: flex;
@@ -1359,29 +1371,19 @@
   display: flex;
   align-items: center;
   white-space: nowrap;
-  width: max-content;
   color: var(--blume-mist-dim);
   font-size: 12.5px;
   font-weight: 500;
   letter-spacing: 0.04em;
-  will-change: transform;
+  /* The track itself is the scroll container — BlumeMarquee drives its
+     scrollLeft directly via rAF. overflow: hidden still allows setting
+     scrollLeft programmatically, it just hides the (unneeded) scrollbar
+     and blocks the user from dragging it around by hand. */
+  overflow-x: hidden;
+  scrollbar-width: none;
 }
-/* Only added once JS has already measured --marquee-set-width, so the
-   animation never gets a chance to start with a stale/fallback value. */
-.blume-marquee-track.blume-marquee-animate {
-  animation: blumeMarqueeScroll 26s linear infinite;
-}
-@keyframes blumeMarqueeScroll {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    /* --marquee-set-width is kept in sync with the real rendered width of
-       one set via a ResizeObserver (see BlumeMarquee), so this stays exact
-       even if the window is resized mid-animation. The 50% fallback only
-       matters for the first frame or two before that JS has run. */
-    transform: translateX(calc(-1 * var(--marquee-set-width, 50%)));
-  }
+.blume-marquee-track::-webkit-scrollbar {
+  display: none;
 }
 .blume-marquee-set {
   display: flex;

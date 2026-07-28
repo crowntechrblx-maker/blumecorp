@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFadingError } from "./useFadingError";
 import { getChargeName } from "./pncCharges";
 
@@ -285,72 +285,73 @@ function Reveal({ children, className = "" }: { children: ReactNode; className?:
   );
 }
 
-// The loop distance is a CSS custom property (--marquee-set-width, in real
-// pixels) rather than a bare `translateX(-50%)`. But that alone wasn't
-// enough: browsers don't reliably re-resolve a running animation's
-// keyframes when a custom property they reference changes mid-flight — the
-// already-playing iteration can keep using whatever value was in effect
-// when it started (often the CSS fallback, before JS has measured
-// anything), and only pick up the corrected value once a later iteration
-// gets a fresh keyframe resolution. That's exactly what showed up as a
-// stall partway through the loop, right around the Financial Services /
-// second-set seam. Two things fix that: (1) never start the animation
-// until the very first measurement is already in place — done via
-// useLayoutEffect, which runs before paint — and (2) whenever the
-// measurement changes later (resize, font swap-in), force the browser to
-// re-resolve the keyframes by dropping the animation for one frame and
-// reapplying it, rather than trusting a live update to reach an
-// already-running animation.
+// Driven by the container's real scrollLeft, not a CSS transform animation.
+// Every previous version of this (a bare percentage transform, then a CSS
+// custom property feeding a @keyframes rule) kept showing the same stall
+// right at the Financial Services / second-set seam despite fixing the
+// specific staleness theory behind each attempt — which points at the
+// underlying mechanism itself (a running CSS animation whose target value
+// depends on something JS measured) rather than any one bug in it.
+// scrollLeft sidesteps that whole category: it's a plain scroll position,
+// not an animated CSS property, so there's no keyframe resolution for a
+// browser to cache or leave stale — every rAF tick just sets a number and
+// the browser scrolls to exactly that position, this frame, full stop.
+// The container holds two identical copies of the list back to back;
+// once scrollLeft passes the width of the first copy, it's decremented by
+// that same width, which is invisible since copy two is sitting in
+// exactly the position copy one just vacated.
 function BlumeMarquee() {
-  const trackRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
   const setRef = useRef<HTMLDivElement | null>(null);
-  const [ready, setReady] = useState(false);
+  const widthRef = useRef(0);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
+    const scrollerEl = scrollerRef.current;
     const setEl = setRef.current;
-    const trackEl = trackRef.current;
-    if (!setEl || !trackEl) return;
+    if (!scrollerEl || !setEl) return;
 
-    function restartAnimation() {
-      if (!trackEl) return;
-      trackEl.style.animation = "none";
-      void trackEl.offsetWidth; // force a reflow so the browser drops the old keyframe resolution
-      trackEl.style.animation = "";
+    function measure() {
+      if (setEl) widthRef.current = setEl.getBoundingClientRect().width;
     }
+    measure();
 
-    function apply(restart: boolean) {
-      if (!setEl || !trackEl) return;
-      const width = setEl.getBoundingClientRect().width;
-      if (width <= 0) return;
-      trackEl.style.setProperty("--marquee-set-width", `${width}px`);
-      if (restart) restartAnimation();
-    }
-
-    apply(false);
-    setReady(true);
-
-    const ro = new ResizeObserver(() => apply(true));
+    const ro = new ResizeObserver(measure);
     ro.observe(setEl);
 
     let cancelled = false;
     document.fonts?.ready
       ?.then(() => {
-        if (!cancelled) apply(true);
+        if (!cancelled) measure();
       })
       .catch(() => {});
 
+    const SPEED = 36; // px per second
+    let lastTime: number | null = null;
+    let raf = 0;
+
+    function tick(time: number) {
+      const setWidth = widthRef.current;
+      if (scrollerEl && setWidth > 0 && lastTime !== null) {
+        const dt = Math.min((time - lastTime) / 1000, 0.1);
+        let next = scrollerEl.scrollLeft + SPEED * dt;
+        if (next >= setWidth) next -= setWidth;
+        scrollerEl.scrollLeft = next;
+      }
+      lastTime = time;
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+
     return () => {
       cancelled = true;
+      cancelAnimationFrame(raf);
       ro.disconnect();
     };
   }, []);
 
   return (
     <section className="blume-marquee">
-      <div
-        className={`blume-marquee-track${ready ? " blume-marquee-animate" : ""}`}
-        ref={trackRef}
-      >
+      <div className="blume-marquee-track" ref={scrollerRef}>
         <div className="blume-marquee-set" ref={setRef}>
           {INDUSTRIES.map((ind) => (
             <span className="blume-marquee-item" key={ind.title}>
