@@ -36,14 +36,6 @@ function randomBusDelay(): number {
 }
 
 function TflContent() {
-  const lines = [
-    { name: "Victoria", status: "Good service", color: "#0098d4" },
-    { name: "Central", status: "Minor delays", color: "#e32017" },
-    { name: "Jubilee", status: "Good service", color: "#a0a5a9" },
-    { name: "Northern", status: "Good service", color: "#000000" },
-    { name: "District", status: "Good service", color: "#00782a" },
-  ];
-
   const [delays, setDelays] = useState<number[]>(() => TFL_BUS_ROUTES.map(randomBusDelay));
 
   useEffect(() => {
@@ -55,17 +47,7 @@ function TflContent() {
 
   return (
     <div className="app-content tfl">
-      <h2>Line Status</h2>
-      <ul className="line-list">
-        {lines.map((l) => (
-          <li key={l.name}>
-            <span className="line-dot" style={{ background: l.color }} />
-            <span className="line-name">{l.name}</span>
-            <span className="line-status">{l.status}</span>
-          </li>
-        ))}
-      </ul>
-
+      <h2>Westbridge Transport</h2>
       <div className="section">
         <h3>Stations</h3>
         <ul className="tfl-station-list">
@@ -96,10 +78,6 @@ function TflContent() {
             );
           })}
         </ul>
-      </div>
-
-      <div className="tfl-footer">
-        <img className="tfl-footer-logo" src="/blume-logo.png" alt="Blume" />
       </div>
     </div>
   );

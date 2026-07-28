@@ -297,32 +297,6 @@
 }
 
 /* TfL */
-.line-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 14px;
-}
-.line-list li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 0;
-  border-bottom: 1px solid #eee;
-}
-.line-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.line-name {
-  flex: 1;
-  font-weight: 600;
-}
-.line-status {
-  font-size: 12px;
-  color: #555;
-}
 .section h3 {
   margin: 0 0 8px;
   font-size: 14px;
@@ -383,22 +357,6 @@
 }
 .tfl-route-on-time {
   color: #0a8a3f;
-}
-.tfl-footer {
-  margin-top: 20px;
-  padding: 16px 0 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-top: 1px solid #eee;
-}
-.tfl-footer-logo {
-  width: 26px;
-  height: 26px;
-  object-fit: contain;
-  padding: 5px;
-  border-radius: 7px;
-  background: var(--blume-navy, #07203b);
 }
 
 /* Uber */
@@ -1365,6 +1323,19 @@
   font-weight: 500;
   letter-spacing: 0.04em;
   will-change: transform;
+  animation: blumeMarqueeScroll 26s linear infinite;
+}
+@keyframes blumeMarqueeScroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    /* Exactly one set-width, since the track holds two identical sets back
+       to back — a percentage here is resolved against the track's own
+       rendered box, so it's always correct regardless of font metrics or
+       content length. */
+    transform: translateX(-50%);
+  }
 }
 .blume-marquee-set {
   display: flex;
@@ -1792,7 +1763,10 @@
   width: 16px;
   height: 16px;
   border-radius: 5px;
-  background: linear-gradient(135deg, var(--blume-accent), #fff);
+  background: var(--blume-navy);
+  object-fit: contain;
+  padding: 2px;
+  box-sizing: border-box;
 }
 .blume-footer-links {
   display: flex;

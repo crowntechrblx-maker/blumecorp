@@ -285,76 +285,21 @@ function Reveal({ children, className = "" }: { children: ReactNode; className?:
   );
 }
 
-// Driven by rAF and measured against the real rendered width every frame,
-// rather than a CSS keyframe tied to a percentage of the element's width —
-// that's what left a gap once the custom font finished loading and the
-// track's actual width shifted out from under a fixed-percentage animation.
+// Pure CSS loop — translateX(-50%) always shifts by exactly one set-width,
+// no matter what that width actually renders to, because percentages here
+// resolve against the track's own box at paint time. That's what makes this
+// version surefire: the earlier rAF versions had to measure the set's pixel
+// width in JS and race that measurement against web-font swap-in and layout
+// timing, and any staleness there (even briefly) showed up as a stutter or
+// a chunk of the second set appearing to "pop in" partway through — right
+// around the seam between the two sets, i.e. right after Financial
+// Services, the last item in the first set. Percentage-based transforms
+// don't need a measurement at all, so that whole class of bug is gone.
 function BlumeMarquee() {
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const setRef = useRef<HTMLDivElement | null>(null);
-  const offsetRef = useRef(0);
-  // Cached rather than re-measured every animation frame — calling
-  // getBoundingClientRect() inside the rAF loop forces a synchronous layout
-  // on every single tick, and that per-frame layout thrash is what showed up
-  // as a stall right as the loop reached the end of the set (Financial
-  // Services, the last item) and needed a fresh width reading to wrap
-  // seamlessly. Measuring once up front — and again only when the layout
-  // actually changes (resize, or the custom font finishing its swap-in) —
-  // removes that forced reflow from the hot path entirely.
-  const widthRef = useRef(0);
-
-  useEffect(() => {
-    const setEl = setRef.current;
-    if (!setEl) return;
-
-    function measure() {
-      if (setEl) widthRef.current = setEl.getBoundingClientRect().width;
-    }
-    measure();
-
-    const ro = new ResizeObserver(measure);
-    ro.observe(setEl);
-
-    let cancelled = false;
-    document.fonts?.ready
-      ?.then(() => {
-        if (!cancelled) measure();
-      })
-      .catch(() => {});
-
-    const SPEED = 36; // px per second
-    let lastTime: number | null = null;
-    let raf = 0;
-
-    function tick(time: number) {
-      const trackEl = trackRef.current;
-      const setWidth = widthRef.current;
-      if (trackEl && setWidth > 0 && lastTime !== null) {
-        // Clamp so a dropped/delayed frame (tab backgrounded, heavy work
-        // elsewhere) can't produce one huge jump — it just animates a
-        // little faster to catch up over the next couple of frames.
-        const dt = Math.min((time - lastTime) / 1000, 0.1);
-        offsetRef.current -= SPEED * dt;
-        if (offsetRef.current <= -setWidth) {
-          offsetRef.current += setWidth;
-        }
-        trackEl.style.transform = `translateX(${offsetRef.current}px)`;
-      }
-      lastTime = time;
-      raf = requestAnimationFrame(tick);
-    }
-    raf = requestAnimationFrame(tick);
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-      ro.disconnect();
-    };
-  }, []);
-
   return (
     <section className="blume-marquee">
-      <div className="blume-marquee-track" ref={trackRef}>
-        <div className="blume-marquee-set" ref={setRef}>
+      <div className="blume-marquee-track">
+        <div className="blume-marquee-set">
           {INDUSTRIES.map((ind) => (
             <span className="blume-marquee-item" key={ind.title}>
               {ind.title}
@@ -1220,7 +1165,7 @@ export function BlumeApp({
           <footer className="blume-footer">
             <div className="blume-footer-inner">
               <div className="blume-footer-brand">
-                <span className="blume-footer-mark" />
+                <img className="blume-footer-mark" src="/blume-logo.png" alt="" />
                 <span>Blume</span>
               </div>
               <div className="blume-footer-links">
