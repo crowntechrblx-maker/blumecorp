@@ -601,15 +601,31 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
               nickname?: string;
             };
 
+            const avatarUrl = await getRobloxAvatarUrl(profile.sub);
+            const sessionId = b64url(crypto.randomBytes(24));
+
             if (isBanned(profile.sub)) {
-              res.statusCode = 403;
-              res.end("This Roblox account has been banned from Westbridge OS.");
+              // Same trick as prod: set the session cookie anyway and just
+              // redirect in — /api/auth/me checks isBanned on every request
+              // and clears this same cookie the moment it sees it, so the
+              // app shows its normal styled ban screen instead of a bare
+              // text response here.
+              sessions.set(sessionId, {
+                userId: profile.sub,
+                username: profile.preferred_username,
+                displayName: profile.nickname || profile.preferred_username,
+                avatarUrl,
+              });
+              res.setHeader(
+                "Set-Cookie",
+                `wb_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax`
+              );
+              res.statusCode = 302;
+              res.setHeader("Location", "/");
+              res.end();
               return;
             }
 
-            const avatarUrl = await getRobloxAvatarUrl(profile.sub);
-
-            const sessionId = b64url(crypto.randomBytes(24));
             sessions.set(sessionId, {
               userId: profile.sub,
               username: profile.preferred_username,

@@ -285,30 +285,32 @@ function Reveal({ children, className = "" }: { children: ReactNode; className?:
   );
 }
 
-// Driven by the container's real scrollLeft, not a CSS transform animation.
-// Every previous version of this (a bare percentage transform, then a CSS
-// custom property feeding a @keyframes rule) kept showing the same stall
-// right at the Financial Services / second-set seam despite fixing the
-// specific staleness theory behind each attempt — which points at the
-// underlying mechanism itself (a running CSS animation whose target value
-// depends on something JS measured) rather than any one bug in it.
-// scrollLeft sidesteps that whole category: it's a plain scroll position,
-// not an animated CSS property, so there's no keyframe resolution for a
-// browser to cache or leave stale — every rAF tick just sets a number and
-// the browser scrolls to exactly that position, this frame, full stop.
-// The container holds two identical copies of the list back to back;
-// once scrollLeft passes the width of the first copy, it's decremented by
-// that same width, which is invisible since copy two is sitting in
-// exactly the position copy one just vacated.
+// Found the actual bug behind the scrollLeft version: `scrollLeft` is
+// clamped by the browser to [0, scrollWidth - clientWidth]. This marquee
+// bar spans the full window width, which can easily be *wider* than a
+// single copy of the (short) industries list — so scrollWidth - clientWidth
+// (two copies minus the visible bar) ends up *less* than one copy's width,
+// meaning the wrap threshold this code was aiming for was never actually
+// reachable: scrollLeft would climb, hit the browser's clamp, and just sit
+// there — exactly the "gets to the end and stops" symptom. transform has no
+// such clamp (it can go arbitrarily negative), and setting it directly as a
+// plain inline style every rAF tick — rather than through a CSS @keyframes
+// animation — means there's no keyframe resolution for a browser to cache
+// or leave stale either, which was the failure mode of the versions before
+// this one. The only thing measured is the (cached, ResizeObserver-driven)
+// width of one copy of the list; the position itself lives in a plain JS
+// ref, not read back from the DOM, so there's nothing for the browser to
+// clamp or reinterpret.
 function BlumeMarquee() {
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
   const setRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef(0);
+  const offsetRef = useRef(0);
 
   useEffect(() => {
-    const scrollerEl = scrollerRef.current;
+    const trackEl = trackRef.current;
     const setEl = setRef.current;
-    if (!scrollerEl || !setEl) return;
+    if (!trackEl || !setEl) return;
 
     function measure() {
       if (setEl) widthRef.current = setEl.getBoundingClientRect().width;
@@ -331,11 +333,11 @@ function BlumeMarquee() {
 
     function tick(time: number) {
       const setWidth = widthRef.current;
-      if (scrollerEl && setWidth > 0 && lastTime !== null) {
+      if (trackEl && setWidth > 0 && lastTime !== null) {
         const dt = Math.min((time - lastTime) / 1000, 0.1);
-        let next = scrollerEl.scrollLeft + SPEED * dt;
-        if (next >= setWidth) next -= setWidth;
-        scrollerEl.scrollLeft = next;
+        offsetRef.current -= SPEED * dt;
+        if (offsetRef.current <= -setWidth) offsetRef.current += setWidth;
+        trackEl.style.transform = `translateX(${offsetRef.current}px)`;
       }
       lastTime = time;
       raf = requestAnimationFrame(tick);
@@ -351,7 +353,7 @@ function BlumeMarquee() {
 
   return (
     <section className="blume-marquee">
-      <div className="blume-marquee-track" ref={scrollerRef}>
+      <div className="blume-marquee-track" ref={trackRef}>
         <div className="blume-marquee-set" ref={setRef}>
           {INDUSTRIES.map((ind) => (
             <span className="blume-marquee-item" key={ind.title}>
@@ -372,7 +374,6 @@ function BlumeMarquee() {
 }
 
 export function BlumeApp({
-  username,
   onMaximize,
 }: {
   username: string;
@@ -1450,12 +1451,6 @@ export function BlumeApp({
               {personError && (
                 <p className={`blume-error${personFading ? " fading-out" : ""}`}>{personError}</p>
               )}
-              {!personResult && !personError && (
-                <p className="blume-muted blume-search-hint">
-                  Search by name or Roblox ID, {username}. Every search is logged and cached.
-                </p>
-              )}
-
               {personResult && (
                 <div className="blume-person-result">
                   <div className="blume-person-head">
@@ -1716,11 +1711,6 @@ export function BlumeApp({
                           ))}
                         </div>
                       </div>
-                      <p className="blume-muted blume-search-hint">
-                        Search shows anyone we already know in this group. Scan fetches everyone
-                        in the group fresh (respecting the records API's rate limit, so large
-                        groups take a while — keep this tab open until it finishes).
-                      </p>
                       <div className="blume-search-form">
                         <input
                           placeholder="Group ID or URL…"
@@ -1819,11 +1809,6 @@ export function BlumeApp({
 
                   {groupsTab === "settings" && (
                     <>
-                      <p className="blume-muted blume-search-hint">
-                        Every group Blume knows about, and whether it's flagged red or white. Add
-                        one below — it's picked up everywhere groups are shown (Person Search,
-                        Group Search, Field Activity).
-                      </p>
                       <div className="blume-add-group-form">
                         <input
                           placeholder="Group ID…"

@@ -70,11 +70,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       nickname?: string;
     };
 
-    if (await isBanned(profile.sub)) {
-      res.status(403).send("This Roblox account has been banned from Westbridge OS.");
-      return;
-    }
-
     const avatarUrl = await getRobloxAvatarUrl(profile.sub);
 
     const session = {
@@ -84,6 +79,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       avatarUrl,
     };
 
+    setCookie(res, "wb_oauth_verifier", "", { maxAge: 0 });
+    setCookie(res, "wb_oauth_state", "", { maxAge: 0 });
+
+    if (await isBanned(profile.sub)) {
+      // Set the session cookie anyway (briefly) and just redirect into the
+      // app rather than serving a bare text response here — /api/auth/me
+      // already checks isBanned on every request and immediately clears
+      // this same cookie the moment it sees it, so the app renders its
+      // normal, styled "You've been banned" screen instead of a one-off
+      // page, exactly like a ban that lands on someone mid-session does.
+      setCookie(res, "wb_session", encodeSession(session), { maxAge: 60 });
+      res.writeHead(302, { Location: "/" });
+      res.end();
+      return;
+    }
+
     await upsertKnownUser({ userId: profile.sub, username: profile.preferred_username, avatarUrl });
     await appendAuditLog({
       type: "login",
@@ -92,8 +103,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     setCookie(res, "wb_session", encodeSession(session), { maxAge: 60 * 60 * 24 * 30 });
-    setCookie(res, "wb_oauth_verifier", "", { maxAge: 0 });
-    setCookie(res, "wb_oauth_state", "", { maxAge: 0 });
 
     res.writeHead(302, { Location: "/" });
     res.end();
