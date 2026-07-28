@@ -1373,13 +1373,15 @@
   white-space: nowrap;
   /* Grows to fit both copies of the list — .blume-marquee (the parent) is
      what clips it via overflow: hidden, while BlumeMarquee's rAF loop
-     slides it left/right with a plain transform. */
+     slides it left/right by animating `left`, not `transform` — see the
+     comment on BlumeMarquee for why. position: relative is what makes
+     `left` actually do anything here. */
   width: max-content;
+  position: relative;
   color: var(--blume-mist-dim);
   font-size: 12.5px;
   font-weight: 500;
   letter-spacing: 0.04em;
-  will-change: transform;
 }
 .blume-marquee-set {
   display: flex;

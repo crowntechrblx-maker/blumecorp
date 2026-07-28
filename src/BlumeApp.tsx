@@ -285,22 +285,25 @@ function Reveal({ children, className = "" }: { children: ReactNode; className?:
   );
 }
 
-// Found the actual bug behind the scrollLeft version: `scrollLeft` is
-// clamped by the browser to [0, scrollWidth - clientWidth]. This marquee
-// bar spans the full window width, which can easily be *wider* than a
-// single copy of the (short) industries list — so scrollWidth - clientWidth
-// (two copies minus the visible bar) ends up *less* than one copy's width,
-// meaning the wrap threshold this code was aiming for was never actually
-// reachable: scrollLeft would climb, hit the browser's clamp, and just sit
-// there — exactly the "gets to the end and stops" symptom. transform has no
-// such clamp (it can go arbitrarily negative), and setting it directly as a
-// plain inline style every rAF tick — rather than through a CSS @keyframes
-// animation — means there's no keyframe resolution for a browser to cache
-// or leave stale either, which was the failure mode of the versions before
-// this one. The only thing measured is the (cached, ResizeObserver-driven)
-// width of one copy of the list; the position itself lives in a plain JS
-// ref, not read back from the DOM, so there's nothing for the browser to
-// clamp or reinterpret.
+// Every earlier version of this — CSS keyframes, a custom-property-fed
+// keyframe, native scrollLeft, a plain JS-set transform — shared one thing
+// in common: all of them animate `transform`, which Chrome/Safari/Firefox
+// all promote to its own GPU compositing layer (especially with
+// `will-change: transform`, which was set here specifically to ask for
+// that). A confirmed report narrowed the actual symptom down precisely:
+// it's not a wrap-math bug at all — the remaining marquee content simply
+// doesn't get rasterized as it scrolls in, and only "catches up" (pops in
+// all at once) once the animated position is roughly mid-viewport. That's
+// the signature of GPU tile-rasterization lag on a transform-animated
+// layer, not a JS timing or measurement issue — which is exactly why fixing
+// the measurement/wrap logic three different ways never changed the
+// symptom. The fix here is to stop using `transform` entirely and animate
+// `left` (a normal layout property) instead. That's ordinarily considered
+// "worse" for animation performance, because it forces a synchronous
+// layout + paint on the main thread every frame rather than letting the
+// compositor handle it independently — but for a single thin row of text,
+// that's a trivial amount of work, and paying it buys guaranteed painting:
+// there's no separate GPU raster pipeline here that can fall behind.
 function BlumeMarquee() {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const setRef = useRef<HTMLDivElement | null>(null);
@@ -337,7 +340,7 @@ function BlumeMarquee() {
         const dt = Math.min((time - lastTime) / 1000, 0.1);
         offsetRef.current -= SPEED * dt;
         if (offsetRef.current <= -setWidth) offsetRef.current += setWidth;
-        trackEl.style.transform = `translateX(${offsetRef.current}px)`;
+        trackEl.style.left = `${offsetRef.current}px`;
       }
       lastTime = time;
       raf = requestAnimationFrame(tick);
