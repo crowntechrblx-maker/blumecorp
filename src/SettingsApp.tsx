@@ -36,6 +36,7 @@ export function SettingsApp() {
   const [bans, setBans] = useState<BanEntry[]>([]);
   const [messages, setMessages] = useState<AdminMessage[]>([]);
   const [messageFilter, setMessageFilter] = useState("");
+  const [auditFilter, setAuditFilter] = useState("");
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [banInput, setBanInput] = useState("");
@@ -169,6 +170,8 @@ export function SettingsApp() {
         )}
       </div>
 
+      <hr className="settings-divider" />
+
       <div className="section settings-section">
         <h3>Messages</h3>
         <p className="settings-audit-hint">
@@ -209,27 +212,51 @@ export function SettingsApp() {
         </div>
       </div>
 
+      <hr className="settings-divider" />
+
       <div className="section settings-section">
         <h3>Audit log</h3>
         <p className="settings-audit-hint">
-          Every Instagram post, message, Blume report, blog post, and login across the platform.
+          Every Instagram post, message, Blume report, blog post, ban, and login across the platform.
         </p>
+        <input
+          className="settings-message-filter"
+          placeholder="Search by type, username, or detail…"
+          value={auditFilter}
+          onChange={(e) => setAuditFilter(e.target.value)}
+        />
         {loading ? (
           <p>Loading…</p>
+        ) : auditLog.length === 0 ? (
+          <p>No activity logged yet.</p>
         ) : (
-          <div className="settings-audit-list">
-            {auditLog.map((entry) => (
-              <div className="settings-audit-row" key={entry.id}>
-                <span className="settings-audit-type">{entry.type}</span>
-                <span className="settings-audit-user">{entry.username}</span>
-                <span className="settings-audit-detail">{entry.detail}</span>
-                <span className="settings-audit-time">
-                  {new Date(entry.createdAt).toLocaleString()}
-                </span>
+          (() => {
+            const term = auditFilter.trim().toLowerCase();
+            const filtered = term
+              ? auditLog.filter(
+                  (entry) =>
+                    entry.type.toLowerCase().includes(term) ||
+                    entry.username.toLowerCase().includes(term) ||
+                    entry.detail.toLowerCase().includes(term)
+                )
+              : auditLog;
+            return filtered.length === 0 ? (
+              <p>No log entries match "{auditFilter}".</p>
+            ) : (
+              <div className="settings-audit-list">
+                {filtered.map((entry) => (
+                  <div className="settings-audit-row" key={entry.id}>
+                    <span className="settings-audit-type">{entry.type}</span>
+                    <span className="settings-audit-user">{entry.username}</span>
+                    <span className="settings-audit-detail">{entry.detail}</span>
+                    <span className="settings-audit-time">
+                      {new Date(entry.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
-            {auditLog.length === 0 && <p>No activity logged yet.</p>}
-          </div>
+            );
+          })()
         )}
       </div>
 

@@ -3,7 +3,7 @@ import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
 import { isPlatformAdmin, getMemberGroupNames } from "../../lib/roblox.js";
 import { findKnownUser } from "../../lib/known-users.js";
-import { getAuditLog } from "../../lib/audit.js";
+import { getAuditLog, appendAuditLog } from "../../lib/audit.js";
 import { getBans, addBan, removeBan } from "../../lib/bans.js";
 import { kv } from "../../lib/kv.js";
 
@@ -101,8 +101,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             bannedByUsername: session.username,
             createdAt: Date.now(),
           });
+          await appendAuditLog({
+            type: "user_banned",
+            username: session.username,
+            detail: `Banned ${target.username}`,
+          });
         } else {
           await removeBan(target.userId);
+          await appendAuditLog({
+            type: "user_unbanned",
+            username: session.username,
+            detail: `Unbanned ${target.username}`,
+          });
         }
         const bans = await getBans();
         res.status(200).json({ bans });

@@ -1841,8 +1841,18 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
                   bannedByUsername: session.username,
                   createdAt: Date.now(),
                 });
+                appendAuditLog({
+                  type: "user_banned",
+                  username: session.username,
+                  detail: `Banned ${target.username}`,
+                });
               } else {
                 removeBan(target.userId);
+                appendAuditLog({
+                  type: "user_unbanned",
+                  username: session.username,
+                  detail: `Unbanned ${target.username}`,
+                });
               }
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ bans: loadBansDb() }));

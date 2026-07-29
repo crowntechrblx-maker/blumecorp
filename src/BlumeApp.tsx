@@ -105,6 +105,33 @@ function formatLastOnline(ts: number): string {
 const ARREST_SHOWN_CAP = 5;
 const ARREST_RECENT_WINDOW_MS = 10 * 24 * 60 * 60 * 1000;
 
+const ARREST_CHARGE_KEYS = ["chargeIds", "charges", "chargeId", "charge"];
+const ARREST_OFFICER_KEYS = ["officer", "arrestedBy", "by", "arrestingOfficer"];
+const ARREST_DATE_KEYS = [
+  "date",
+  "timestamp",
+  "createdAt",
+  "time",
+  "arrestedAt",
+  "arrestDate",
+  "arrestTime",
+  "dateTime",
+  "occurredAt",
+];
+
+function getFieldCI(obj: Record<string, unknown>, names: string[]): unknown {
+  const lowerToKey = new Map(Object.keys(obj).map((k) => [k.toLowerCase(), k] as const));
+  for (const name of names) {
+    const actualKey = lowerToKey.get(name.toLowerCase());
+    if (actualKey !== undefined && obj[actualKey] !== undefined) return obj[actualKey];
+  }
+  return undefined;
+}
+
+function normalizeTimestampMs(value: number): number {
+  return value > 0 && value < 10_000_000_000 ? value * 1000 : value;
+}
+
 function ArrestRecord({ data }: { data: unknown }) {
   if (data === null || data === undefined) {
     return <p className="blume-muted">None on file.</p>;
@@ -123,8 +150,8 @@ function ArrestRecord({ data }: { data: unknown }) {
   function extractWhenMs(item: unknown): number | null {
     if (item && typeof item === "object") {
       const obj = item as Record<string, unknown>;
-      const when = obj.date ?? obj.timestamp ?? obj.createdAt ?? obj.time;
-      if (typeof when === "number") return when;
+      const when = getFieldCI(obj, ARREST_DATE_KEYS);
+      if (typeof when === "number") return normalizeTimestampMs(when);
       if (typeof when === "string") {
         const parsed = Date.parse(when);
         if (!Number.isNaN(parsed)) return parsed;
@@ -143,29 +170,20 @@ function ArrestRecord({ data }: { data: unknown }) {
     }
     if (item && typeof item === "object") {
       const obj = item as Record<string, unknown>;
-      const chargeField = obj.chargeIds ?? obj.charges ?? obj.chargeId ?? obj.charge;
+      const chargeField = getFieldCI(obj, ARREST_CHARGE_KEYS);
       const charges = Array.isArray(chargeField)
         ? chargeField.map(renderChargeLike)
         : chargeField !== undefined
           ? [renderChargeLike(chargeField)]
           : [];
-      const officer = obj.officer ?? obj.arrestedBy ?? obj.by ?? obj.arrestingOfficer;
-      const when = obj.date ?? obj.timestamp ?? obj.createdAt ?? obj.time;
-      const knownKeys = new Set([
-        "chargeIds",
-        "charges",
-        "chargeId",
-        "charge",
-        "officer",
-        "arrestedBy",
-        "by",
-        "arrestingOfficer",
-        "date",
-        "timestamp",
-        "createdAt",
-        "time",
-      ]);
-      const rest = Object.entries(obj).filter(([k]) => !knownKeys.has(k));
+      const officer = getFieldCI(obj, ARREST_OFFICER_KEYS);
+      const whenMs = extractWhenMs(item);
+      const knownKeysLower = new Set(
+        [...ARREST_CHARGE_KEYS, ...ARREST_OFFICER_KEYS, ...ARREST_DATE_KEYS].map((k) =>
+          k.toLowerCase()
+        )
+      );
+      const rest = Object.entries(obj).filter(([k]) => !knownKeysLower.has(k.toLowerCase()));
       return (
         <div className="blume-arrest-row" key={key}>
           {charges.length > 0 && (
@@ -173,13 +191,7 @@ function ArrestRecord({ data }: { data: unknown }) {
           )}
           <div className="blume-arrest-meta">
             {officer !== undefined && <span>Arrested by {String(officer)}</span>}
-            {when !== undefined && (
-              <span>
-                {typeof when === "number"
-                  ? new Date(when).toLocaleString()
-                  : String(when)}
-              </span>
-            )}
+            {whenMs !== null && <span>{new Date(whenMs).toLocaleString()}</span>}
           </div>
           {rest.length > 0 && charges.length === 0 && (
             <div className="blume-arrest-raw">
@@ -208,14 +220,13 @@ function ArrestRecord({ data }: { data: unknown }) {
   const recentCount = indexed.filter(
     (e) => e.whenMs !== null && e.whenMs >= recentCutoff
   ).length;
-  const overflow = recentCount > ARREST_SHOWN_CAP ? recentCount - ARREST_SHOWN_CAP : 0;
 
   return (
     <div className="blume-arrest-list">
       {shown.map((e) => renderItem(e.item, e.i))}
-      {overflow > 0 && (
+      {recentCount > 0 && (
         <div className="blume-arrest-row blume-arrest-overflow">
-          And {overflow} other arrest{overflow === 1 ? "" : "s"} in the last 10 days
+          {recentCount} arrest{recentCount === 1 ? "" : "s"} in the last 10 days
         </div>
       )}
     </div>

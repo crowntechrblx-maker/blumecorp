@@ -3461,6 +3461,11 @@
 .settings-section {
   margin-top: 20px;
 }
+.settings-divider {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 24px 0 0;
+}
 .settings-ban-form {
   display: flex;
   gap: 8px;
