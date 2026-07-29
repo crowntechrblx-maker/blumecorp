@@ -49,7 +49,7 @@ export const APPS: AppDef[] = [
     id: "swiftCorporate",
     name: "Swift Corporate",
     icon: "",
-    iconImage: "/icons/swift-corporate-tile.png",
+    iconImage: "/icons/swift-corporate-tile-v2.png",
     iconFull: true,
     color: "#f4f1ea",
     defaultSize: { width: 800, height: 600 },
