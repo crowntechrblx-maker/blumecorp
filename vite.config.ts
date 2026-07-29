@@ -2020,35 +2020,74 @@ const AGENT_GROUPS: { id: number; label: string }[] = [
   { id: 315987361, label: "ROCU" },
 ];
 
-async function findInGamePresence(
-  candidates: GroupScanEntry[],
-  gamePlaceId: number | null
-): Promise<GroupScanEntry[]> {
-  const inGame: GroupScanEntry[] = [];
-  for (let i = 0; i < candidates.length; i += 100) {
-    const batch = candidates.slice(i, i + 100);
-    const presRes = await fetch("https://presence.roblox.com/v1/presence/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...robloxHeaders() },
-      body: JSON.stringify({ userIds: batch.map((m) => Number(m.userId)) }),
-    });
-    if (!presRes.ok) continue;
-    const data = (await presRes.json()) as {
-      userPresences?: {
-        userId?: number;
-        userPresenceType?: number;
-        rootPlaceId?: number;
-        placeId?: number;
-      }[];
-    };
-    for (const p of data.userPresences || []) {
-      if (p.userPresenceType !== 2) continue;
-      if (gamePlaceId && p.rootPlaceId !== gamePlaceId && p.placeId !== gamePlaceId) continue;
-      const member = batch.find((m) => Number(m.userId) === p.userId);
-      if (member) inGame.push(member);
+// Mirrors api/blume-search/index.ts's scanMemberEntry — resolves one
+// Roblox user's current username/avatar/groups/friends/plate and returns a
+// fresh cache entry. Doesn't touch the DB itself; callers merge the result
+// into blumeGroupScanCache themselves.
+async function scanMemberEntry(
+  userId: string,
+  usernameHint: string | undefined,
+  allEntries: GroupScanEntry[]
+): Promise<GroupScanEntry> {
+  const existing = allEntries.find((m) => m.userId === userId);
+  const resolved = await resolveRobloxUserId(userId);
+  const username = resolved?.username || existing?.username || usernameHint || userId;
+  const [avatarUrl, groupIds, friendsRaw] = await Promise.all([
+    getRobloxAvatarUrl(userId),
+    getUserGroupIds(userId),
+    getRobloxFriends(userId),
+  ]);
+
+  const knownScanIds = new Set(allEntries.map((m) => m.userId));
+  const friends = friendsRaw
+    .filter((f) => f.userId !== userId && knownScanIds.has(f.userId))
+    .map((f) => ({ userId: f.userId, username: f.username }));
+
+  let customPlate: string | null = null;
+  try {
+    const playerRes = await fetch(`${READONLY_API}/player/${encodeURIComponent(userId)}`);
+    const playerText = await playerRes.text();
+    let playerData: any;
+    try {
+      playerData = JSON.parse(playerText);
+    } catch {
+      playerData = null;
+    }
+    if (playerRes.ok && playerData && !playerData.error) {
+      customPlate = playerData.CustomPlate ?? null;
+    }
+  } catch {
+    // Best-effort.
+  }
+
+  let changed: GroupScanEntry["changed"] = null;
+  if (existing) {
+    const usernameChanged = existing.username !== username;
+    const oldGroupIds = new Set(existing.groupIds);
+    const newGroupIds = new Set(groupIds);
+    const groupsChanged =
+      oldGroupIds.size !== newGroupIds.size ||
+      [...newGroupIds].some((id) => !oldGroupIds.has(id));
+    const oldFriendIds = new Set((existing.friends || []).map((f) => f.userId));
+    const newFriendIds = new Set(friends.map((f) => f.userId));
+    const friendsChanged =
+      oldFriendIds.size !== newFriendIds.size ||
+      [...newFriendIds].some((id) => !oldFriendIds.has(id));
+    if (usernameChanged || groupsChanged || friendsChanged) {
+      changed = { username: usernameChanged, groups: groupsChanged, friends: friendsChanged, at: Date.now() };
     }
   }
-  return inGame;
+
+  return {
+    userId,
+    username,
+    avatarUrl,
+    customPlate,
+    groupIds,
+    friends,
+    scannedAt: Date.now(),
+    changed,
+  };
 }
 
 function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
@@ -2120,33 +2159,59 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
         if (req.method === "GET") {
           if (url.searchParams.get("activeAgents")) {
             const settings = loadBlumeSettings();
-            const gamePlaceId = settings.activeGamePlaceId
-              ? Number(settings.activeGamePlaceId)
-              : null;
-            const agentGroupIds = AGENT_GROUPS.map((g) => g.id);
-            const all = loadGroupScanDb();
-            const candidates = all.filter((m) =>
-              m.groupIds.some((id) => agentGroupIds.includes(id))
-            );
-            if (candidates.length === 0) {
+            const AGENT_SCAN_FRESH_MS = 15 * 60 * 1000;
+            const AGENT_SCAN_BATCH_CAP = 8;
+
+            const liveReport = loadServerPresence();
+            const livePlayers =
+              liveReport && Date.now() - liveReport.updatedAt < SERVER_PRESENCE_STALE_MS
+                ? liveReport.players
+                : [];
+
+            if (livePlayers.length === 0) {
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ agents: [], gamePlaceId: settings.activeGamePlaceId || null }));
               return;
             }
-            try {
-              const inGame = await findInGamePresence(candidates, gamePlaceId);
-              const agents = inGame.map((member) => ({
-                username: member.username,
-                role: AGENT_GROUPS.filter((g) => member.groupIds.includes(g.id))
+
+            let all = loadGroupScanDb();
+            const byId = new Map(all.map((m) => [m.userId, m]));
+
+            const stale = livePlayers
+              .filter((p) => {
+                const entry = byId.get(p.userId);
+                return !entry || Date.now() - entry.scannedAt >= AGENT_SCAN_FRESH_MS;
+              })
+              .sort((a, b) => (byId.get(a.userId)?.scannedAt || 0) - (byId.get(b.userId)?.scannedAt || 0))
+              .slice(0, AGENT_SCAN_BATCH_CAP);
+
+            for (const p of stale) {
+              try {
+                const entry = await scanMemberEntry(p.userId, p.username, all);
+                all = [...all.filter((m) => m.userId !== p.userId), entry];
+                byId.set(p.userId, entry);
+              } catch {
+                // Best-effort — try again on a later poll.
+              }
+            }
+            if (stale.length > 0) {
+              saveGroupScanDb(all);
+            }
+
+            const agentGroupIds = AGENT_GROUPS.map((g) => g.id);
+            const agents = livePlayers
+              .map((p) => byId.get(p.userId))
+              .filter((entry): entry is GroupScanEntry => !!entry)
+              .filter((entry) => entry.groupIds.some((id) => agentGroupIds.includes(id)))
+              .map((entry) => ({
+                username: entry.username,
+                role: AGENT_GROUPS.filter((g) => entry.groupIds.includes(g.id))
                   .map((g) => g.label)
                   .join(" / "),
               }));
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ agents, gamePlaceId: settings.activeGamePlaceId || null }));
-            } catch (err) {
-              res.statusCode = 500;
-              res.end("Couldn't reach Roblox's presence API: " + (err as Error).message);
-            }
+
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ agents, gamePlaceId: settings.activeGamePlaceId || null }));
             return;
           }
 
@@ -2183,24 +2248,8 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               return;
             }
 
-            const settings = loadBlumeSettings();
-            const gamePlaceId = settings.activeGamePlaceId
-              ? Number(settings.activeGamePlaceId)
-              : null;
-            if (scanCache.length === 0) {
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ users: [], live: false }));
-              return;
-            }
-            try {
-              const inGame = await findInGamePresence(scanCache, gamePlaceId);
-              const users = sortUsers(inGame.map((m) => tagMember(m.userId, m.username, m.avatarUrl)));
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ users, live: false }));
-            } catch (err) {
-              res.statusCode = 500;
-              res.end("Couldn't reach Roblox's presence API: " + (err as Error).message);
-            }
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ users: [], live: false }));
             return;
           }
 
@@ -2565,69 +2614,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 return;
               }
 
-              const resolved = await resolveRobloxUserId(userId);
-              const username = resolved?.username || existing?.username || userId;
-              const [avatarUrl, groupIds, friendsRawScan] = await Promise.all([
-                getRobloxAvatarUrl(userId),
-                getUserGroupIds(userId),
-                getRobloxFriends(userId),
-              ]);
-
-              const knownScanIds = new Set(all.map((m) => m.userId));
-              const friends = friendsRawScan
-                .filter((f) => f.userId !== userId && knownScanIds.has(f.userId))
-                .map((f) => ({ userId: f.userId, username: f.username }));
-
-              let customPlate: string | null = null;
-              try {
-                const playerRes = await fetch(`${READONLY_API}/player/${encodeURIComponent(userId)}`);
-                const playerText = await playerRes.text();
-                let playerData: any;
-                try {
-                  playerData = JSON.parse(playerText);
-                } catch {
-                  playerData = null;
-                }
-                if (playerRes.ok && playerData && !playerData.error) {
-                  customPlate = playerData.CustomPlate ?? null;
-                }
-              } catch {
-                // Best-effort.
-              }
-
-              let changed: GroupScanEntry["changed"] = null;
-              if (existing) {
-                const usernameChanged = existing.username !== username;
-                const oldGroupIds = new Set(existing.groupIds);
-                const newGroupIds = new Set(groupIds);
-                const groupsChanged =
-                  oldGroupIds.size !== newGroupIds.size ||
-                  [...newGroupIds].some((id) => !oldGroupIds.has(id));
-                const oldFriendIds = new Set((existing.friends || []).map((f) => f.userId));
-                const newFriendIds = new Set(friends.map((f) => f.userId));
-                const friendsChanged =
-                  oldFriendIds.size !== newFriendIds.size ||
-                  [...newFriendIds].some((id) => !oldFriendIds.has(id));
-                if (usernameChanged || groupsChanged || friendsChanged) {
-                  changed = {
-                    username: usernameChanged,
-                    groups: groupsChanged,
-                    friends: friendsChanged,
-                    at: Date.now(),
-                  };
-                }
-              }
-
-              const entry: GroupScanEntry = {
-                userId,
-                username,
-                avatarUrl,
-                customPlate,
-                groupIds,
-                friends,
-                scannedAt: Date.now(),
-                changed,
-              };
+              const entry = await scanMemberEntry(userId, undefined, all);
               const next = [...all.filter((m) => m.userId !== userId), entry];
               saveGroupScanDb(next);
               res.setHeader("Content-Type", "application/json");

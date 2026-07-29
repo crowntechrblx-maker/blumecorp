@@ -141,39 +141,81 @@ interface MonitoringPostEntry {
   deleted?: boolean;
 }
 
-// Shared by Active Users and the Surveillance Grid's in-game list: batches
-// candidates through Roblox's presence API (100 at a time, its own limit)
-// and returns whichever ones are actually in a game right now, optionally
-// narrowed to one specific game.
-async function findInGamePresence(
-  candidates: GroupScanEntry[],
-  gamePlaceId: number | null
-): Promise<GroupScanEntry[]> {
-  const inGame: GroupScanEntry[] = [];
-  for (let i = 0; i < candidates.length; i += 100) {
-    const batch = candidates.slice(i, i + 100);
-    const presRes = await fetch("https://presence.roblox.com/v1/presence/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...robloxHeaders() },
-      body: JSON.stringify({ userIds: batch.map((m) => Number(m.userId)) }),
-    });
-    if (!presRes.ok) continue;
-    const data = (await presRes.json()) as {
-      userPresences?: {
-        userId?: number;
-        userPresenceType?: number;
-        rootPlaceId?: number;
-        placeId?: number;
-      }[];
-    };
-    for (const p of data.userPresences || []) {
-      if (p.userPresenceType !== 2) continue; // 2 = actually in a game
-      if (gamePlaceId && p.rootPlaceId !== gamePlaceId && p.placeId !== gamePlaceId) continue;
-      const member = batch.find((m) => Number(m.userId) === p.userId);
-      if (member) inGame.push(member);
+// Shared by the manual "scanMember" action and Active Field Agents' own
+// auto-scan of Luke's live roster below — resolves one Roblox user's
+// current username/avatar/groups/friends/plate and returns a fresh cache
+// entry. Doesn't touch KV itself; callers merge the result into
+// blumeGroupScanCache themselves (so the auto-scan path can batch several
+// writes into one kv.set instead of one per member).
+async function scanMemberEntry(
+  userId: string,
+  usernameHint: string | undefined,
+  allEntries: GroupScanEntry[]
+): Promise<GroupScanEntry> {
+  const existing = allEntries.find((m) => m.userId === userId);
+  const resolved = await resolveRobloxUserId(userId);
+  const username = resolved?.username || existing?.username || usernameHint || userId;
+  const [avatarUrl, groupIds, friendsRaw] = await Promise.all([
+    getRobloxAvatarUrl(userId),
+    getUserGroupIds(userId),
+    getRobloxFriends(userId),
+  ]);
+
+  // Only keep friends who've ALSO already been through a group scan — never
+  // a friend we've never otherwise encountered.
+  const knownScanIds = new Set(allEntries.map((m) => m.userId));
+  const friends = friendsRaw
+    .filter((f) => f.userId !== userId && knownScanIds.has(f.userId))
+    .map((f) => ({ userId: f.userId, username: f.username }));
+
+  let customPlate: string | null = null;
+  try {
+    const playerRes = await fetch(`${READONLY_API}/player/${encodeURIComponent(userId)}`);
+    const playerText = await playerRes.text();
+    let playerData: any;
+    try {
+      playerData = JSON.parse(playerText);
+    } catch {
+      playerData = null;
+    }
+    if (playerRes.ok && playerData && !playerData.error) {
+      customPlate = playerData.CustomPlate ?? null;
+    }
+  } catch {
+    // Best-effort — a scan that can't reach the records API still logs
+    // groups + photo rather than failing the whole member.
+  }
+
+  // Compare against whatever we had on file before, so a re-scan can flag
+  // exactly what changed (surfaced later on Person Search).
+  let changed: GroupScanEntry["changed"] = null;
+  if (existing) {
+    const usernameChanged = existing.username !== username;
+    const oldGroupIds = new Set(existing.groupIds);
+    const newGroupIds = new Set(groupIds);
+    const groupsChanged =
+      oldGroupIds.size !== newGroupIds.size ||
+      [...newGroupIds].some((id) => !oldGroupIds.has(id));
+    const oldFriendIds = new Set((existing.friends || []).map((f) => f.userId));
+    const newFriendIds = new Set(friends.map((f) => f.userId));
+    const friendsChanged =
+      oldFriendIds.size !== newFriendIds.size ||
+      [...newFriendIds].some((id) => !oldFriendIds.has(id));
+    if (usernameChanged || groupsChanged || friendsChanged) {
+      changed = { username: usernameChanged, groups: groupsChanged, friends: friendsChanged, at: Date.now() };
     }
   }
-  return inGame;
+
+  return {
+    userId,
+    username,
+    avatarUrl,
+    customPlate,
+    groupIds,
+    friends,
+    scannedAt: Date.now(),
+    changed,
+  };
 }
 
 // This endpoint doubles up on both Person Search and its vehicle tagging
@@ -226,35 +268,74 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "GET") {
-    // Active Field Agents: of everyone we've ever scanned into the group
-    // cache who belongs to CIA/MI5/MI6/ROCU, which ones does Roblox's
-    // presence API say are actually in a game right now. Only covers people
-    // who've been swept up by a Group Search scan of one of those groups —
-    // it can't see members it's never encountered.
+    // Active Field Agents: of everyone currently in Luke's live server
+    // roster, which ones belong to CIA/MI5/MI6/ROCU. Since the roster is
+    // already a confirmed real in-game player list, there's no presence-API
+    // check needed here anymore — the only work left is knowing each live
+    // player's current groups, which means keeping their group-scan cache
+    // entry fresh. A 15-minute freshness window (much shorter than the 6h
+    // one manual scans reuse elsewhere) keeps that current without
+    // re-scanning someone who was just checked a minute ago. Re-scans are
+    // capped per request so a big batch of never-seen-before players can't
+    // blow past Vercel's execution time limit — leftover stale entries just
+    // get picked up on the next poll (client polls every 20s).
     if (req.query.activeAgents) {
       const settings = await loadBlumeSettings();
-      const gamePlaceId = settings.activeGamePlaceId
-        ? Number(settings.activeGamePlaceId)
-        : null;
-      const agentGroupIds = AGENT_GROUPS.map((g) => g.id);
-      const all = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
-      const candidates = all.filter((m) => m.groupIds.some((id) => agentGroupIds.includes(id)));
-      if (candidates.length === 0) {
+      const AGENT_SCAN_FRESH_MS = 15 * 60 * 1000;
+      const AGENT_SCAN_BATCH_CAP = 8;
+
+      const liveReport = await kv.get<ServerPresenceReport>("blumeServerPresence");
+      const livePlayers =
+        liveReport && Date.now() - liveReport.updatedAt < SERVER_PRESENCE_STALE_MS
+          ? liveReport.players
+          : [];
+
+      if (livePlayers.length === 0) {
         res.status(200).json({ agents: [], gamePlaceId: settings.activeGamePlaceId || null });
         return;
       }
-      try {
-        const inGame = await findInGamePresence(candidates, gamePlaceId);
-        const agents = inGame.map((member) => ({
-          username: member.username,
-          role: AGENT_GROUPS.filter((g) => member.groupIds.includes(g.id))
+
+      let all = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
+      const byId = new Map(all.map((m) => [m.userId, m]));
+
+      // Never-scanned/oldest-scanned first, so a big influx of new players
+      // catches up over a few polls instead of the same few always winning
+      // the batch cap.
+      const stale = livePlayers
+        .filter((p) => {
+          const entry = byId.get(p.userId);
+          return !entry || Date.now() - entry.scannedAt >= AGENT_SCAN_FRESH_MS;
+        })
+        .sort((a, b) => (byId.get(a.userId)?.scannedAt || 0) - (byId.get(b.userId)?.scannedAt || 0))
+        .slice(0, AGENT_SCAN_BATCH_CAP);
+
+      for (const p of stale) {
+        try {
+          const entry = await scanMemberEntry(p.userId, p.username, all);
+          all = [...all.filter((m) => m.userId !== p.userId), entry];
+          byId.set(p.userId, entry);
+        } catch {
+          // Best-effort — leave whatever's cached (or nothing) for this
+          // player and try again on a later poll.
+        }
+      }
+      if (stale.length > 0) {
+        await kv.set("blumeGroupScanCache", all);
+      }
+
+      const agentGroupIds = AGENT_GROUPS.map((g) => g.id);
+      const agents = livePlayers
+        .map((p) => byId.get(p.userId))
+        .filter((entry): entry is GroupScanEntry => !!entry)
+        .filter((entry) => entry.groupIds.some((id) => agentGroupIds.includes(id)))
+        .map((entry) => ({
+          username: entry.username,
+          role: AGENT_GROUPS.filter((g) => entry.groupIds.includes(g.id))
             .map((g) => g.label)
             .join(" / "),
         }));
-        res.status(200).json({ agents, gamePlaceId: settings.activeGamePlaceId || null });
-      } catch (err) {
-        res.status(500).send("Couldn't reach Roblox's presence API: " + (err as Error).message);
-      }
+
+      res.status(200).json({ agents, gamePlaceId: settings.activeGamePlaceId || null });
       return;
     }
 
@@ -690,69 +771,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return;
         }
 
-        const resolved = await resolveRobloxUserId(userId);
-        const username = resolved?.username || existing?.username || userId;
-        const [avatarUrl, groupIds, friendsRaw] = await Promise.all([
-          getRobloxAvatarUrl(userId),
-          getUserGroupIds(userId),
-          getRobloxFriends(userId),
-        ]);
-
-        // Only keep friends who've ALSO already been through a group scan —
-        // never a friend we've never otherwise encountered.
-        const knownScanIds = new Set(all.map((m) => m.userId));
-        const friends = friendsRaw
-          .filter((f) => f.userId !== userId && knownScanIds.has(f.userId))
-          .map((f) => ({ userId: f.userId, username: f.username }));
-
-        let customPlate: string | null = null;
-        try {
-          const playerRes = await fetch(`${READONLY_API}/player/${encodeURIComponent(userId)}`);
-          const playerText = await playerRes.text();
-          let playerData: any;
-          try {
-            playerData = JSON.parse(playerText);
-          } catch {
-            playerData = null;
-          }
-          if (playerRes.ok && playerData && !playerData.error) {
-            customPlate = playerData.CustomPlate ?? null;
-          }
-        } catch {
-          // Best-effort — a scan that can't reach the records API still logs
-          // groups + photo rather than failing the whole member.
-        }
-
-        // Compare against whatever we had on file before, so a re-scan can
-        // flag exactly what changed (surfaced later on Person Search).
-        let changed: GroupScanEntry["changed"] = null;
-        if (existing) {
-          const usernameChanged = existing.username !== username;
-          const oldGroupIds = new Set(existing.groupIds);
-          const newGroupIds = new Set(groupIds);
-          const groupsChanged =
-            oldGroupIds.size !== newGroupIds.size ||
-            [...newGroupIds].some((id) => !oldGroupIds.has(id));
-          const oldFriendIds = new Set((existing.friends || []).map((f) => f.userId));
-          const newFriendIds = new Set(friends.map((f) => f.userId));
-          const friendsChanged =
-            oldFriendIds.size !== newFriendIds.size ||
-            [...newFriendIds].some((id) => !oldFriendIds.has(id));
-          if (usernameChanged || groupsChanged || friendsChanged) {
-            changed = { username: usernameChanged, groups: groupsChanged, friends: friendsChanged, at: Date.now() };
-          }
-        }
-
-        const entry: GroupScanEntry = {
-          userId,
-          username,
-          avatarUrl,
-          customPlate,
-          groupIds,
-          friends,
-          scannedAt: Date.now(),
-          changed,
-        };
+        const entry = await scanMemberEntry(userId, undefined, all);
         const next = [...all.filter((m) => m.userId !== userId), entry];
         await kv.set("blumeGroupScanCache", next);
         res.status(200).json({ entry, skipped: false });
