@@ -185,7 +185,7 @@ export const PERSON_SEARCH_GROUPS: Record<number, { name: string; tier: "red" | 
   10742221: { name: "G-Block", tier: "red" },
   223035360: { name: "Shadow District", tier: "red" },
   679403020: { name: "Harakat", tier: "red" },
-  16684944: { name: "Kinshahan", tier: "red" },
+  16684944: { name: "National Liberation Movement", tier: "red" },
   34067916: { name: "CHS", tier: "red" },
   541807: { name: "UK | United Kingdom", tier: "red" },
   14641286: { name: "TUI Airways | Roblox", tier: "red" },

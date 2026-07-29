@@ -61,6 +61,7 @@ interface PersonSearchResult {
   knownFriends: KnownFriend[];
   groupScanChange: GroupScanChange | null;
   apiError: string | null;
+  lastSeenOnlineAt: number | null;
 }
 
 interface HistorySnapshot {
@@ -88,6 +89,17 @@ function formatClockTime(ts: number): string {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
+}
+
+function formatLastOnline(ts: number): string {
+  const diffMs = Math.max(0, Date.now() - ts);
+  const hours = Math.floor(diffMs / (60 * 60 * 1000));
+  if (hours < 24) {
+    const h = Math.max(hours, 1);
+    return `${h} hour${h === 1 ? "" : "s"} ago`;
+  }
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 const ARREST_SHOWN_CAP = 5;
@@ -1491,18 +1503,30 @@ export function BlumeApp({
                       <img className="blume-person-photo" src={personResult.avatarUrl} alt="" />
                     )}
                     <div>
-                      <strong
-                        className="blume-person-name blume-clickable-username"
-                        title="Click to copy username"
-                        onClick={() => handleCopyUsername(personResult.username)}
-                      >
-                        {personResult.username}
-                        {usernameCopied && <span className="blume-copied-tag">Copied</span>}
-                        {inGameUsers.some(
+                      {(() => {
+                        const isPersonActive = inGameUsers.some(
                           (u) => u.username.toLowerCase() === personResult.username.toLowerCase()
-                        ) && <span className="blume-person-active-tag">ACTIVE</span>}
-                      </strong>
-                      <span className="blume-person-id">ID {personResult.userId}</span>
+                        );
+                        return (
+                          <>
+                            <strong
+                              className="blume-person-name blume-clickable-username"
+                              title="Click to copy username"
+                              onClick={() => handleCopyUsername(personResult.username)}
+                            >
+                              {personResult.username}
+                              {usernameCopied && <span className="blume-copied-tag">Copied</span>}
+                              {isPersonActive && <span className="blume-person-active-tag">ACTIVE</span>}
+                            </strong>
+                            <span className="blume-person-id">ID {personResult.userId}</span>
+                            {!isPersonActive && personResult.lastSeenOnlineAt && (
+                              <span className="blume-person-last-online">
+                                Last online {formatLastOnline(personResult.lastSeenOnlineAt)}
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
 

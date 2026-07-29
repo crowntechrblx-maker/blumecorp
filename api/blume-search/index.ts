@@ -46,6 +46,7 @@ interface GroupScanEntry {
   friends: { userId: string; username: string }[];
   scannedAt: number;
   changed?: { username: boolean; groups: boolean; friends: boolean; at: number } | null;
+  lastSeenOnlineAt?: number;
 }
 
 interface CustomGroup {
@@ -224,6 +225,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.query.activeAgents) {
       const AGENT_SCAN_FRESH_MS = 10 * 60 * 1000;
       const AGENT_SCAN_BATCH_CAP = 8;
+      const ONLINE_TOUCH_MIN_GAP_MS = 5 * 60 * 1000;
 
       const liveReport = await kv.get<ServerPresenceReport>("blumeServerPresence");
       const livePlayers =
@@ -247,15 +249,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .sort((a, b) => (byId.get(a.userId)?.scannedAt || 0) - (byId.get(b.userId)?.scannedAt || 0))
         .slice(0, AGENT_SCAN_BATCH_CAP);
 
+      let changed = false;
       for (const p of stale) {
         try {
           const entry = await scanMemberEntry(p.userId, p.username, all);
           all = [...all.filter((m) => m.userId !== p.userId), entry];
           byId.set(p.userId, entry);
+          changed = true;
         } catch {
         }
       }
-      if (stale.length > 0) {
+
+      const now = Date.now();
+      for (const p of livePlayers) {
+        const entry = byId.get(p.userId);
+        if (entry && (!entry.lastSeenOnlineAt || now - entry.lastSeenOnlineAt >= ONLINE_TOUCH_MIN_GAP_MS)) {
+          entry.lastSeenOnlineAt = now;
+          changed = true;
+        }
+      }
+
+      if (changed) {
         await kv.set("blumeGroupScanCache", all);
       }
 
@@ -585,6 +599,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       knownFriends,
       groupScanChange,
       apiError,
+      lastSeenOnlineAt: scanByUserId.get(userId)?.lastSeenOnlineAt || null,
     });
     return;
   }

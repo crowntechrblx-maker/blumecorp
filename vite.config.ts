@@ -158,7 +158,7 @@ const PERSON_SEARCH_GROUPS: Record<number, { name: string; tier: "red" | "white"
   10742221: { name: "G-Block", tier: "red" },
   223035360: { name: "Shadow District", tier: "red" },
   679403020: { name: "Harakat", tier: "red" },
-  16684944: { name: "Kinshahan", tier: "red" },
+  16684944: { name: "National Liberation Movement", tier: "red" },
   34067916: { name: "CHS", tier: "red" },
   541807: { name: "UK | United Kingdom", tier: "red" },
   14641286: { name: "TUI Airways | Roblox", tier: "red" },
@@ -1917,6 +1917,7 @@ interface GroupScanEntry {
   friends: { userId: string; username: string }[];
   scannedAt: number;
   changed?: { username: boolean; groups: boolean; friends: boolean; at: number } | null;
+  lastSeenOnlineAt?: number;
 }
 
 interface CustomGroup {
@@ -2129,6 +2130,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           if (url.searchParams.get("activeAgents")) {
             const AGENT_SCAN_FRESH_MS = 10 * 60 * 1000;
             const AGENT_SCAN_BATCH_CAP = 8;
+            const ONLINE_TOUCH_MIN_GAP_MS = 5 * 60 * 1000;
 
             const liveReport = loadServerPresence();
             const livePlayers =
@@ -2153,15 +2155,27 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               .sort((a, b) => (byId.get(a.userId)?.scannedAt || 0) - (byId.get(b.userId)?.scannedAt || 0))
               .slice(0, AGENT_SCAN_BATCH_CAP);
 
+            let changed = false;
             for (const p of stale) {
               try {
                 const entry = await scanMemberEntry(p.userId, p.username, all);
                 all = [...all.filter((m) => m.userId !== p.userId), entry];
                 byId.set(p.userId, entry);
+                changed = true;
               } catch {
               }
             }
-            if (stale.length > 0) {
+
+            const now = Date.now();
+            for (const p of livePlayers) {
+              const entry = byId.get(p.userId);
+              if (entry && (!entry.lastSeenOnlineAt || now - entry.lastSeenOnlineAt >= ONLINE_TOUCH_MIN_GAP_MS)) {
+                entry.lastSeenOnlineAt = now;
+                changed = true;
+              }
+            }
+
+            if (changed) {
               saveGroupScanDb(all);
             }
 
@@ -2493,6 +2507,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               knownFriends,
               groupScanChange,
               apiError,
+              lastSeenOnlineAt: scanByUserId.get(userId)?.lastSeenOnlineAt || null,
             })
           );
           return;
