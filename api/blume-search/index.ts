@@ -5,7 +5,6 @@ import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
 import {
   isBlumeAuthorized,
-  isBlumeSuperUser,
   isPlatformAdmin,
   getRobloxAvatarUrl,
   getUserGroupIds,
@@ -81,14 +80,6 @@ const AGENT_GROUPS: { id: number; label: string }[] = [
   { id: 685466511, label: "MI6" },
   { id: 315987361, label: "ROCU" },
 ];
-
-interface BlumeSettings {
-  activeGamePlaceId?: string;
-}
-
-async function loadBlumeSettings(): Promise<BlumeSettings> {
-  return (await kv.get<BlumeSettings>("blumeSettings")) || {};
-}
 
 interface ServerPresenceReport {
   placeId: string | null;
@@ -231,7 +222,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "GET") {
     if (req.query.activeAgents) {
-      const settings = await loadBlumeSettings();
       const AGENT_SCAN_FRESH_MS = 10 * 60 * 1000;
       const AGENT_SCAN_BATCH_CAP = 8;
 
@@ -242,7 +232,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           : [];
 
       if (livePlayers.length === 0) {
-        res.status(200).json({ agents: [], gamePlaceId: settings.activeGamePlaceId || null });
+        res.status(200).json({ agents: [] });
         return;
       }
 
@@ -281,7 +271,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .join(" / "),
         }));
 
-      res.status(200).json({ agents, gamePlaceId: settings.activeGamePlaceId || null });
+      res.status(200).json({ agents });
       return;
     }
 
@@ -642,23 +632,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           detail: `Added ${groupTier} group "${groupName}" (${groupId})`,
         });
         res.status(200).json({ group: { id: groupId, name: groupName, tier: groupTier } });
-        return;
-      }
-
-      if (action === "setActiveGamePlaceId") {
-        if (!isBlumeSuperUser(session.userId)) {
-          res.status(403).send("Only Blume operators can change this.");
-          return;
-        }
-        const placeId = (body.placeId || "").toString().trim();
-        if (placeId && !/^\d+$/.test(placeId)) {
-          res.status(400).send("Place ID must be numeric (or blank to clear it).");
-          return;
-        }
-        const settings = await loadBlumeSettings();
-        settings.activeGamePlaceId = placeId || undefined;
-        await kv.set("blumeSettings", settings);
-        res.status(200).json({ activeGamePlaceId: settings.activeGamePlaceId || null });
         return;
       }
 

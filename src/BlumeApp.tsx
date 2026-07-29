@@ -385,11 +385,6 @@ export function BlumeApp({
     { username: string; avatarUrl: string | null; redGroupName: string | null; role: string | null }[]
   >([]);
   const [inGameLive, setInGameLive] = useState(false);
-  const [gamePlaceId, setGamePlaceId] = useState<string | null>(null);
-  const [showPlaceIdForm, setShowPlaceIdForm] = useState(false);
-  const [placeIdInput, setPlaceIdInput] = useState("");
-  const [savingPlaceId, setSavingPlaceId] = useState(false);
-  const { error: placeIdError, fading: placeIdFading, setError: setPlaceIdError } = useFadingError();
 
   const [reports, setReports] = useState<BlumeReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
@@ -489,33 +484,8 @@ export function BlumeApp({
 
   async function loadActiveAgents() {
     try {
-      const res = await fetch("/api/blume-search?activeAgents=1");
-      if (!res.ok) return;
-      const data = await res.json();
-      setGamePlaceId(data.gamePlaceId || null);
+      await fetch("/api/blume-search?activeAgents=1");
     } catch {
-    }
-  }
-
-  async function handleSavePlaceId() {
-    setSavingPlaceId(true);
-    setPlaceIdError(null);
-    try {
-      const res = await fetch("/api/blume-search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "setActiveGamePlaceId", placeId: placeIdInput.trim() }),
-      });
-      if (!res.ok) {
-        setPlaceIdError(await res.text());
-        return;
-      }
-      const data = await res.json();
-      setGamePlaceId(data.activeGamePlaceId || null);
-      setShowPlaceIdForm(false);
-      await loadActiveAgents();
-    } finally {
-      setSavingPlaceId(false);
     }
   }
 
@@ -1214,36 +1184,6 @@ export function BlumeApp({
           <div className="blume-active-strip">
             <div className="blume-active-label-group">
               <img className="blume-active-brand-mark" src="/blume-logo.png" alt="" />
-              {canEditBlog && (
-                <button
-                  className="blume-active-config-btn"
-                  title="Set game ID"
-                  onClick={() => {
-                    setPlaceIdInput(gamePlaceId || "");
-                    setShowPlaceIdForm((s) => !s);
-                  }}
-                >
-                  +
-                </button>
-              )}
-              {showPlaceIdForm && (
-                <div className="blume-active-config-form">
-                  <input
-                    placeholder="Game (place) ID…"
-                    value={placeIdInput}
-                    onChange={(e) => setPlaceIdInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !savingPlaceId) handleSavePlaceId();
-                    }}
-                  />
-                  <button className="blume-cta-btn" disabled={savingPlaceId} onClick={handleSavePlaceId}>
-                    {savingPlaceId ? "Saving…" : "Save"}
-                  </button>
-                  {placeIdError && (
-                    <p className={`blume-error${placeIdFading ? " fading-out" : ""}`}>{placeIdError}</p>
-                  )}
-                </div>
-              )}
             </div>
             <button className="blume-btn-login blume-btn-login-ghost blume-logout-btn" onClick={handleLogout}>
               LOGOUT

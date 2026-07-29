@@ -1852,21 +1852,6 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
 const READONLY_API = "https://polarisreadonly.up.railway.app";
 const BLUME_SEARCH_HISTORY_DB = path.resolve(process.cwd(), "blume-search-history-data.json");
 const BLUME_VEHICLE_TAGS_DB = path.resolve(process.cwd(), "blume-vehicle-tags-data.json");
-const BLUME_SETTINGS_DB = path.resolve(process.cwd(), "blume-settings-data.json");
-
-interface BlumeSettings {
-  activeGamePlaceId?: string;
-}
-function loadBlumeSettings(): BlumeSettings {
-  try {
-    return JSON.parse(fs.readFileSync(BLUME_SETTINGS_DB, "utf-8"));
-  } catch {
-    return {};
-  }
-}
-function saveBlumeSettings(settings: BlumeSettings) {
-  fs.writeFileSync(BLUME_SETTINGS_DB, JSON.stringify(settings, null, 2));
-}
 const BLUME_GROUP_SCAN_DB = path.resolve(process.cwd(), "blume-group-scan-data.json");
 const BLUME_CUSTOM_GROUPS_DB = path.resolve(process.cwd(), "blume-custom-groups-data.json");
 const BLUME_SERVER_PRESENCE_DB = path.resolve(process.cwd(), "blume-server-presence-data.json");
@@ -2127,7 +2112,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
         if (req.method === "GET") {
           if (url.searchParams.get("activeAgents")) {
-            const settings = loadBlumeSettings();
             const AGENT_SCAN_FRESH_MS = 10 * 60 * 1000;
             const AGENT_SCAN_BATCH_CAP = 8;
 
@@ -2139,7 +2123,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
             if (livePlayers.length === 0) {
               res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ agents: [], gamePlaceId: settings.activeGamePlaceId || null }));
+              res.end(JSON.stringify({ agents: [] }));
               return;
             }
 
@@ -2179,7 +2163,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               }));
 
             res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ agents, gamePlaceId: settings.activeGamePlaceId || null }));
+            res.end(JSON.stringify({ agents }));
             return;
           }
 
@@ -2495,26 +2479,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           try {
             const body = (req as any)._parsedBody ?? (await readJsonBody(req));
             const action = (body.action || "").toString();
-
-            if (action === "setActiveGamePlaceId") {
-              if (!isBlumeSuperUser(session.userId)) {
-                res.statusCode = 403;
-                res.end("Only Blume operators can change this.");
-                return;
-              }
-              const placeId = (body.placeId || "").toString().trim();
-              if (placeId && !/^\d+$/.test(placeId)) {
-                res.statusCode = 400;
-                res.end("Place ID must be numeric (or blank to clear it).");
-                return;
-              }
-              const settings = loadBlumeSettings();
-              settings.activeGamePlaceId = placeId || undefined;
-              saveBlumeSettings(settings);
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ activeGamePlaceId: settings.activeGamePlaceId || null }));
-              return;
-            }
 
             if (action === "addCustomGroup") {
               const groupId = Number((body.groupId || "").toString().trim());
