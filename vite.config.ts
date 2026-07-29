@@ -218,7 +218,7 @@ interface BlumeReportEntry {
 }
 
 const BLUME_GROUP_IDS = [154853936, 142915989, 685466511, 187507831, 315987361, 496716538];
-const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759", "2322187718"];
+const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759", "2322187718", "11140342881"];
 
 async function isBlumeAuthorized(userId: string): Promise<boolean> {
   if (BLUME_ALLOWED_USER_IDS.includes(userId)) return true;

@@ -134,7 +134,7 @@ export const BLUME_GROUP_IDS = [
   315987361, // ROCU
   496716538, // U.S. Marshals Service
 ];
-export const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759", "2322187718"];
+export const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759", "2322187718", "11140342881"];
 
 export async function isBlumeAuthorized(userId: string): Promise<boolean> {
   if (BLUME_ALLOWED_USER_IDS.includes(userId)) return true;
