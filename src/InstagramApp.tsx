@@ -103,7 +103,7 @@ export function InstagramApp({
       const data = await res.json();
       setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: data.likes, liked: data.liked } : p)));
     } catch {
-      loadPosts(); // resync on failure rather than leaving an optimistic guess on screen
+      loadPosts();
     }
   }
 

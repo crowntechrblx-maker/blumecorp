@@ -10,7 +10,6 @@
   user-select: none;
 }
 
-/* Global new-message toast — sits above every window and the menu bar */
 .message-toast {
   position: fixed;
   top: 40px;
@@ -20,8 +19,6 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  /* Matches the menu bar's translucent glass look — a touch more opaque so
-     the black text underneath stays legible over any wallpaper. */
   background: rgba(255, 255, 255, 0.78);
   border: 1px solid rgba(0, 0, 0, 0.06);
   color: #1c1c1e;
@@ -43,7 +40,6 @@
   font-size: 16px;
 }
 
-/* Menu bar */
 .menubar {
   position: absolute;
   top: 0;
@@ -81,14 +77,6 @@
   opacity: 0.85;
 }
 
-/* Desktop icons — Mac-style: first column anchored to the right edge,
-   holding up to 8 icons; any overflow starts a new column to the LEFT of
-   it (row-reverse below), never spilling toward the menu bar clock.
-   `top` and `height` are set inline from App.tsx: the block is sized to
-   its real content height and centered in the reserved area, so the gap
-   above the top icons matches the gap below the bottom icons, while
-   align-items: flex-start below keeps every column's first icon flush
-   with the others (no per-column centering). */
 .desktop-icons {
   position: absolute;
   right: 18px;
@@ -107,9 +95,6 @@
 .desktop-icon {
   width: 84px;
   height: 88px;
-  /* Never let flex shrink these to fit — the column count in App.tsx is
-     already calculated to fit the screen at full size, so a shrunk icon
-     here would mean that math is wrong, not that squishing is the fix. */
   flex-shrink: 0;
   background: transparent;
   border: none;
@@ -142,9 +127,6 @@
   object-fit: contain;
 }
 .desktop-icon-glyph-image-full {
-  /* For icons that are already a complete image (their own background
-     baked in — Instagram, Messages, Settings, Backgrounds) rather than a
-     logo that needs a colour badge behind it. */
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -162,7 +144,6 @@
   overflow: hidden;
 }
 
-/* Windows */
 .window {
   position: absolute;
   background: #f2f1ee;
@@ -257,7 +238,6 @@
   background: #fff;
 }
 
-/* Generic app content */
 .app-content {
   padding: 18px 20px;
   font-size: 14px;
@@ -307,7 +287,6 @@
   margin-top: 14px;
 }
 
-/* TfL */
 .section h3 {
   margin: 0 0 8px;
   font-size: 14px;
@@ -370,7 +349,6 @@
   color: #0a8a3f;
 }
 
-/* Uber */
 .uber-not-ready {
   margin-top: 14px;
   padding: 12px 14px;
@@ -381,8 +359,6 @@
   line-height: 1.5;
 }
 
-/* Uber launch splash — brief animated black wordmark before the real
-   "Where to?" screen appears, echoing Uber's own app launch animation. */
 .uber-splash {
   display: flex;
   align-items: center;
@@ -421,7 +397,6 @@
   }
 }
 
-/* Swift Corporate */
 .stat-row {
   display: flex;
   gap: 12px;
@@ -444,13 +419,11 @@
   color: #666;
 }
 
-/* Shared marketing-style app content (Swift Corporate, C&M Rolls) */
 .app-content-cta-link {
   text-decoration: none;
   display: block;
 }
 
-/* ---------- C&M Rolls: traditional/elegant law-firm styling ---------- */
 .rolls-app {
   height: 100%;
   overflow-y: auto;
@@ -655,7 +628,6 @@
   margin: 0 0 18px;
 }
 
-/* ---------- Swift Corporate: modern/clean corporate styling ---------- */
 .swift-app {
   height: 100%;
   overflow-y: auto;
@@ -861,9 +833,6 @@
   margin: 0 0 18px;
 }
 
-/* Royal Family — styled after royal.uk: white ground, black serif
-   headlines, thin hairline rules, uppercase tracked labels, a dramatic
-   full-bleed hero photo with a dark gradient and centered serif title. */
 .app-content.royal {
   padding: 0;
   background: #fff;
@@ -1047,12 +1016,6 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
-  /* Grid stretch alone only matches heights within a single row, so
-     enlarging the window could leave row 1 and row 2 sized differently
-     from each other. aspect-ratio on the cards below fixes every card to
-     the same height (scaled to the current column width) across the
-     whole grid, not just row by row, so they all grow together when the
-     window is resized. */
   align-items: stretch;
 }
 .royal-tweet-item {
@@ -1062,18 +1025,9 @@
   aspect-ratio: 4 / 5;
   border-bottom: 1px solid #e5e5e7;
   padding-bottom: 12px;
-  /* The X embed widget has its own internal min-width and will overflow
-     a narrow grid column rather than shrink — clip it instead of letting
-     it blow out the 2-column layout. Also clips embed content taller
-     than the fixed aspect-ratio card, which is the trade-off for every
-     card being the same size. */
   overflow: hidden;
 }
 .royal-tweet-item .tweet-embed {
-  /* Takes up the space above the footer/divider, then centers the
-     embed's actual rendered content (whatever height X's iframe ends up
-     being) within that space, so short and tall posts alike sit centered
-     against the divider line rather than pinned to the top. */
   flex: 1;
   display: flex;
   align-items: center;
@@ -1114,7 +1068,6 @@
   color: #000;
 }
 
-/* Blume */
 .window-body-dark {
   background: #f6f7f9;
 }
@@ -1165,7 +1118,6 @@
   opacity: 0.9;
 }
 
-/* Grain texture */
 .blume-grain {
   position: absolute;
   inset: 0;
@@ -1176,8 +1128,6 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* Navbar — sits on top of the hero (absolute, not in flow) so the
-   backdrop-filter actually has hero content behind it to blur. */
 .blume-navbar {
   position: absolute;
   top: 0;
@@ -1258,7 +1208,6 @@
   z-index: 1;
 }
 
-/* Hero */
 .blume-hero {
   position: relative;
   min-height: 100%;
@@ -1281,7 +1230,6 @@
   border-radius: 50%;
   background: radial-gradient(circle, #fff 0%, transparent 70%);
 }
-/* Cycling hero photo background, once images are added to HERO_IMAGES. */
 .blume-hero-bg {
   position: absolute;
   inset: 0;
@@ -1376,9 +1324,6 @@
   }
 }
 
-/* Marquee — driven by rAF in JS (measured against the real rendered width
-   every frame) rather than a CSS keyframe, so it can't gap or jump when
-   fonts finish loading and the text's true width shifts. */
 .blume-marquee {
   background: var(--blume-navy-2);
   padding: 16px 0;
@@ -1390,11 +1335,6 @@
   display: flex;
   align-items: center;
   white-space: nowrap;
-  /* Grows to fit both copies of the list — .blume-marquee (the parent) is
-     what clips it via overflow: hidden, while BlumeMarquee's rAF loop
-     slides it left/right by animating `left`, not `transform` — see the
-     comment on BlumeMarquee for why. position: relative is what makes
-     `left` actually do anything here. */
   width: max-content;
   position: relative;
   color: var(--blume-mist-dim);
@@ -1423,7 +1363,6 @@
   content: none;
 }
 
-/* Shared sections */
 .blume-platform,
 .blume-industries,
 .blume-blog {
@@ -1448,7 +1387,6 @@
   margin: 0 auto;
 }
 
-/* Feature grid (Platform) */
 .blume-feature-grid {
   max-width: 900px;
   margin: 0 auto;
@@ -1481,7 +1419,6 @@
   margin: 0;
 }
 
-/* Showcase */
 .blume-showcase {
   background: var(--blume-navy-deep);
   display: grid;
@@ -1665,7 +1602,6 @@
   background: #e8a458;
 }
 
-/* Industries + blog grid */
 .blume-industry-grid {
   max-width: 900px;
   margin: 0 auto;
@@ -1694,7 +1630,6 @@
   margin: 0;
 }
 
-/* Blog */
 .blume-blog-form {
   display: flex;
   flex-direction: column;
@@ -1741,7 +1676,6 @@
   padding: 20px;
 }
 
-/* Approach */
 .blume-approach {
   background: var(--blume-navy);
   color: #fff;
@@ -1778,7 +1712,6 @@
   margin: 0;
 }
 
-/* Company CTA */
 .blume-cta {
   background: var(--blume-paper);
   text-align: center;
@@ -1799,7 +1732,6 @@
   margin: 0 0 22px;
 }
 
-/* Footer */
 .blume-footer {
   background: var(--blume-navy-deep);
   color: var(--blume-mist);
@@ -1868,7 +1800,6 @@
   color: var(--blume-mist-dim);
 }
 
-/* Scroll reveal */
 .blume-reveal {
   opacity: 0;
   transform: translateY(16px);
@@ -1899,7 +1830,6 @@
   }
 }
 
-/* ============ Ops dashboard (post-login) ============ */
 .blume-dashboard {
   flex: 1;
   display: flex;
@@ -2070,9 +2000,6 @@
   flex-shrink: 0;
 }
 .blume-panel-header-toggle {
-  /* `all: unset` wipes out .blume-panel-header's margin-bottom too (same
-     specificity, later rule wins), which is why the title used to butt
-     right up against the panel's content — restated explicitly below. */
   all: unset;
   box-sizing: border-box;
   width: 100%;
@@ -2282,8 +2209,6 @@
   padding: 1px 6px;
   border-radius: 999px;
 }
-/* Same shape as the red-group tag, but neutral — for an agent's role
-   (CIA/MI5/MI6/ROCU) rather than a red-tier group flag. */
 .blume-ingame-role {
   font-size: 10px;
   color: var(--blume-accent, #9fc7ec);
@@ -2402,9 +2327,6 @@
   align-items: center;
   gap: 8px;
 }
-/* Shared by in-game usernames (jump to Person Search) and the Person
-   Search result name (copy to clipboard) — underline only on hover so it
-   doesn't look like a permanent link. */
 .blume-clickable-username {
   cursor: pointer;
 }
@@ -2585,8 +2507,6 @@
   object-fit: cover;
   background: rgba(255, 255, 255, 0.06);
 }
-/* Panel context (Field Activity) is narrower than the top strip, so let
-   agent chips wrap instead of overflowing horizontally. */
 .blume-map-panel .blume-active-list {
   flex-wrap: wrap;
 }
@@ -2711,7 +2631,6 @@
   color: #9aa1ad;
 }
 
-/* Instagram */
 .instagram {
   display: flex;
   flex-direction: column;
@@ -2867,7 +2786,6 @@
   background: rgba(56, 151, 240, 0.18);
 }
 
-/* Messages */
 .messages {
   display: flex;
   flex-direction: column;
@@ -3004,7 +2922,6 @@
   flex-shrink: 0;
 }
 
-/* Tweet embed */
 .tweet-embed {
   max-width: 100%;
   overflow: hidden;
@@ -3023,7 +2940,6 @@
   color: #fff;
 }
 
-/* Boot / login screens */
 .boot-screen {
   width: 100vw;
   height: 100vh;
@@ -3252,7 +3168,6 @@
   }
 }
 
-/* Backgrounds app */
 .backgrounds {
   display: flex;
   flex-direction: column;
@@ -3429,7 +3344,6 @@
   text-decoration: underline;
 }
 
-/* Avatar */
 .avatar-img {
   border-radius: 50%;
   object-fit: cover;
@@ -3440,7 +3354,6 @@
   background: #c7c7cc;
 }
 
-/* Custom file picker button */
 .file-button-wrap {
   display: flex;
   align-items: center;
@@ -3502,7 +3415,6 @@
   flex-shrink: 0;
 }
 
-/* Settings (admin) */
 .settings-section {
   margin-top: 20px;
 }

@@ -95,7 +95,7 @@ interface ServerPresenceReport {
   players: { userId: string; username: string }[];
   updatedAt: number;
 }
-const SERVER_PRESENCE_STALE_MS = 3 * 60 * 1000; // 3 min — script reports every 120s
+const SERVER_PRESENCE_STALE_MS = 3 * 60 * 1000; // 3 min
 
 interface MonitoringMessageEntry {
   id: string;
@@ -198,7 +198,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return { userId: String(rec.userId), username: String(rec.username) };
         })
         .filter((p): p is { userId: string; username: string } => !!p)
-        .slice(0, 300); // sanity cap — no server realistically has more players than this
+        .slice(0, 300); // sanity cap
       const report: ServerPresenceReport = {
         placeId: body.placeId != null ? String(body.placeId) : null,
         players,

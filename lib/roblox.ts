@@ -1,17 +1,9 @@
-// Some communities reject anonymous requests to their member-list endpoints
-// (confirmed on group 765550426) even though everything else about the
-// group stays publicly readable. Setting ROBLOX_SCAN_COOKIE to a dedicated,
-// permission-less account's .ROBLOSECURITY value gets those requests
-// treated as a logged-in user instead of a bot, which is enough — no group
-// membership or admin rights on that account are required.
 const ROBLOX_SCAN_COOKIE = process.env.ROBLOX_SCAN_COOKIE || "";
 
 export function robloxHeaders(): Record<string, string> {
   return ROBLOX_SCAN_COOKIE ? { Cookie: `.ROBLOSECURITY=${ROBLOX_SCAN_COOKIE}` } : {};
 }
 
-// Simple in-memory cache. Only helps within a single warm serverless
-// instance, but avoids redundant lookups during a burst of requests.
 const avatarCache = new Map<string, string | null>();
 
 export async function getRobloxAvatarUrl(userId: string): Promise<string | null> {
@@ -44,8 +36,6 @@ export function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } 
   return { mime: match[1], buffer: Buffer.from(match[2], "base64") };
 }
 
-// The "PS Royal Households of the United Kingdom" Roblox community.
-// https://www.roblox.com/communities/35167585/PS-Royal-Households-of-the-United-Kingdom
 export const ROYAL_FAMILY_GROUP_ID = 35167585;
 
 export async function isRobloxGroupMember(userId: string, groupId: number): Promise<boolean> {
@@ -61,10 +51,6 @@ export async function isRobloxGroupMember(userId: string, groupId: number): Prom
   }
 }
 
-// Accepts either a bare group ID or a full group URL (any of Roblox's past
-// and current URL shapes — /communities/ID-slug, /groups/ID/slug, etc.) and
-// returns just the numeric ID. Pasting the page URL is the obvious thing to
-// do here, so Group Search shouldn't 400 on it.
 export function extractGroupId(input: string): string {
   const trimmed = input.trim();
   const urlMatch = /(?:communities|groups)\/(\d+)/i.exec(trimmed);
@@ -74,9 +60,6 @@ export function extractGroupId(input: string): string {
   return trimmed;
 }
 
-// Every group ID this account belongs to, in one call — used by Person
-// Search to cross-reference against a known list, instead of making one
-// isRobloxGroupMember call per candidate group.
 export async function getUserGroupIds(userId: string): Promise<number[]> {
   try {
     const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`, {
@@ -92,8 +75,6 @@ export async function getUserGroupIds(userId: string): Promise<number[]> {
   }
 }
 
-// Resolves a Roblox username to a user ID. If the input already looks like a
-// numeric ID, it's returned as-is (no network call needed).
 export async function resolveRobloxUserId(
   query: string
 ): Promise<{ userId: string; username: string } | null> {
@@ -128,9 +109,6 @@ export async function resolveRobloxUserId(
   }
 }
 
-// Every friend a Roblox account has, per Roblox's own friends list — used by
-// Person Search to cross-reference against people already in our own
-// cache (search history + group scans), NOT to look anyone new up.
 export async function getRobloxFriends(
   userId: string
 ): Promise<{ userId: string; username: string }[]> {
@@ -148,8 +126,6 @@ export async function getRobloxFriends(
   }
 }
 
-// Blume clearance: any of these Roblox groups, or one of the three
-// explicitly-allowed user IDs, unlocks the Blume dashboard.
 export const BLUME_GROUP_IDS = [
   154853936, // MI5
   142915989, // National Crime Agency
@@ -168,23 +144,16 @@ export async function isBlumeAuthorized(userId: string): Promise<boolean> {
   return checks.some(Boolean);
 }
 
-// Publishing to the public Blume blog is restricted to the named
-// operators, not the wider group-authorized dashboard access.
 export function isBlumeSuperUser(userId: string): boolean {
   return BLUME_ALLOWED_USER_IDS.includes(userId);
 }
 
-// Site-wide platform admins: same three people, but this grants access to
-// the Settings app, the audit log, banning, and Admin Mode across the whole
-// of Westbridge OS (not just Blume).
 export const PLATFORM_ADMIN_USER_IDS = ["181869610", "4963562759", "2322187718"];
 
 export function isPlatformAdmin(userId: string): boolean {
   return PLATFORM_ADMIN_USER_IDS.includes(userId);
 }
 
-// Every Roblox community this app knows about, used to warn an admin before
-// they ban someone who belongs to one of them.
 export const ALL_KNOWN_GROUPS: { id: number; label: string }[] = [
   { id: ROYAL_FAMILY_GROUP_ID, label: "PS Royal Households of the United Kingdom" },
   ...BLUME_GROUP_IDS.map((id) => ({ id, label: `Blume-authorized group ${id}` })),
@@ -212,10 +181,6 @@ export async function getRobloxGroupName(groupId: number): Promise<string | null
   }
 }
 
-// Groups that matter for Blume's Person Search — everything else the person
-// belongs to is ignored. "red" groups render in red (organized-crime /
-// unaffiliated-interest groups), "white" groups render in normal text
-// (largely law enforcement, government, and emergency services).
 export const PERSON_SEARCH_GROUPS: Record<number, { name: string; tier: "red" | "white" }> = {
   10742221: { name: "G-Block", tier: "red" },
   223035360: { name: "Shadow District", tier: "red" },
@@ -268,9 +233,6 @@ export const PERSON_SEARCH_GROUPS: Record<number, { name: string; tier: "red" | 
   35273143: { name: "Explorium Studios", tier: "red" },
 };
 
-// Returns the display names of every known group the given user belongs to
-// (fetching the real Roblox group name rather than relying on a hardcoded
-// label), for the ban-confirmation warning.
 export async function getMemberGroupNames(userId: string): Promise<string[]> {
   const memberships = await Promise.all(
     ALL_KNOWN_GROUPS.map(async (g) => ({

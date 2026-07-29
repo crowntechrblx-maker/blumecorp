@@ -1,5 +1,4 @@
 const BLOCKED_TERMS = [
-  // Slurs (racial, ethnic, homophobic, transphobic, ableist, misogynistic).
   "nigger",
   "nigga",
   "chink",
@@ -22,7 +21,6 @@ const BLOCKED_TERMS = [
   "cunt",
   "whore",
   "slut",
-  // General profanity.
   "fuck",
   "shit",
   "bitch",

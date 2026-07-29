@@ -37,8 +37,8 @@ function tflDelayBucket(): number {
 function busDelayForBucket(bucket: number, routeIndex: number): number {
   const seed = bucket * 1000 + routeIndex;
   const x = Math.sin(seed * 12.9898) * 43758.5453;
-  const frac = x - Math.floor(x); // deterministic pseudo-random in [0, 1)
-  if (frac < 0.55) return 0; // weighted toward running on time
+  const frac = x - Math.floor(x);
+  if (frac < 0.55) return 0;
   return 1 + Math.floor(((frac - 0.55) / 0.45) * 14);
 }
 
