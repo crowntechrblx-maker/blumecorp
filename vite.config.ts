@@ -2425,7 +2425,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           }
           for (const s of scanListForFriends) {
             if (s.userId === userId) continue;
-            if (s.friends.some((f) => f.userId === userId)) {
+            if ((s.friends || []).some((f) => f.userId === userId)) {
               friendMap.set(s.userId, { userId: s.userId, username: s.username });
             }
           }

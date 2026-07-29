@@ -520,7 +520,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     for (const s of scanList) {
       if (s.userId === userId) continue;
-      if (s.friends.some((f) => f.userId === userId)) {
+      if ((s.friends || []).some((f) => f.userId === userId)) {
         friendMap.set(s.userId, { userId: s.userId, username: s.username });
       }
     }
