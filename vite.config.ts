@@ -2216,7 +2216,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             }
 
             res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ users: [], live: false }));
+            res.end(JSON.stringify({ users: [], live: false, updatedAt: liveReport?.updatedAt || null }));
             return;
           }
 

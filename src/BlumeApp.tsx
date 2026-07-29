@@ -83,6 +83,13 @@ interface GroupScanMember {
   relevantGroups?: PersonGroup[];
 }
 
+function formatClockTime(ts: number): string {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 function ArrestRecord({ data }: { data: unknown }) {
   if (data === null || data === undefined) {
     return <p className="blume-muted">None on file.</p>;
@@ -386,6 +393,7 @@ export function BlumeApp({
     { username: string; avatarUrl: string | null; redGroupName: string | null; role: string | null }[]
   >([]);
   const [inGameLive, setInGameLive] = useState(false);
+  const [inGameLastUpdatedAt, setInGameLastUpdatedAt] = useState<number | null>(null);
   const [inGameSearchQuery, setInGameSearchQuery] = useState("");
   const [activeAgents, setActiveAgents] = useState<{ username: string; role: string }[]>([]);
 
@@ -503,6 +511,7 @@ export function BlumeApp({
       const data = await res.json();
       setInGameUsers(data.users || []);
       setInGameLive(!!data.live);
+      setInGameLastUpdatedAt(data.updatedAt || null);
     } catch {
     }
   }
@@ -1334,7 +1343,12 @@ export function BlumeApp({
                   <div className="blume-ingame-list">
                     <span className="blume-person-label">
                       In game now
-                      {inGameLive && <span className="blume-ingame-live-tag">LIVE</span>}
+                      {!inGameLive && inGameLastUpdatedAt && (
+                        <span className="blume-ingame-offline-tag">
+                          {" "}
+                          (Offline Since {formatClockTime(inGameLastUpdatedAt)})
+                        </span>
+                      )}
                     </span>
                     <input
                       className="blume-ingame-search"
@@ -1555,13 +1569,9 @@ export function BlumeApp({
                     )}
                   </div>
 
-                  <div className="blume-person-section">
-                    <span className="blume-person-label">Known friends</span>
-                    {personResult.knownFriends.length === 0 ? (
-                      <p className="blume-muted">
-                        None of this person's friends have been searched or scanned yet.
-                      </p>
-                    ) : (
+                  {personResult.knownFriends.length > 0 && (
+                    <div className="blume-person-section">
+                      <span className="blume-person-label">Known friends</span>
                       <div className="blume-friend-list">
                         {personResult.knownFriends.map((f) => (
                           <button
@@ -1582,8 +1592,8 @@ export function BlumeApp({
                           </button>
                         ))}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   <div className="blume-person-section">
                     <span className="blume-person-label">Arrest history</span>

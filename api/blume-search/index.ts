@@ -308,7 +308,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
-      res.status(200).json({ users: [], live: false });
+      res.status(200).json({ users: [], live: false, updatedAt: liveReport?.updatedAt || null });
       return;
     }
 
