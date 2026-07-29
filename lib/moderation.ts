@@ -1,3 +1,4 @@
+
 const BLOCKED_TERMS = [
   "nigger",
   "nigga",

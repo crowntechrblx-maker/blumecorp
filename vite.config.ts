@@ -162,7 +162,7 @@ const PERSON_SEARCH_GROUPS: Record<number, { name: string; tier: "red" | "white"
   34067916: { name: "CHS", tier: "red" },
   541807: { name: "UK | United Kingdom", tier: "red" },
   14641286: { name: "TUI Airways | Roblox", tier: "red" },
-  696897291: { name: "Motorway Roleplay Community", tier: "red" },
+  696897291: { name: "Motorway Roleplay", tier: "red" },
   11939831: { name: "Nottinghamshire, England", tier: "red" },
   16339807: { name: "Liber Studios", tier: "red" },
   34544324: { name: "UK | Sandford Studios", tier: "red" },
