@@ -90,6 +90,9 @@ function formatClockTime(ts: number): string {
   return `${hh}:${mm}`;
 }
 
+const ARREST_SHOWN_CAP = 5;
+const ARREST_RECENT_WINDOW_MS = 10 * 24 * 60 * 60 * 1000;
+
 function ArrestRecord({ data }: { data: unknown }) {
   if (data === null || data === undefined) {
     return <p className="blume-muted">None on file.</p>;
@@ -105,74 +108,104 @@ function ArrestRecord({ data }: { data: unknown }) {
     return String(value);
   }
 
+  function extractWhenMs(item: unknown): number | null {
+    if (item && typeof item === "object") {
+      const obj = item as Record<string, unknown>;
+      const when = obj.date ?? obj.timestamp ?? obj.createdAt ?? obj.time;
+      if (typeof when === "number") return when;
+      if (typeof when === "string") {
+        const parsed = Date.parse(when);
+        if (!Number.isNaN(parsed)) return parsed;
+      }
+    }
+    return null;
+  }
+
+  function renderItem(item: unknown, key: number) {
+    if (typeof item === "number" || typeof item === "string") {
+      return (
+        <div className="blume-arrest-row" key={key}>
+          {renderChargeLike(item)}
+        </div>
+      );
+    }
+    if (item && typeof item === "object") {
+      const obj = item as Record<string, unknown>;
+      const chargeField = obj.chargeIds ?? obj.charges ?? obj.chargeId ?? obj.charge;
+      const charges = Array.isArray(chargeField)
+        ? chargeField.map(renderChargeLike)
+        : chargeField !== undefined
+          ? [renderChargeLike(chargeField)]
+          : [];
+      const officer = obj.officer ?? obj.arrestedBy ?? obj.by ?? obj.arrestingOfficer;
+      const when = obj.date ?? obj.timestamp ?? obj.createdAt ?? obj.time;
+      const knownKeys = new Set([
+        "chargeIds",
+        "charges",
+        "chargeId",
+        "charge",
+        "officer",
+        "arrestedBy",
+        "by",
+        "arrestingOfficer",
+        "date",
+        "timestamp",
+        "createdAt",
+        "time",
+      ]);
+      const rest = Object.entries(obj).filter(([k]) => !knownKeys.has(k));
+      return (
+        <div className="blume-arrest-row" key={key}>
+          {charges.length > 0 && (
+            <div className="blume-arrest-charges">{charges.join(", ")}</div>
+          )}
+          <div className="blume-arrest-meta">
+            {officer !== undefined && <span>Arrested by {String(officer)}</span>}
+            {when !== undefined && (
+              <span>
+                {typeof when === "number"
+                  ? new Date(when).toLocaleString()
+                  : String(when)}
+              </span>
+            )}
+          </div>
+          {rest.length > 0 && charges.length === 0 && (
+            <div className="blume-arrest-raw">
+              {rest.map(([k, v]) => (
+                <span key={k}>
+                  {k}: {String(v)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+    return (
+      <div className="blume-arrest-row" key={key}>
+        {String(item)}
+      </div>
+    );
+  }
+
+  const indexed = list.map((item, i) => ({ item, i, whenMs: extractWhenMs(item) }));
+  const sorted = [...indexed].sort((a, b) => (b.whenMs ?? -Infinity) - (a.whenMs ?? -Infinity));
+  const shown = sorted.slice(0, ARREST_SHOWN_CAP);
+
+  const recentCutoff = Date.now() - ARREST_RECENT_WINDOW_MS;
+  const recentCount = indexed.filter(
+    (e) => e.whenMs !== null && e.whenMs >= recentCutoff
+  ).length;
+  const overflow = recentCount > ARREST_SHOWN_CAP ? recentCount - ARREST_SHOWN_CAP : 0;
+
   return (
     <div className="blume-arrest-list">
-      {list.map((item, i) => {
-        if (typeof item === "number" || typeof item === "string") {
-          return (
-            <div className="blume-arrest-row" key={i}>
-              {renderChargeLike(item)}
-            </div>
-          );
-        }
-        if (item && typeof item === "object") {
-          const obj = item as Record<string, unknown>;
-          const chargeField = obj.chargeIds ?? obj.charges ?? obj.chargeId ?? obj.charge;
-          const charges = Array.isArray(chargeField)
-            ? chargeField.map(renderChargeLike)
-            : chargeField !== undefined
-              ? [renderChargeLike(chargeField)]
-              : [];
-          const officer = obj.officer ?? obj.arrestedBy ?? obj.by ?? obj.arrestingOfficer;
-          const when = obj.date ?? obj.timestamp ?? obj.createdAt ?? obj.time;
-          const knownKeys = new Set([
-            "chargeIds",
-            "charges",
-            "chargeId",
-            "charge",
-            "officer",
-            "arrestedBy",
-            "by",
-            "arrestingOfficer",
-            "date",
-            "timestamp",
-            "createdAt",
-            "time",
-          ]);
-          const rest = Object.entries(obj).filter(([k]) => !knownKeys.has(k));
-          return (
-            <div className="blume-arrest-row" key={i}>
-              {charges.length > 0 && (
-                <div className="blume-arrest-charges">{charges.join(", ")}</div>
-              )}
-              <div className="blume-arrest-meta">
-                {officer !== undefined && <span>Arrested by {String(officer)}</span>}
-                {when !== undefined && (
-                  <span>
-                    {typeof when === "number"
-                      ? new Date(when).toLocaleString()
-                      : String(when)}
-                  </span>
-                )}
-              </div>
-              {rest.length > 0 && charges.length === 0 && (
-                <div className="blume-arrest-raw">
-                  {rest.map(([k, v]) => (
-                    <span key={k}>
-                      {k}: {String(v)}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        }
-        return (
-          <div className="blume-arrest-row" key={i}>
-            {String(item)}
-          </div>
-        );
-      })}
+      {shown.map((e) => renderItem(e.item, e.i))}
+      {overflow > 0 && (
+        <div className="blume-arrest-row blume-arrest-overflow">
+          And {overflow} other arrest{overflow === 1 ? "" : "s"} in the last 10 days
+        </div>
+      )}
     </div>
   );
 }
@@ -1321,7 +1354,7 @@ export function BlumeApp({
                               </div>
                               <p>{r.body}</p>
                               <span className="blume-report-meta">
-                                Filed by {r.authorUsername} · {new Date(r.createdAt).toLocaleString()}
+                                Filed by {r.authorUsername} · {new Date(r.createdAt).toLocaleDateString()}
                                 {r.linkedUsername && (
                                   <>
                                     {" "}
@@ -1631,11 +1664,6 @@ export function BlumeApp({
                   )}
 
                   <div className="blume-person-section">
-                    <span className="blume-person-label">Arrest history</span>
-                    <ArrestRecord data={personResult.arrestHistory} />
-                  </div>
-
-                  <div className="blume-person-section">
                     <span className="blume-person-label">Linked intelligence reports</span>
                     {personLinkedReportsLoading ? (
                       <p className="blume-muted">Loading…</p>
@@ -1650,13 +1678,18 @@ export function BlumeApp({
                             </div>
                             <p>{r.body}</p>
                             <span className="blume-report-meta">
-                              Filed by {r.authorUsername} · {new Date(r.createdAt).toLocaleString()}
+                              Filed by {r.authorUsername} · {new Date(r.createdAt).toLocaleDateString()}
                               {r.expiresAt && <> · expires {new Date(r.expiresAt).toLocaleDateString()}</>}
                             </span>
                           </div>
                         ))}
                       </div>
                     )}
+                  </div>
+
+                  <div className="blume-person-section">
+                    <span className="blume-person-label">Arrest history</span>
+                    <ArrestRecord data={personResult.arrestHistory} />
                   </div>
                 </div>
               )}
