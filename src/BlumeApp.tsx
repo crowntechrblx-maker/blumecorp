@@ -1248,11 +1248,22 @@ export function BlumeApp({
                                 (r.linkedUsername || "").toLowerCase().includes(q)
                             )
                           : reports;
-                        return filtered.length === 0 ? (
+                        const inGameLower = new Set(inGameUsers.map((u) => u.username.toLowerCase()));
+                        const isLinkedInGame = (r: BlumeReport) =>
+                          !!r.linkedUsername && inGameLower.has(r.linkedUsername.toLowerCase());
+                        const sorted = [...filtered].sort((a, b) => {
+                          const aIn = isLinkedInGame(a);
+                          const bIn = isLinkedInGame(b);
+                          return aIn === bIn ? 0 : aIn ? -1 : 1;
+                        });
+                        return sorted.length === 0 ? (
                           <p className="blume-muted">No reports match "{reportSearchQuery}".</p>
                         ) : (
-                          filtered.map((r) => (
-                            <div className="blume-report-card" key={r.id}>
+                          sorted.map((r) => (
+                            <div
+                              className={`blume-report-card${isLinkedInGame(r) ? " blume-report-card-ingame" : ""}`}
+                              key={r.id}
+                            >
                               <div className="blume-report-card-head">
                                 <strong>{r.title}</strong>
                                 <button
@@ -1276,6 +1287,9 @@ export function BlumeApp({
                                     >
                                       {r.linkedUsername}
                                     </strong>
+                                    {isLinkedInGame(r) && (
+                                      <span className="blume-report-ingame-tag">IN GAME</span>
+                                    )}
                                   </>
                                 )}
                               </span>
