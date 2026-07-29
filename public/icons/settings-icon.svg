@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="setGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#9a9ea6" />
+      <stop offset="100%" stop-color="#6c7078" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="100" height="100" rx="22" fill="url(#setGrad)" />
+  <g fill="#ffffff">
+    <circle cx="50" cy="50" r="21" />
+    <polygon points="66.50,44.80 75.50,44.80 75.50,55.20 66.50,55.20" rx="2" />
+    <polygon points="65.34,57.99 71.71,64.35 64.35,71.71 57.99,65.34" />
+    <polygon points="55.20,66.50 55.20,75.50 44.80,75.50 44.80,66.50" />
+    <polygon points="42.01,65.34 35.65,71.71 28.29,64.35 34.66,57.99" />
+    <polygon points="33.50,55.20 24.50,55.20 24.50,44.80 33.50,44.80" />
+    <polygon points="34.66,42.01 28.29,35.65 35.65,28.29 42.01,34.66" />
+    <polygon points="44.80,33.50 44.80,24.50 55.20,24.50 55.20,33.50" />
+    <polygon points="57.99,34.66 64.35,28.29 71.71,35.65 65.34,42.01" />
+  </g>
+  <circle cx="50" cy="50" r="9" fill="url(#setGrad)" />
+</svg>
