@@ -149,6 +149,13 @@ async function scanMemberEntry(
   } catch {
   }
 
+  if (customPlate) {
+    const plateTaken = allEntries.some(
+      (m) => m.userId !== userId && m.customPlate === customPlate
+    );
+    if (plateTaken) customPlate = null;
+  }
+
   let changed: GroupScanEntry["changed"] = null;
   if (existing) {
     const usernameChanged = existing.username !== username;
@@ -225,7 +232,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     if (req.query.activeAgents) {
       const settings = await loadBlumeSettings();
-      const AGENT_SCAN_FRESH_MS = 15 * 60 * 1000;
+      const AGENT_SCAN_FRESH_MS = 10 * 60 * 1000;
       const AGENT_SCAN_BATCH_CAP = 8;
 
       const liveReport = await kv.get<ServerPresenceReport>("blumeServerPresence");

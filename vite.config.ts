@@ -2027,6 +2027,13 @@ async function scanMemberEntry(
   } catch {
   }
 
+  if (customPlate) {
+    const plateTaken = allEntries.some(
+      (m) => m.userId !== userId && m.customPlate === customPlate
+    );
+    if (plateTaken) customPlate = null;
+  }
+
   let changed: GroupScanEntry["changed"] = null;
   if (existing) {
     const usernameChanged = existing.username !== username;
@@ -2121,7 +2128,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
         if (req.method === "GET") {
           if (url.searchParams.get("activeAgents")) {
             const settings = loadBlumeSettings();
-            const AGENT_SCAN_FRESH_MS = 15 * 60 * 1000;
+            const AGENT_SCAN_FRESH_MS = 10 * 60 * 1000;
             const AGENT_SCAN_BATCH_CAP = 8;
 
             const liveReport = loadServerPresence();
