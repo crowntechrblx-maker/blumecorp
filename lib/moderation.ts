@@ -1,13 +1,3 @@
-// Blocks profanity, slurs, and other derogatory language from any
-// user-submitted free text (Instagram posts, messages, Blume reports and
-// blog posts). This is a word-list match, not a slur "generator" — the list
-// itself is never exposed to clients.
-//
-// Matching is deliberately loose (substring, with common leetspeak
-// substitutions normalized first) so obvious evasions like "a$$hole" or
-// "n1gger" are still caught, at the cost of occasionally over-blocking. That
-// trade-off is intentional for a moderation filter.
-
 const BLOCKED_TERMS = [
   // Slurs (racial, ethnic, homophobic, transphobic, ableist, misogynistic).
   "nigger",
