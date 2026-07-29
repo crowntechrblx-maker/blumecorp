@@ -597,6 +597,11 @@ export function BlumeApp({
     await loadAccess();
   }
 
+  function jumpToPersonReports(username: string) {
+    setCollapsedPanels((prev) => ({ ...prev, reports: false }));
+    setReportSearchQuery(username);
+  }
+
   async function handleAddBlogPost() {
     if (!blogTitle.trim() || !blogExcerpt.trim()) return;
     setBlogSubmitting(true);
@@ -1217,39 +1222,52 @@ export function BlumeApp({
               </button>
               {!collapsedPanels.reports && (
                 <>
-                  <div className="blume-report-form">
-                    <input
-                      placeholder="Report title"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                    />
-                    <textarea
-                      placeholder="Report details…"
-                      value={body}
-                      onChange={(e) => setBody(e.target.value)}
-                      rows={3}
-                    />
-                    <input
-                      placeholder="Link to a person (optional) — name or ID"
-                      value={linkedPerson}
-                      onChange={(e) => setLinkedPerson(e.target.value)}
-                    />
-                    <label className="blume-report-expiry-field">
-                      Expires
-                      <input
-                        type="date"
-                        value={reportExpiry}
-                        onChange={(e) => setReportExpiry(e.target.value)}
-                      />
-                    </label>
+                  <div className="blume-report-form-section">
                     <button
-                      className="blume-cta-btn"
-                      disabled={!title.trim() || !body.trim() || submitting}
-                      onClick={handleAddReport}
+                      className="blume-report-form-toggle"
+                      onClick={() => togglePanel("reportForm")}
                     >
-                      {submitting ? "Filing…" : "File report"}
+                      <span>File a report</span>
+                      <span className="blume-panel-toggle-icon">
+                        {collapsedPanels.reportForm ? "▸" : "▾"}
+                      </span>
                     </button>
-                    {error && <p className={`blume-error${fading ? " fading-out" : ""}`}>{error}</p>}
+                    {!collapsedPanels.reportForm && (
+                      <div className="blume-report-form">
+                        <input
+                          placeholder="Report title"
+                          value={title}
+                          onChange={(e) => setTitle(e.target.value)}
+                        />
+                        <textarea
+                          placeholder="Report details…"
+                          value={body}
+                          onChange={(e) => setBody(e.target.value)}
+                          rows={3}
+                        />
+                        <input
+                          placeholder="Link to a person (optional) — name or ID"
+                          value={linkedPerson}
+                          onChange={(e) => setLinkedPerson(e.target.value)}
+                        />
+                        <label className="blume-report-expiry-field">
+                          Expires
+                          <input
+                            type="date"
+                            value={reportExpiry}
+                            onChange={(e) => setReportExpiry(e.target.value)}
+                          />
+                        </label>
+                        <button
+                          className="blume-cta-btn"
+                          disabled={!title.trim() || !body.trim() || submitting}
+                          onClick={handleAddReport}
+                        >
+                          {submitting ? "Filing…" : "File report"}
+                        </button>
+                        {error && <p className={`blume-error${fading ? " fading-out" : ""}`}>{error}</p>}
+                      </div>
+                    )}
                   </div>
                   <div className="blume-reports-search">
                     <input
@@ -1367,6 +1385,11 @@ export function BlumeApp({
                       if (filtered.length === 0) {
                         return <p className="blume-muted">No in-game users match "{inGameSearchQuery}".</p>;
                       }
+                      const reportedLower = new Set(
+                        reports
+                          .filter((r) => r.linkedUsername)
+                          .map((r) => r.linkedUsername!.toLowerCase())
+                      );
                       return (
                         <div className="blume-ingame-users">
                           {filtered.map((u) => (
@@ -1382,6 +1405,15 @@ export function BlumeApp({
                                 <span className="blume-ingame-red-group">{u.redGroupName}</span>
                               )}
                               {u.role && <span className="blume-ingame-role">{u.role}</span>}
+                              {reportedLower.has(u.username.toLowerCase()) && (
+                                <span
+                                  className="blume-ingame-report-tag"
+                                  title="Has an intelligence report"
+                                  onClick={() => jumpToPersonReports(u.username)}
+                                >
+                                  REPORT
+                                </span>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1433,6 +1465,9 @@ export function BlumeApp({
                       >
                         {personResult.username}
                         {usernameCopied && <span className="blume-copied-tag">Copied</span>}
+                        {inGameUsers.some(
+                          (u) => u.username.toLowerCase() === personResult.username.toLowerCase()
+                        ) && <span className="blume-person-active-tag">ACTIVE</span>}
                       </strong>
                       <span className="blume-person-id">ID {personResult.userId}</span>
                     </div>

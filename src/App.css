@@ -1982,11 +1982,33 @@
   letter-spacing: 1.5px;
 }
 
+.blume-report-form-section {
+  flex-shrink: 0;
+  margin-bottom: 14px;
+}
+.blume-report-form-toggle {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--blume-accent);
+  margin-bottom: 8px;
+}
+.blume-report-form-toggle:hover {
+  color: var(--blume-mist);
+}
 .blume-report-form {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 0;
   flex-shrink: 0;
 }
 .blume-report-form input,
@@ -2199,6 +2221,20 @@
   padding: 1px 6px;
   border-radius: 999px;
 }
+.blume-ingame-report-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  padding: 1px 6px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.blume-ingame-report-tag:hover {
+  background: rgba(251, 191, 36, 0.2);
+}
 
 .blume-search-panel input,
 .blume-group-search-panel input,
@@ -2323,6 +2359,18 @@
   border: 1px solid rgba(52, 211, 153, 0.3);
   padding: 1px 6px;
   border-radius: 999px;
+}
+.blume-person-active-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 6px;
+  vertical-align: middle;
 }
 .blume-person-id {
   font-size: 10.5px;
