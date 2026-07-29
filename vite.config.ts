@@ -2410,7 +2410,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
           const historyListForFriends = loadSearchHistoryDb();
           const scanListForFriends = loadGroupScanDb();
-          const friendsRaw = await getRobloxFriends(userId);
           const knownAvatarByUserId = new Map<string, string | null>();
           for (const h of historyListForFriends) knownAvatarByUserId.set(h.userId, h.avatarUrl);
           for (const s of scanListForFriends) knownAvatarByUserId.set(s.userId, s.avatarUrl);
@@ -2420,8 +2419,17 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             ...historyListForFriends.map((h) => h.userId),
             ...scanListForFriends.map((s) => s.userId),
           ]);
-          const knownFriends = friendsRaw
-            .filter((f) => f.userId !== userId && knownIds.has(f.userId))
+          const friendMap = new Map<string, { userId: string; username: string }>();
+          for (const f of scanByUserId.get(userId)?.friends || []) {
+            if (f.userId !== userId && knownIds.has(f.userId)) friendMap.set(f.userId, f);
+          }
+          for (const s of scanListForFriends) {
+            if (s.userId === userId) continue;
+            if (s.friends.some((f) => f.userId === userId)) {
+              friendMap.set(s.userId, { userId: s.userId, username: s.username });
+            }
+          }
+          const knownFriends = Array.from(friendMap.values())
             .map((f) => {
               const scanEntry = scanByUserId.get(f.userId);
               const redGroupNames = scanEntry

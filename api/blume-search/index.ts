@@ -501,10 +501,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (v) => v.userId === userId
     );
 
-    const [allHistoryForFriends, groupScanForFriends, friends] = await Promise.all([
+    const [allHistoryForFriends, groupScanForFriends] = await Promise.all([
       kv.get<SearchSnapshot[]>("blumeSearchHistory"),
       kv.get<GroupScanEntry[]>("blumeGroupScanCache"),
-      getRobloxFriends(userId),
     ]);
     const historyList = allHistoryForFriends || [];
     const scanList = groupScanForFriends || [];
@@ -514,22 +513,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const scanByUserId = new Map<string, GroupScanEntry>();
     for (const s of scanList) scanByUserId.set(s.userId, s);
     const knownIds = new Set<string>([...historyList.map((h) => h.userId), ...scanList.map((s) => s.userId)]);
-    const knownFriends = friends
-      .filter((f) => f.userId !== userId && knownIds.has(f.userId))
-      .map((f) => {
-        const scanEntry = scanByUserId.get(f.userId);
-        const redGroupNames = scanEntry
-          ? relevantGroups(scanEntry.groupIds, catalog)
-              .filter((g) => g.tier === "red")
-              .map((g) => g.name)
-          : [];
-        return {
-          userId: f.userId,
-          username: f.username,
-          avatarUrl: knownAvatarByUserId.get(f.userId) ?? null,
-          redGroupNames,
-        };
-      });
+
+    const friendMap = new Map<string, { userId: string; username: string }>();
+    for (const f of scanByUserId.get(userId)?.friends || []) {
+      if (f.userId !== userId && knownIds.has(f.userId)) friendMap.set(f.userId, f);
+    }
+    for (const s of scanList) {
+      if (s.userId === userId) continue;
+      if (s.friends.some((f) => f.userId === userId)) {
+        friendMap.set(s.userId, { userId: s.userId, username: s.username });
+      }
+    }
+    const knownFriends = Array.from(friendMap.values()).map((f) => {
+      const scanEntry = scanByUserId.get(f.userId);
+      const redGroupNames = scanEntry
+        ? relevantGroups(scanEntry.groupIds, catalog)
+            .filter((g) => g.tier === "red")
+            .map((g) => g.name)
+        : [];
+      return {
+        userId: f.userId,
+        username: f.username,
+        avatarUrl: knownAvatarByUserId.get(f.userId) ?? null,
+        redGroupNames,
+      };
+    });
 
     const ownScanEntry = scanList.find((s) => s.userId === userId);
     const groupScanChange = ownScanEntry?.changed || null;
