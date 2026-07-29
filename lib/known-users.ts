@@ -11,8 +11,6 @@ export async function getKnownUsers(): Promise<KnownUser[]> {
   return (await kv.get<KnownUser[]>("users")) || [];
 }
 
-// Resolves either a Roblox user ID or a username to a known user record
-// (someone who has actually signed into the site at least once).
 export async function findKnownUser(query: string): Promise<KnownUser | null> {
   const raw = query.trim();
   if (!raw) return null;
