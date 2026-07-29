@@ -63,8 +63,6 @@ interface RoyalTweetEntry {
   createdAt: number;
 }
 
-// The "PS Royal Households of the United Kingdom" Roblox community.
-// https://www.roblox.com/communities/35167585/PS-Royal-Households-of-the-United-Kingdom
 const ROYAL_FAMILY_GROUP_ID = 35167585;
 
 async function isRobloxGroupMember(userId: string, groupId: number): Promise<boolean> {
@@ -80,17 +78,11 @@ async function isRobloxGroupMember(userId: string, groupId: number): Promise<boo
   }
 }
 
-// Mirrors lib/roblox.ts's robloxHeaders exactly — some communities reject
-// anonymous member-list requests, so a dedicated account's session cookie
-// (set via ROBLOX_SCAN_COOKIE in .env, bridged into process.env below) gets
-// those requests treated as logged-in instead of anonymous/bot traffic.
 function robloxHeaders(): Record<string, string> {
   const cookie = process.env.ROBLOX_SCAN_COOKIE || "";
   return cookie ? { Cookie: `.ROBLOSECURITY=${cookie}` } : {};
 }
 
-// Accepts either a bare group ID or a full group URL and returns just the
-// numeric ID — mirrors lib/roblox.ts's extractGroupId exactly.
 function extractGroupId(input: string): string {
   const trimmed = input.trim();
   const urlMatch = /(?:communities|groups)\/(\d+)/i.exec(trimmed);
@@ -224,8 +216,6 @@ interface BlumeReportEntry {
   linkedUsername?: string;
 }
 
-// Blume clearance: any of these Roblox groups, or one of the three
-// explicitly-allowed user IDs, unlocks the Blume dashboard.
 const BLUME_GROUP_IDS = [154853936, 142915989, 685466511, 187507831, 315987361, 496716538];
 const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759", "2322187718"];
 
@@ -241,9 +231,6 @@ function isBlumeSuperUser(userId: string): boolean {
   return BLUME_ALLOWED_USER_IDS.includes(userId);
 }
 
-// Site-wide platform admins: same three people, but this grants access to
-// the Settings app, the audit log, banning, and Admin Mode across the whole
-// of Westbridge OS (not just Blume).
 const PLATFORM_ADMIN_USER_IDS = ["181869610", "4963562759", "2322187718"];
 
 function isPlatformAdmin(userId: string): boolean {
@@ -291,9 +278,6 @@ async function getMemberGroupNames(userId: string): Promise<string[]> {
   return names;
 }
 
-// Blocks profanity, slurs, and other derogatory language from any
-// user-submitted free text. Word-list match with common leetspeak
-// substitutions normalized first.
 const BLOCKED_TERMS = [
   "nigger",
   "nigga",
@@ -529,7 +513,6 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
   const CLIENT_SECRET = env.ROBLOX_CLIENT_SECRET;
   const REDIRECT_URI = env.ROBLOX_REDIRECT_URI || "http://localhost:5173/api/auth/callback";
 
-  // In-memory stores. Fine for local dev; resets whenever the dev server restarts.
   const pendingLogins = new Map<string, { verifier: string }>();
 
   return {
@@ -605,11 +588,6 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
             const sessionId = b64url(crypto.randomBytes(24));
 
             if (isBanned(profile.sub)) {
-              // Same trick as prod: set the session cookie anyway and just
-              // redirect in — /api/auth/me checks isBanned on every request
-              // and clears this same cookie the moment it sees it, so the
-              // app shows its normal styled ban screen instead of a bare
-              // text response here.
               sessions.set(sessionId, {
                 userId: profile.sub,
                 username: profile.preferred_username,
@@ -666,8 +644,6 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
             res.end(JSON.stringify(null));
             return;
           }
-          // Enforced here (polled periodically by the client) so a ban takes
-          // effect for someone already using the site, not just on next login.
           if (isBanned(session.userId)) {
             sessions.delete(cookies.wb_session);
             res.end(JSON.stringify({ banned: true }));
@@ -1074,8 +1050,6 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             res.end("You can only delete your own posts.");
             return;
           }
-          // The image file is deliberately kept (not deleted) — Monitoring
-          // needs to still be able to show it.
           entries[index] = { ...post, deleted: true, deletedAt: Date.now() };
           savePostsDb(entries);
           appendAuditLog({
@@ -1897,8 +1871,6 @@ const BLUME_GROUP_SCAN_DB = path.resolve(process.cwd(), "blume-group-scan-data.j
 const BLUME_CUSTOM_GROUPS_DB = path.resolve(process.cwd(), "blume-custom-groups-data.json");
 const BLUME_SERVER_PRESENCE_DB = path.resolve(process.cwd(), "blume-server-presence-data.json");
 
-// Live server roster reported directly by an in-game script — mirrors the
-// prod KV-backed version in api/blume-search/index.ts.
 interface ServerPresenceReport {
   placeId: string | null;
   players: { userId: string; username: string }[];
@@ -2020,10 +1992,6 @@ const AGENT_GROUPS: { id: number; label: string }[] = [
   { id: 315987361, label: "ROCU" },
 ];
 
-// Mirrors api/blume-search/index.ts's scanMemberEntry — resolves one
-// Roblox user's current username/avatar/groups/friends/plate and returns a
-// fresh cache entry. Doesn't touch the DB itself; callers merge the result
-// into blumeGroupScanCache themselves.
 async function scanMemberEntry(
   userId: string,
   usernameHint: string | undefined,
@@ -2057,7 +2025,6 @@ async function scanMemberEntry(
       customPlate = playerData.CustomPlate ?? null;
     }
   } catch {
-    // Best-effort.
   }
 
   let changed: GroupScanEntry["changed"] = null;
@@ -2101,9 +2068,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           return;
         }
 
-        // Server roster ingest: an in-game script, not a logged-in dashboard
-        // user, calls this — authenticated by its own shared secret instead
-        // of the session cookie checked below.
         if (req.method === "POST") {
           let peekBody: any;
           try {
@@ -2138,8 +2102,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             res.end(JSON.stringify({ ok: true, count: players.length }));
             return;
           }
-          // Not the ingest action — fall through to the normal session-gated
-          // POST handling below, using the body already read off the stream.
           (req as any)._parsedBody = peekBody;
         }
 
@@ -2191,7 +2153,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 all = [...all.filter((m) => m.userId !== p.userId), entry];
                 byId.set(p.userId, entry);
               } catch {
-                // Best-effort — try again on a later poll.
               }
             }
             if (stale.length > 0) {
@@ -2441,9 +2402,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
           const vehicleTags = loadVehicleTagsDb().filter((v) => v.userId === userId);
 
-          // Friends who are ALREADY in our system — never look up or list a
-          // friend who isn't already known via search history or a group
-          // scan.
           const historyListForFriends = loadSearchHistoryDb();
           const scanListForFriends = loadGroupScanDb();
           const friendsRaw = await getRobloxFriends(userId);
@@ -2528,9 +2486,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
         if (req.method === "POST") {
           try {
-            // Body's already been read once above (to check for the ingest
-            // action before the session gate) — reuse it instead of trying
-            // to read the now-drained request stream again.
             const body = (req as any)._parsedBody ?? (await readJsonBody(req));
             const action = (body.action || "").toString();
 
@@ -2699,7 +2654,6 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
-// https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   if (env.ROBLOX_SCAN_COOKIE) process.env.ROBLOX_SCAN_COOKIE = env.ROBLOX_SCAN_COOKIE;

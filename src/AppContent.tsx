@@ -19,8 +19,6 @@ const TFL_STATIONS = [
   { name: "Oxbridge Bus Station", street: "Barking Street" },
 ];
 
-// A handful of generic routes strung between the real stations above — not
-// tied to any particular line, just enough to make the board feel alive.
 const TFL_BUS_ROUTES = [
   { number: "1", from: "King Edward Station", to: "Oxbridge Bus Station" },
   { number: "7", from: "Westbridge Bus Station", to: "Matlock Broadway Station" },
@@ -36,10 +34,6 @@ function tflDelayBucket(): number {
   return Math.floor(Date.now() / TFL_DELAY_BUCKET_MS);
 }
 
-// Deterministic given (bucket, route index) — so every route's delay is
-// stable for the whole 5-minute window rather than re-rolling every time
-// the app is opened, and only actually changes once the real-world 5-minute
-// boundary passes.
 function busDelayForBucket(bucket: number, routeIndex: number): number {
   const seed = bucket * 1000 + routeIndex;
   const x = Math.sin(seed * 12.9898) * 43758.5453;
@@ -106,9 +100,6 @@ function UberContent() {
   const [requested, setRequested] = useState(false);
   const [initializing, setInitializing] = useState(true);
 
-  // Brief branded splash before the app is usable, like Uber's own
-  // launch animation — the wordmark scales/fades in, holds briefly, then
-  // the real "Where to?" screen takes over.
   useEffect(() => {
     const timer = setTimeout(() => setInitializing(false), 1600);
     return () => clearTimeout(timer);

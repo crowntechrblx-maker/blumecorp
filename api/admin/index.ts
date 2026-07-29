@@ -16,10 +16,6 @@ interface MessageEntry {
   createdAt: number;
 }
 
-// Everything the Settings app needs lives behind this single endpoint
-// (rather than several) to stay within Vercel's Hobby-plan 12-function
-// limit — GET handles reads (including the target lookup for the ban
-// confirmation dialog), POST handles the mutations.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cookies = parseCookies(req);
   const session = decodeSession(cookies.wb_session);

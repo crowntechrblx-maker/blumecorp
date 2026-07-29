@@ -26,11 +26,6 @@ interface BlumeBlogPost {
   createdAt: number;
 }
 
-// Intelligence reports (Blume-clearance only) and the public blog
-// (published by named Blume operators) both live behind this one file,
-// routed via ?type=report|blog, to stay within Vercel Hobby's 12-function
-// limit rather than adding a second file for what's structurally the same
-// GET/POST/DELETE pattern.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const type = (req.query.type as string) || "report";
   const cookies = parseCookies(req);
@@ -130,7 +125,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  // type === "report"
   const canAccess = session ? await isBlumeAuthorized(session.userId) : false;
 
   if (req.method === "GET") {

@@ -16,16 +16,11 @@ interface PostEntry {
   text: string;
   imageUrl: string | null;
   createdAt: number;
-  // Deletion never actually erases the row (or its image blob) — it's
-  // flagged so Blume Monitoring can still surface it. The public feed GET
-  // below filters deleted posts out, so nothing changes for regular users.
   deleted?: boolean;
   deletedAt?: number;
   likedBy?: string[];
 }
 
-// DELETE is routed through this same file (via ?id=) rather than a separate
-// [id].ts file, to stay within Vercel's Hobby-plan 12-function limit.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cookies = parseCookies(req);
   const session = decodeSession(cookies.wb_session);
@@ -181,8 +176,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // The image blob is deliberately kept (not deleted) — Monitoring needs
-    // to still be able to show it.
     entries[index] = { ...post, deleted: true, deletedAt: Date.now() };
     await kv.set("posts", entries);
 

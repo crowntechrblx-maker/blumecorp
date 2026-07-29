@@ -57,8 +57,6 @@ export function MessagesApp({
   }, [search]);
 
   useEffect(() => {
-    // Keeps the sidebar ordering fresh (whoever last messaged you jumps to
-    // the top) even while you aren't actively watching a conversation.
     loadUnreadCounts();
     rosterPollRef.current = setInterval(() => {
       loadRoster(search.trim());
@@ -81,8 +79,6 @@ export function MessagesApp({
     setActive(user);
     setError(null);
     loadMessages(user.username);
-    // The GET above marks that person's messages as read on the backend —
-    // clear the badge immediately rather than waiting for the next poll.
     setUnreadCounts((prev) => {
       const next = { ...prev };
       delete next[user.username.toLowerCase()];
@@ -100,8 +96,6 @@ export function MessagesApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // Always land on the newest message instead of leaving the scroll
-  // position wherever it happened to be — no one wants to scroll for it.
   useEffect(() => {
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;

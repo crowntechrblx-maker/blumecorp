@@ -1,6 +1,3 @@
-// Ported from the user's Roblox-side "PNCCharges" Lua module (message.txt),
-// keeping the same numeric IDs so arrest records referencing a charge ID
-// (rather than a full name) can still be decoded to something readable.
 
 export const PNC_CHARGES_BY_ID: Record<number, string> = {
   1: "Tampering with motor vehicles",

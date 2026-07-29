@@ -18,19 +18,12 @@ function App() {
   const { user, loading, banned } = useAuth();
   const { wallpaperUrl } = useWallpaper();
   const [windows, setWindows] = useState<WindowsMap>({});
-  // Read synchronously (not in an effect) so this is already known on the
-  // very first render — otherwise the real desktop flashes on screen for a
-  // frame right after the OAuth redirect lands, before an effect had a
-  // chance to flip this to true.
   const [showLoginSequence, setShowLoginSequence] = useState(
     () => sessionStorage.getItem(LOGIN_SEQUENCE_FLAG) === "1"
   );
   const [activeApp, setActiveApp] = useState<AppId | null>(null);
   const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
 
-  // Only used to re-center the icon column when the window is resized —
-  // it does NOT affect how many icons fit in a column (that's a flat 8,
-  // regardless of screen size or how many apps are visible).
   useEffect(() => {
     function handleResize() {
       setViewportHeight(window.innerHeight);
@@ -39,19 +32,6 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Keep-alive against renderer throttling. Chrome (heavily on macOS, via
-  // window-occlusion detection) can decide this tab isn't "really" visible
-  // even while it's on screen and focused, and pauses/throttles rAF, CSS
-  // animations, and repaints while that's in effect — then repaints the
-  // whole page in one shot once it lifts. That single mechanism explains
-  // every marquee "fix" failing identically regardless of implementation
-  // (CSS keyframes, transform, left) and matches the exact reported
-  // symptom of the *entire page* suddenly popping in at once partway
-  // through a scroll, not something specific to the marquee's own code.
-  // A held screen wake lock is the standard way to opt an active tab out
-  // of that throttling; failures (unsupported browser, denied, no HTTPS)
-  // are silently ignored since this is a best-effort perf nudge, not a
-  // feature the app depends on.
   useEffect(() => {
     let lock: WakeLockSentinel | null = null;
     let cancelled = false;
@@ -67,7 +47,6 @@ function App() {
           lock = sentinel;
         }
       } catch {
-        // Ignore — e.g. denied, unsupported, or tab not visible yet.
       }
     }
 
@@ -150,9 +129,6 @@ function App() {
 
   function maximizeApp(id: AppId) {
     const width = Math.min(window.innerWidth - 60, window.innerWidth * 0.94);
-    // No dock to leave room for anymore. Match the desktop icons' framing:
-    // 26px menu bar + 16px breathing room on top (42px), and the same 16px
-    // gap reserved at the bottom, so the window sits evenly between them.
     const topGap = 42;
     const bottomGap = 16;
     const height = Math.min(window.innerHeight - topGap - bottomGap, window.innerHeight * 0.94);
@@ -200,12 +176,6 @@ function App() {
 
   const visibleApps = APPS.filter((app) => app.id !== "settings" || user.isAdmin);
 
-  // Mac-style desktop icon layout: fill a column top-to-bottom, and once
-  // it hits 8, start a new column to the LEFT of it (never to the right,
-  // which would run off toward the menu bar clock). This is a flat,
-  // always-8 rule — it does NOT change based on how many apps someone can
-  // see. An admin (extra Settings icon) simply gets a second column with
-  // one more icon in it; the first column is identical either way.
   const ICON_SLOT_HEIGHT = 94; // 88px icon + 6px gap
   const RESERVED_VERTICAL_SPACE = 58; // 42px top framing + 16px bottom framing
   const ICONS_PER_COLUMN = 8;
@@ -214,14 +184,6 @@ function App() {
     iconColumns.push(visibleApps.slice(i, i + ICONS_PER_COLUMN));
   }
 
-  // The tallest column is always the first one (columns fill to capacity
-  // before overflowing), so its content height is what actually needs to
-  // be framed. Rather than stretching the icon block across the whole
-  // reserved area (which leaves top-aligned icons flush at the top but
-  // with a bigger gap below), size the block to its real content height
-  // and center THAT block in the reserved area — so the gap above the top
-  // icons equals the gap below the bottom icons, while every column still
-  // starts flush with the others at the block's top edge.
   const tallestColumnCount = iconColumns[0]?.length ?? 0;
   const contentHeight = Math.max(0, tallestColumnCount * ICON_SLOT_HEIGHT - 6);
   const availableHeight = viewportHeight - RESERVED_VERTICAL_SPACE;

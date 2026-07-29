@@ -23,17 +23,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  // Enforced here (polled periodically by the client) so a ban takes effect
-  // for someone already using the site, not just on their next login.
   if (await isBanned(session.userId)) {
     setCookie(res, "wb_session", "", { maxAge: 0 });
     res.status(200).json({ banned: true });
     return;
   }
 
-  // Piggybacks the "did I just get messaged?" check on this already-polled
-  // endpoint instead of adding a dedicated one, since Vercel Hobby caps
-  // serverless functions at 12.
   const messages = (await kv.get<MessageEntry[]>("messages")) || [];
   const myMessages = messages.filter(
     (m) => m.toUsername.toLowerCase() === session.username.toLowerCase()

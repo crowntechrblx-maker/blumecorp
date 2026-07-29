@@ -94,7 +94,6 @@ export function InstagramApp({
   }
 
   async function handleToggleLike(id: string) {
-    // Optimistic update — flips instantly, resyncs from the server response.
     setPosts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p))
     );

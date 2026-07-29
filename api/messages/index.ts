@@ -21,14 +21,8 @@ interface MessageEntry {
   toUsername: string;
   text: string;
   createdAt: number;
-  // Deletion never actually erases the row — it's flagged so Blume
-  // Monitoring can still surface it. Every ordinary read path (this file's
-  // own GET) filters deleted messages out, so nothing changes for regular
-  // users; only Monitoring reads the flag itself.
   deleted?: boolean;
   deletedAt?: number;
-  // Set once the recipient has opened the conversation it belongs to.
-  // Used to compute the unread badge shown next to each contact.
   readAt?: number;
 }
 
@@ -46,9 +40,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Unread counts per sender, for the badge shown next to each contact
-    // in the sidebar — kept on this same endpoint rather than a new
-    // function file, since Vercel Hobby caps serverless functions at 12.
     if (req.query.unread === "1") {
       const me = session.username.toLowerCase();
       const all = (await kv.get<MessageEntry[]>("messages")) || [];
@@ -71,8 +62,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const key = conversationKey(session.username, withUser);
     const all = (await kv.get<MessageEntry[]>("messages")) || [];
 
-    // Opening a conversation is what marks the other person's messages as
-    // read — same trigger a real chat app uses.
     const me = session.username.toLowerCase();
     const otherLower = withUser.toLowerCase();
     let mutated = false;

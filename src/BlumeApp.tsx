@@ -82,10 +82,6 @@ interface GroupScanMember {
   relevantGroups?: PersonGroup[];
 }
 
-// Renders whatever shape the arrest data actually turns out to be — a flat
-// list of names/IDs, or a list of record objects with fields like
-// chargeIds/officer/date — decoding any numeric charge codes through the
-// PNC table along the way, since we don't control that API's exact schema.
 function ArrestRecord({ data }: { data: unknown }) {
   if (data === null || data === undefined) {
     return <p className="blume-muted">None on file.</p>;
@@ -235,9 +231,6 @@ const APPROACH = [
 
 const REQUEST_ACCESS_URL = "https://discord.gg/DHs9HnQ3JE";
 
-// Drop uploaded hero images in public/blume/hero/ and list their paths here
-// (e.g. "/blume/hero/1.jpg") to cycle them behind the hero headline. Leave
-// empty to keep the plain navy gradient.
 const HERO_IMAGES: string[] = [];
 const HERO_CYCLE_MS = 5000;
 
@@ -285,38 +278,12 @@ function Reveal({ children, className = "" }: { children: ReactNode; className?:
   );
 }
 
-// Every earlier version of this — CSS keyframes, a custom-property-fed
-// keyframe, native scrollLeft, a plain JS-set transform — shared one thing
-// in common: all of them animate `transform`, which Chrome/Safari/Firefox
-// all promote to its own GPU compositing layer (especially with
-// `will-change: transform`, which was set here specifically to ask for
-// that). A confirmed report narrowed the actual symptom down precisely:
-// it's not a wrap-math bug at all — the remaining marquee content simply
-// doesn't get rasterized as it scrolls in, and only "catches up" (pops in
-// all at once) once the animated position is roughly mid-viewport. That's
-// the signature of GPU tile-rasterization lag on a transform-animated
-// layer, not a JS timing or measurement issue — which is exactly why fixing
-// the measurement/wrap logic three different ways never changed the
-// symptom. The fix here is to stop using `transform` entirely and animate
-// `left` (a normal layout property) instead. That's ordinarily considered
-// "worse" for animation performance, because it forces a synchronous
-// layout + paint on the main thread every frame rather than letting the
-// compositor handle it independently — but for a single thin row of text,
-// that's a trivial amount of work, and paying it buys guaranteed painting:
-// there's no separate GPU raster pipeline here that can fall behind.
 function BlumeMarquee() {
   const containerRef = useRef<HTMLElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const setRef = useRef<HTMLDivElement | null>(null);
   const widthRef = useRef(0);
   const offsetRef = useRef(0);
-  // Two copies of the set is only enough to seamlessly cover a container
-  // narrower than one set's width — this app's windows are resizable, and
-  // widening one past that (e.g. maximizing) exposes a visible gap right
-  // at the wrap point, because there's no third copy queued up to slide
-  // in behind it. Render however many copies are actually needed to cover
-  // the current container width (plus one extra set as a buffer), and
-  // recompute it whenever either measurement changes.
   const [copies, setCopies] = useState(2);
 
   useEffect(() => {
@@ -459,9 +426,6 @@ export function BlumeApp({
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Group Search and Group Viewer are now one consolidated feature: a
-  // single group ID/URL drives both "show me who we already know in this
-  // group" (view) and "go fetch/refresh everyone in this group" (scan).
   const [groupsTab, setGroupsTab] = useState<"search" | "settings">("search");
   const [groupQuery, setGroupQuery] = useState("");
   const [groupScanning, setGroupScanning] = useState(false);
@@ -474,8 +438,6 @@ export function BlumeApp({
   const [viewerLoading, setViewerLoading] = useState(false);
   const [viewerError, setViewerError] = useState<string | null>(null);
 
-  // Group Settings tab: every known group (built-in + user-added), plus the
-  // form for adding a new one.
   const [groupCatalog, setGroupCatalog] = useState<PersonGroup[]>([]);
   const [newGroupId, setNewGroupId] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
@@ -483,8 +445,6 @@ export function BlumeApp({
   const [addingGroup, setAddingGroup] = useState(false);
   const { error: addGroupError, fading: addGroupFading, setError: setAddGroupError } = useFadingError();
 
-  // Monitoring — super-user only, reads private message/post content
-  // (including deleted rows), so it's kept separate from everything else.
   const [monitoringUsers, setMonitoringUsers] = useState<
     { username: string; redGroupName: string | null }[]
   >([]);
@@ -534,7 +494,6 @@ export function BlumeApp({
       const data = await res.json();
       setGamePlaceId(data.gamePlaceId || null);
     } catch {
-      // Best-effort — the strip just stays empty if this fails.
     }
   }
 
@@ -568,12 +527,9 @@ export function BlumeApp({
       setInGameUsers(data.users || []);
       setInGameLive(!!data.live);
     } catch {
-      // Best-effort — the list just stays empty if this fails.
     }
   }
 
-  // Presence changes constantly, so refresh it periodically while the
-  // dashboard is actually open rather than fetching it once and going stale.
   useEffect(() => {
     if (!loggedIn) return;
     loadActiveAgents();
@@ -598,8 +554,6 @@ export function BlumeApp({
   function handleLogin() {
     if (!canAccess) return;
     onMaximize?.();
-    // Let the window's resize animation get underway before the content
-    // swaps, so the transition reads as one fluid motion rather than a cut.
     window.setTimeout(() => setLoggedIn(true), 260);
   }
 
@@ -687,8 +641,6 @@ export function BlumeApp({
   const [usernameCopied, setUsernameCopied] = useState(false);
 
   function handleUsernameClick(name: string) {
-    // Jump the searched name into Person Search — expand the panel if it's
-    // collapsed so the result is actually visible.
     setCollapsedPanels((prev) => ({ ...prev, search: false }));
     handlePersonSearch(name);
   }
@@ -699,8 +651,6 @@ export function BlumeApp({
       setUsernameCopied(true);
       window.setTimeout(() => setUsernameCopied(false), 1500);
     } catch {
-      // Clipboard API can be denied/unavailable — fail quietly, nothing to
-      // recover from client-side.
     }
   }
 
@@ -796,12 +746,6 @@ export function BlumeApp({
     setPersonResult((prev) => (prev ? { ...prev, vehicleTags: data.vehicleTags || [] } : prev));
   }
 
-  // Client-driven so it works within Vercel's serverless timeouts and the
-  // records API's 50 req/min limit: the browser tab pages through the
-  // group's member list, then walks each member one at a time with a ~1.3s
-  // gap between records-API calls, updating progress as it goes. Stopping
-  // just flips a ref the loop checks between steps; resuming later re-runs
-  // the same group and the backend skips anyone scanned recently.
   async function startGroupScan() {
     const groupId = groupQuery.trim();
     if (!groupId || groupScanning) return;
@@ -829,11 +773,6 @@ export function BlumeApp({
         setGroupScanProgress((p) => ({ ...p, total: allMembers.length }));
       } while (cursor && !groupScanStopRef.current);
 
-      // Paced right up against the records API's real 50/min cap (1200ms
-      // between calls, measured start-to-start rather than tacked on after
-      // each request finishes) instead of leaving a conservative margin.
-      // Cache hits (already-scanned-recently members) don't touch that API
-      // at all, so they skip the wait entirely.
       const MIN_INTERVAL_MS = 1200;
       for (let i = 0; i < allMembers.length; i++) {
         if (groupScanStopRef.current) break;
@@ -905,8 +844,6 @@ export function BlumeApp({
       const data = await res.json();
       setGroupCatalog(data.groups || []);
     } catch {
-      // Group Settings tab just shows an empty list — not worth its own
-      // error state for a background refresh.
     }
   }
 
@@ -918,7 +855,6 @@ export function BlumeApp({
       const data = await res.json();
       setMonitoringUsers(data.users || []);
     } catch {
-      // Best-effort — the list just stays empty if this fails.
     } finally {
       setMonitoringLoading(false);
     }
@@ -935,7 +871,6 @@ export function BlumeApp({
       const data = await res.json();
       setMonitoringData(data);
     } catch {
-      // Left as null — the panel shows "no data" rather than crashing.
     } finally {
       setMonitoringDetailLoading(false);
     }
@@ -1279,10 +1214,6 @@ export function BlumeApp({
           <div className="blume-active-strip">
             <div className="blume-active-label-group">
               <img className="blume-active-brand-mark" src="/blume-logo.png" alt="" />
-              {/* Old presence-scan count removed — it only ever reflected
-                  people we'd already scanned, not the real server roster,
-                  and was misleading before the live ingest feed exists.
-                  Left blank until that's wired up. */}
               {canEditBlog && (
                 <button
                   className="blume-active-config-btn"

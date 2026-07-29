@@ -20,9 +20,6 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   const challenge = b64url(crypto.createHash("sha256").update(verifier).digest());
   const state = b64url(crypto.randomBytes(16));
 
-  // Serverless functions don't share memory between requests, so the PKCE
-  // verifier and state are stashed in short-lived cookies instead of a
-  // server-side map, and read back in the callback.
   setCookie(res, "wb_oauth_verifier", verifier, { maxAge: 600 });
   setCookie(res, "wb_oauth_state", state, { maxAge: 600 });
 

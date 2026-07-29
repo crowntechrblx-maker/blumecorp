@@ -31,8 +31,6 @@ const AuthContext = createContext<AuthState>({
   clearMessageNotification: () => {},
 });
 
-// Also drives how quickly a new-message toast/ding can appear, since that
-// check is piggybacked on this same poll rather than a dedicated endpoint.
 const POLL_MS = 5000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -41,7 +39,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [banned, setBanned] = useState(false);
   const [messageNotification, setMessageNotification] = useState<MessageNotification | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // undefined = haven't established a baseline yet (don't notify on first load)
   const lastMessageIdRef = useRef<string | null | undefined>(undefined);
 
   function applyMeResponse(data: any) {
@@ -57,7 +54,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (latest === undefined) return;
     const latestId = latest ? latest.id : null;
     if (lastMessageIdRef.current === undefined) {
-      // First load after mount/login — just record the baseline, no toast.
       lastMessageIdRef.current = latestId;
       return;
     }
@@ -78,9 +74,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
-    // Polled so a ban takes effect for someone already using the site, not
-    // just on next login — and so a new incoming message can trigger a
-    // toast promptly.
     pollRef.current = setInterval(() => {
       fetch("/api/auth/me")
         .then((r) => r.json())

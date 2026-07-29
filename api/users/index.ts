@@ -30,9 +30,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const search = ((req.query.search as string) || "").trim().toLowerCase();
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-  // Track the most recent message exchanged with each person so the sidebar
-  // can surface whoever you're actively talking to at the top, like a normal
-  // inbox — not just whoever happened to sign in most recently.
   const messages = (await kv.get<MessageEntry[]>("messages")) || [];
   const lastMessageAt = new Map<string, number>();
   const me = session.username.toLowerCase();

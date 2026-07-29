@@ -3,8 +3,6 @@ import { useAuth } from "./AuthContext";
 
 const VISIBLE_MS = 6500;
 
-// A short two-tone "ding" synthesized with the Web Audio API, so there's no
-// audio asset to ship or fetch — it just plays instantly.
 function playDing() {
   try {
     const Ctx = window.AudioContext || (window as any).webkitAudioContext;
@@ -30,8 +28,6 @@ function playDing() {
 
     window.setTimeout(() => ctx.close(), 700);
   } catch {
-    // Audio isn't available (e.g. blocked before any user interaction) —
-    // the visual toast still shows, so this is a silent no-op.
   }
 }
 

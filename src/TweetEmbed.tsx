@@ -23,10 +23,6 @@ function loadTwitterWidgets(): Promise<void> {
   return widgetsScriptPromise;
 }
 
-// Renders a tweet using X's official embed widget (widgets.js). This only
-// works with a specific tweet URL you provide — X's public API for listing
-// an account's latest tweets requires a paid developer plan, and scraping
-// the site directly isn't something this app does.
 export function TweetEmbed({ url }: { url: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -42,13 +38,6 @@ export function TweetEmbed({ url }: { url: string }) {
   }, [url]);
 
   useEffect(() => {
-    // X's widget picks a fixed pixel width based on the container's size
-    // the moment it renders, and never revisits that — so resizing its
-    // container afterwards leaves it either too narrow with a wall of
-    // blank space next to it, or clipped. A plain window "resize" listener
-    // isn't enough here: dragging a Westbridge OS window's corner resizes
-    // this container without changing the actual browser viewport size, so
-    // a ResizeObserver on the container itself is what actually catches it.
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     let resizeTimer: number | undefined;

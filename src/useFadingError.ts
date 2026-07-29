@@ -4,10 +4,6 @@ import { MODERATION_REJECTION_MESSAGE } from "./moderationMessage";
 const FADE_START_MS = 14700;
 const CLEAR_MS = 15000;
 
-// Drop-in replacement for `useState<string | null>(null)` for error banners.
-// Behaves identically, except: if the message set is the profanity/slur
-// moderation rejection, it automatically fades out and clears itself after
-// 15 seconds so the warning doesn't linger forever.
 export function useFadingError() {
   const [error, setErrorState] = useState<string | null>(null);
   const [fading, setFading] = useState(false);

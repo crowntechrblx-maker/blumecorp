@@ -1,9 +1,5 @@
 import Beams from "./Beams";
 
-// Set right before navigating to the OAuth login endpoint, so App.tsx knows
-// to play the fake init sequence once the redirect lands back with a
-// session — rather than every time an already-logged-in user reopens or
-// refreshes the app.
 export const LOGIN_SEQUENCE_FLAG = "wbos_login_sequence_pending";
 
 export function RobloxLogin() {

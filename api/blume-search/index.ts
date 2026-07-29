@@ -18,8 +18,6 @@ import {
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
 
-// The user's own read-only Roblox-side API (not ours) — it's what actually
-// holds arrest/plate data. See message.txt for the Lua snippet this mirrors.
 const READONLY_API = "https://polarisreadonly.up.railway.app";
 
 interface SearchSnapshot {
@@ -40,11 +38,6 @@ interface VehicleTag {
   createdAt: number;
 }
 
-// One row per Roblox user ever swept up by a group search — their full
-// group membership list, friends who are ALSO already in this same cache
-// (never a friend who's never been scanned/searched), plus whatever the
-// records API knows. `changed` records what was different from the last
-// time this same person was scanned, so Person Search can flag it.
 interface GroupScanEntry {
   userId: string;
   username: string;
@@ -56,9 +49,6 @@ interface GroupScanEntry {
   changed?: { username: boolean; groups: boolean; friends: boolean; at: number } | null;
 }
 
-// Groups users have added on top of the built-in PERSON_SEARCH_GROUPS list,
-// via the Group Settings tab. Stored separately so the built-in list never
-// needs a code change to extend.
 interface CustomGroup {
   id: number;
   name: string;
@@ -66,9 +56,6 @@ interface CustomGroup {
 }
 
 const HISTORY_PER_PERSON_CAP = 20;
-// Skip re-fetching a member's data if we scanned them within this window,
-// unless the caller explicitly asks to force a refresh — makes it cheap to
-// stop and re-run a big group scan without redoing all the finished work.
 const GROUP_SCAN_FRESH_MS = 6 * 60 * 60 * 1000;
 
 async function getGroupCatalog(): Promise<Record<number, { name: string; tier: "red" | "white" }>> {
@@ -88,9 +75,6 @@ function relevantGroups(
     .sort((a, b) => (a.tier === b.tier ? 0 : a.tier === "red" ? -1 : 1));
 }
 
-// The four agencies "Active Field Agents" watches for. Kept separate from
-// PERSON_SEARCH_GROUPS/BLUME_GROUP_IDS since it's its own specific list, not
-// tied to Blume-access grants or the red/white tiering.
 const AGENT_GROUPS: { id: number; label: string }[] = [
   { id: 187507831, label: "CIA" },
   { id: 154853936, label: "MI5" },
@@ -98,9 +82,6 @@ const AGENT_GROUPS: { id: number; label: string }[] = [
   { id: 315987361, label: "ROCU" },
 ];
 
-// The game's Place ID isn't stable (the user's said the link changes), so
-// it's an editable setting rather than a constant — the 3 super users can
-// update it from the dashboard instead of needing a code change each time.
 interface BlumeSettings {
   activeGamePlaceId?: string;
 }
@@ -109,11 +90,6 @@ async function loadBlumeSettings(): Promise<BlumeSettings> {
   return (await kv.get<BlumeSettings>("blumeSettings")) || {};
 }
 
-// Live server roster reported directly by an in-game script (HttpService),
-// via POST ?action=reportServerPlayers — a real player list rather than a
-// guess built from Roblox's presence API against a partial known-user
-// cache. Treated as stale (and ignored) if nothing's come in for a while,
-// so a stopped script doesn't leave a frozen roster on screen forever.
 interface ServerPresenceReport {
   placeId: string | null;
   players: { userId: string; username: string }[];
@@ -121,9 +97,6 @@ interface ServerPresenceReport {
 }
 const SERVER_PRESENCE_STALE_MS = 3 * 60 * 1000; // 3 min — script reports every 120s
 
-// Read-only mirrors of api/messages and api/posts' own KV record shapes,
-// used solely by Monitoring below — kept local rather than imported so this
-// file doesn't need to reach into another function's module.
 interface MonitoringMessageEntry {
   id: string;
   fromUsername: string;
@@ -141,12 +114,6 @@ interface MonitoringPostEntry {
   deleted?: boolean;
 }
 
-// Shared by the manual "scanMember" action and Active Field Agents' own
-// auto-scan of Luke's live roster below — resolves one Roblox user's
-// current username/avatar/groups/friends/plate and returns a fresh cache
-// entry. Doesn't touch KV itself; callers merge the result into
-// blumeGroupScanCache themselves (so the auto-scan path can batch several
-// writes into one kv.set instead of one per member).
 async function scanMemberEntry(
   userId: string,
   usernameHint: string | undefined,
@@ -161,8 +128,6 @@ async function scanMemberEntry(
     getRobloxFriends(userId),
   ]);
 
-  // Only keep friends who've ALSO already been through a group scan — never
-  // a friend we've never otherwise encountered.
   const knownScanIds = new Set(allEntries.map((m) => m.userId));
   const friends = friendsRaw
     .filter((f) => f.userId !== userId && knownScanIds.has(f.userId))
@@ -182,12 +147,8 @@ async function scanMemberEntry(
       customPlate = playerData.CustomPlate ?? null;
     }
   } catch {
-    // Best-effort — a scan that can't reach the records API still logs
-    // groups + photo rather than failing the whole member.
   }
 
-  // Compare against whatever we had on file before, so a re-scan can flag
-  // exactly what changed (surfaced later on Person Search).
   let changed: GroupScanEntry["changed"] = null;
   if (existing) {
     const usernameChanged = existing.username !== username;
@@ -218,13 +179,7 @@ async function scanMemberEntry(
   };
 }
 
-// This endpoint doubles up on both Person Search and its vehicle tagging
-// (via ?history= and the POST actions below) to avoid adding yet another
-// file under the Vercel Hobby 12-function cap.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Server roster ingest: an in-game script (HttpService), not a logged-in
-  // dashboard user, calls this — so it's checked before the session/cookie
-  // gate below and authenticated by its own shared secret instead.
   if (req.method === "POST") {
     const rawBody = req.body as { action?: string } | undefined;
     if (rawBody?.action === "reportServerPlayers") {
@@ -268,17 +223,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "GET") {
-    // Active Field Agents: of everyone currently in Luke's live server
-    // roster, which ones belong to CIA/MI5/MI6/ROCU. Since the roster is
-    // already a confirmed real in-game player list, there's no presence-API
-    // check needed here anymore — the only work left is knowing each live
-    // player's current groups, which means keeping their group-scan cache
-    // entry fresh. A 15-minute freshness window (much shorter than the 6h
-    // one manual scans reuse elsewhere) keeps that current without
-    // re-scanning someone who was just checked a minute ago. Re-scans are
-    // capped per request so a big batch of never-seen-before players can't
-    // blow past Vercel's execution time limit — leftover stale entries just
-    // get picked up on the next poll (client polls every 20s).
     if (req.query.activeAgents) {
       const settings = await loadBlumeSettings();
       const AGENT_SCAN_FRESH_MS = 15 * 60 * 1000;
@@ -298,9 +242,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let all = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
       const byId = new Map(all.map((m) => [m.userId, m]));
 
-      // Never-scanned/oldest-scanned first, so a big influx of new players
-      // catches up over a few polls instead of the same few always winning
-      // the batch cap.
       const stale = livePlayers
         .filter((p) => {
           const entry = byId.get(p.userId);
@@ -315,8 +256,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           all = [...all.filter((m) => m.userId !== p.userId), entry];
           byId.set(p.userId, entry);
         } catch {
-          // Best-effort — leave whatever's cached (or nothing) for this
-          // player and try again on a later poll.
         }
       }
       if (stale.length > 0) {
@@ -339,12 +278,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Field Activity's in-game list: everyone we've ever scanned (any
-    // group, not just the agent ones) who's actually in a game right now.
-    // Anyone in a red-tier group gets that group's name attached (same as
-    // Person Search / Group Viewer), and anyone in one of the 4 agent
-    // groups gets their role attached too — one merged list rather than a
-    // separate "Active agents" section. Red-tier people sort to the top.
     if (req.query.activeInGame) {
       const catalog = await getGroupCatalog();
       const scanCache = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
@@ -371,11 +304,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return a.username.localeCompare(b.username);
         });
 
-      // Only the live roster an in-game script reports directly counts as
-      // Field Activity now — the old presence-API scan fallback is gone,
-      // since it only ever reflected people we'd already scanned (not the
-      // real server list) and was showing up even with the new ingest
-      // still unused. Empty/stale report just means an empty list.
       const liveReport = await kv.get<ServerPresenceReport>("blumeServerPresence");
       if (liveReport && Date.now() - liveReport.updatedAt < SERVER_PRESENCE_STALE_MS) {
         const users = sortUsers(liveReport.players.map((p) => tagMember(p.userId, p.username, null)));
@@ -387,8 +315,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Every known group, built-in + anything added via the Group Settings
-    // tab — feeds that tab's list and the "browse a group" quick-picks.
     if (req.query.groupCatalog) {
       const catalog = await getGroupCatalog();
       const groups = Object.entries(catalog)
@@ -398,11 +324,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Monitoring: every user who's ever sent a message or posted, read
-    // straight out of the messages/posts KV stores (including rows flagged
-    // deleted — nothing is ever actually erased from those two stores).
-    // Open to anyone with Blume clearance (same gate as the rest of the
-    // dashboard), not just the 3 super users.
     if (req.query.monitoringUsers) {
       const catalog = await getGroupCatalog();
       const scanCache = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
@@ -431,10 +352,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Monitoring: everything a given username has ever sent — every DM
-    // conversation they're part of (grouped by the other person), and
-    // every post they've made. Includes deleted rows (flagged, not text
-    // shown separately so the reviewer can see exactly what was deleted).
     const monitoringChatsOf = (req.query.monitoringChats as string) || "";
     if (monitoringChatsOf) {
       const target = monitoringChatsOf.toLowerCase();
@@ -487,9 +404,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Group Search: page through a Roblox group's member list. Open to
-    // anyone with Blume clearance (not just the 3 super users) — Group
-    // Search and Group Viewer are now one consolidated feature.
     const groupMembersOf = (req.query.groupMembers as string) || "";
     if (groupMembersOf) {
       const cursor = (req.query.cursor as string) || "";
@@ -518,8 +432,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Group Viewer half of the consolidated feature: which already-scanned
-    // members belong to a given group. Open to anyone with Blume clearance.
     const groupScanOf = (req.query.groupScan as string) || "";
     if (groupScanOf) {
       const catalog = await getGroupCatalog();
@@ -592,10 +504,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (v) => v.userId === userId
     );
 
-    // Friends who are ALREADY in our system — someone else has searched
-    // them before, or they've been swept up by a Group Search scan. Never
-    // look up or list a friend who isn't already known to us; the point is
-    // cross-referencing existing records, not expanding who we track.
     const [allHistoryForFriends, groupScanForFriends, friends] = await Promise.all([
       kv.get<SearchSnapshot[]>("blumeSearchHistory"),
       kv.get<GroupScanEntry[]>("blumeGroupScanCache"),
@@ -609,9 +517,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const scanByUserId = new Map<string, GroupScanEntry>();
     for (const s of scanList) scanByUserId.set(s.userId, s);
     const knownIds = new Set<string>([...historyList.map((h) => h.userId), ...scanList.map((s) => s.userId)]);
-    // A friend flagged in red if THEY belong to a red-tier group — we only
-    // know a friend's groups if they've themselves been through a group
-    // scan (search history alone doesn't carry group membership).
     const knownFriends = friends
       .filter((f) => f.userId !== userId && knownIds.has(f.userId))
       .map((f) => {
@@ -629,17 +534,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         };
       });
 
-    // If this person has themselves been through a group scan before, carry
-    // forward whatever changed the last time they were re-scanned (username,
-    // groups, or their known-friends list), so Person Search can flag it.
     const ownScanEntry = scanList.find((s) => s.userId === userId);
     const groupScanChange = ownScanEntry?.changed || null;
 
-    // Cache a snapshot of the photo + plate for "View Previous" — only when
-    // we actually got something worth remembering, and only when it's
-    // actually different from the last thing we cached for this person (no
-    // point logging a new entry every time someone searches and nothing
-    // about their photo or plate has changed).
     if (avatarUrl || customPlate) {
       const allHistory = (await kv.get<SearchSnapshot[]>("blumeSearchHistory")) || [];
       const existingForPerson = allHistory

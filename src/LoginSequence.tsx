@@ -1,8 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-// Purely cosmetic — the "password" typed here is never real, just asterisks
-// standing in for one, to sell the fake terminal-init look right after a
-// real Roblox OAuth login has already succeeded.
 export function LoginSequence({ username, onDone }: { username: string; onDone: () => void }) {
   const [typedUser, setTypedUser] = useState("");
   const [typedPass, setTypedPass] = useState("");
@@ -54,13 +51,6 @@ export function LoginSequence({ username, onDone }: { username: string; onDone: 
     return () => window.clearTimeout(t);
   }, [stage, onDone]);
 
-  // Both blocks stay mounted the whole time and are layered on top of each
-  // other (absolutely positioned, see App.css); which one is visible is
-  // driven purely by an opacity class toggle. Conditionally mounting /
-  // unmounting them instead would mean the outgoing block vanishes
-  // instantly on the state flip (React doesn't animate unmounts), so the
-  // crossfade between the fake form and the welcome text would never
-  // actually be visible.
   const welcomeVisible = stage === "welcome" || stage === "out";
 
   return (

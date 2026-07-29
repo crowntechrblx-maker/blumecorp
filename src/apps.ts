@@ -14,15 +14,7 @@ export interface AppDef {
   id: AppId;
   name: string;
   icon: string;
-  // Optional image rendered on top of the coloured icon badge (instead of
-  // the plain `icon` glyph text) — used for apps with a real brand logo,
-  // e.g. Blume's desktop icon.
   iconImage?: string;
-  // When set, iconImage fills the whole tile (rounded corners, no colour
-  // badge behind it) instead of sitting as a small logo centred on `color`
-  // — for icons that are a complete image in their own right (Instagram,
-  // Messages, Settings, Backgrounds), as opposed to a wordmark/crest that
-  // needs a background colour behind it (Uber, TFL, Royal, Blume).
   iconFull?: boolean;
   color: string;
   defaultSize: { width: number; height: number };

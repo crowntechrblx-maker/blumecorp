@@ -127,7 +127,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       await del(wallpaper.url);
     } catch {
-      // Ignore blob delete failures; the metadata removal below still succeeds.
     }
 
     entries.splice(index, 1);
