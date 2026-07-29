@@ -214,6 +214,7 @@ interface BlumeReportEntry {
   createdAt: number;
   linkedUserId?: string;
   linkedUsername?: string;
+  expiresAt?: number;
 }
 
 const BLUME_GROUP_IDS = [154853936, 142915989, 685466511, 187507831, 315987361, 496716538];
@@ -1474,7 +1475,9 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             res.end(JSON.stringify({ reports: [], canAccess: false }));
             return;
           }
-          let reports = loadBlumeReportsDb().sort((a, b) => b.createdAt - a.createdAt);
+          let reports = loadBlumeReportsDb()
+            .filter((r) => !r.expiresAt || r.expiresAt > Date.now())
+            .sort((a, b) => b.createdAt - a.createdAt);
           const personId = url.searchParams.get("personId") || "";
           if (personId) {
             reports = reports.filter((r) => r.linkedUserId === personId);
@@ -1520,6 +1523,17 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
               res.end(MODERATION_REJECTION_MESSAGE);
               return;
             }
+            let expiresAt: number | undefined;
+            const expiresAtRaw = (body.expiresAt || "").toString().trim();
+            if (expiresAtRaw) {
+              const parsed = new Date(`${expiresAtRaw}T23:59:59`).getTime();
+              if (Number.isNaN(parsed)) {
+                res.statusCode = 400;
+                res.end("Invalid expiry date.");
+                return;
+              }
+              expiresAt = parsed;
+            }
             let linkedUserId: string | undefined;
             let linkedUsername: string | undefined;
             if (linkedPersonQuery) {
@@ -1539,6 +1553,7 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
               authorUsername: session.username,
               createdAt: Date.now(),
               ...(linkedUserId ? { linkedUserId, linkedUsername } : {}),
+              ...(expiresAt ? { expiresAt } : {}),
             };
             const entries = loadBlumeReportsDb();
             entries.push(entry);

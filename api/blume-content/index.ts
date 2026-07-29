@@ -15,6 +15,7 @@ interface BlumeReport {
   createdAt: number;
   linkedUserId?: string;
   linkedUsername?: string;
+  expiresAt?: number;
 }
 
 interface BlumeBlogPost {
@@ -132,9 +133,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(200).json({ reports: [], canAccess: false });
       return;
     }
-    let reports = ((await kv.get<BlumeReport[]>("blumeReports")) || []).sort(
-      (a, b) => b.createdAt - a.createdAt
-    );
+    let reports = ((await kv.get<BlumeReport[]>("blumeReports")) || [])
+      .filter((r) => !r.expiresAt || r.expiresAt > Date.now())
+      .sort((a, b) => b.createdAt - a.createdAt);
     const personId = (req.query.personId as string) || "";
     if (personId) {
       reports = reports.filter((r) => r.linkedUserId === personId);
@@ -153,7 +154,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     try {
-      const body = req.body as { title?: string; content?: string; linkedPerson?: string };
+      const body = req.body as {
+        title?: string;
+        content?: string;
+        linkedPerson?: string;
+        expiresAt?: string;
+      };
       const title = (body.title || "").toString().trim();
       const content = (body.content || "").toString().trim();
       const linkedPersonQuery = (body.linkedPerson || "").toString().trim();
@@ -172,6 +178,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (containsBlockedLanguage(title) || containsBlockedLanguage(content)) {
         res.status(400).send(MODERATION_REJECTION_MESSAGE);
         return;
+      }
+      let expiresAt: number | undefined;
+      const expiresAtRaw = (body.expiresAt || "").toString().trim();
+      if (expiresAtRaw) {
+        const parsed = new Date(`${expiresAtRaw}T23:59:59`).getTime();
+        if (Number.isNaN(parsed)) {
+          res.status(400).send("Invalid expiry date.");
+          return;
+        }
+        expiresAt = parsed;
       }
       let linkedUserId: string | undefined;
       let linkedUsername: string | undefined;
@@ -193,6 +209,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         authorUsername: session.username,
         createdAt: Date.now(),
         ...(linkedUserId ? { linkedUserId, linkedUsername } : {}),
+        ...(expiresAt ? { expiresAt } : {}),
       };
       const reports = (await kv.get<BlumeReport[]>("blumeReports")) || [];
       reports.push(entry);

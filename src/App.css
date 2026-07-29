@@ -2004,6 +2004,16 @@
 .blume-report-form textarea::placeholder {
   color: #6b7280;
 }
+.blume-report-expiry-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #9aa1ac;
+}
+.blume-report-expiry-field input {
+  flex: 1;
+}
 .blume-cta-btn {
   padding: 7px 14px;
   border: none;
@@ -2129,6 +2139,21 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+}
+.blume-ingame-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: #e5e7eb;
+  font-size: 12.5px;
+  font-family: inherit;
+  margin-top: 8px;
+}
+.blume-ingame-search::placeholder {
+  color: #6b7280;
 }
 .blume-ingame-users {
   display: flex;

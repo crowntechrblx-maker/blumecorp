@@ -10,6 +10,7 @@ interface BlumeReport {
   createdAt: number;
   linkedUserId?: string;
   linkedUsername?: string;
+  expiresAt?: number;
 }
 
 interface BlumeBlogPost {
@@ -385,12 +386,15 @@ export function BlumeApp({
     { username: string; avatarUrl: string | null; redGroupName: string | null; role: string | null }[]
   >([]);
   const [inGameLive, setInGameLive] = useState(false);
+  const [inGameSearchQuery, setInGameSearchQuery] = useState("");
+  const [activeAgents, setActiveAgents] = useState<{ username: string; role: string }[]>([]);
 
   const [reports, setReports] = useState<BlumeReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(true);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [linkedPerson, setLinkedPerson] = useState("");
+  const [reportExpiry, setReportExpiry] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { error, fading, setError } = useFadingError();
   const [reportSearchQuery, setReportSearchQuery] = useState("");
@@ -484,7 +488,10 @@ export function BlumeApp({
 
   async function loadActiveAgents() {
     try {
-      await fetch("/api/blume-search?activeAgents=1");
+      const res = await fetch("/api/blume-search?activeAgents=1");
+      if (!res.ok) return;
+      const data = await res.json();
+      setActiveAgents(data.agents || []);
     } catch {
     }
   }
@@ -543,6 +550,7 @@ export function BlumeApp({
           title: title.trim(),
           content: body.trim(),
           linkedPerson: linkedPerson.trim() || undefined,
+          expiresAt: reportExpiry || undefined,
         }),
       });
       if (!res.ok) {
@@ -552,6 +560,7 @@ export function BlumeApp({
       setTitle("");
       setBody("");
       setLinkedPerson("");
+      setReportExpiry("");
       await loadAccess();
       if (personResult) await loadPersonLinkedReports(personResult.userId);
     } finally {
@@ -1184,6 +1193,7 @@ export function BlumeApp({
           <div className="blume-active-strip">
             <div className="blume-active-label-group">
               <img className="blume-active-brand-mark" src="/blume-logo.png" alt="" />
+              <span className="blume-active-label">{activeAgents.length} Active</span>
             </div>
             <button className="blume-btn-login blume-btn-login-ghost blume-logout-btn" onClick={handleLogout}>
               LOGOUT
@@ -1215,6 +1225,14 @@ export function BlumeApp({
                       value={linkedPerson}
                       onChange={(e) => setLinkedPerson(e.target.value)}
                     />
+                    <label className="blume-report-expiry-field">
+                      Expires
+                      <input
+                        type="date"
+                        value={reportExpiry}
+                        onChange={(e) => setReportExpiry(e.target.value)}
+                      />
+                    </label>
                     <button
                       className="blume-cta-btn"
                       disabled={!title.trim() || !body.trim() || submitting}
@@ -1292,6 +1310,9 @@ export function BlumeApp({
                                     )}
                                   </>
                                 )}
+                                {r.expiresAt && (
+                                  <> · expires {new Date(r.expiresAt).toLocaleDateString()}</>
+                                )}
                               </span>
                             </div>
                           ))
@@ -1315,27 +1336,43 @@ export function BlumeApp({
                       In game now
                       {inGameLive && <span className="blume-ingame-live-tag">LIVE</span>}
                     </span>
-                    {inGameUsers.length === 0 ? (
-                      <p className="blume-muted">Nobody currently in-game.</p>
-                    ) : (
-                      <div className="blume-ingame-users">
-                        {inGameUsers.map((u) => (
-                          <div className="blume-ingame-user" key={u.username}>
-                            {u.avatarUrl && <img src={u.avatarUrl} alt="" />}
-                            <span
-                              className="blume-clickable-username"
-                              onClick={() => handleUsernameClick(u.username)}
-                            >
-                              {u.username}
-                            </span>
-                            {u.redGroupName && (
-                              <span className="blume-ingame-red-group">{u.redGroupName}</span>
-                            )}
-                            {u.role && <span className="blume-ingame-role">{u.role}</span>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <input
+                      className="blume-ingame-search"
+                      placeholder="Search in-game users…"
+                      value={inGameSearchQuery}
+                      onChange={(e) => setInGameSearchQuery(e.target.value)}
+                    />
+                    {(() => {
+                      const q = inGameSearchQuery.trim().toLowerCase();
+                      const filtered = q
+                        ? inGameUsers.filter((u) => u.username.toLowerCase().includes(q))
+                        : inGameUsers;
+                      if (inGameUsers.length === 0) {
+                        return <p className="blume-muted">Nobody currently in-game.</p>;
+                      }
+                      if (filtered.length === 0) {
+                        return <p className="blume-muted">No in-game users match "{inGameSearchQuery}".</p>;
+                      }
+                      return (
+                        <div className="blume-ingame-users">
+                          {filtered.map((u) => (
+                            <div className="blume-ingame-user" key={u.username}>
+                              {u.avatarUrl && <img src={u.avatarUrl} alt="" />}
+                              <span
+                                className="blume-clickable-username"
+                                onClick={() => handleUsernameClick(u.username)}
+                              >
+                                {u.username}
+                              </span>
+                              {u.redGroupName && (
+                                <span className="blume-ingame-red-group">{u.redGroupName}</span>
+                              )}
+                              {u.role && <span className="blume-ingame-role">{u.role}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -1569,6 +1606,7 @@ export function BlumeApp({
                             <p>{r.body}</p>
                             <span className="blume-report-meta">
                               Filed by {r.authorUsername} · {new Date(r.createdAt).toLocaleString()}
+                              {r.expiresAt && <> · expires {new Date(r.expiresAt).toLocaleDateString()}</>}
                             </span>
                           </div>
                         ))}
