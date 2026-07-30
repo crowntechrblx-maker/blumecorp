@@ -32,6 +32,14 @@ const GROUP_CATEGORY_ORDER: GroupCategory[] = [
   "Other",
 ];
 
+function categoryLabel(cat: string): string {
+  return cat === "IE" ? "Immigration Enforcement" : cat;
+}
+
+function personSearchCategoryLabel(cat: string): string {
+  return cat === "OCG" ? "Organised Crime Group" : categoryLabel(cat);
+}
+
 interface PersonGroup {
   id: number;
   name: string;
@@ -1114,7 +1122,11 @@ export function BlumeApp({
         line("No relevant group memberships found.");
       } else {
         for (const g of personResult.groups) {
-          line(`- ${g.name} (${g.category || (g.tier === "red" ? "Flagged" : "Standard")})`);
+          line(
+            `- ${g.name} (${personSearchCategoryLabel(
+              g.category || (g.tier === "red" ? "OCG" : "Emergency Services")
+            )})`
+          );
         }
       }
       if (personResult.groupScanChange) {
@@ -1436,7 +1448,7 @@ export function BlumeApp({
         const items = allGroups.filter(
           (g) => (g.category || (g.tier === "red" ? "OCG" : "Emergency Services")) === cat
         );
-        heading(`${cat} (${items.length})`);
+        heading(`${categoryLabel(cat)} (${items.length})`);
         if (items.length === 0) {
           line("No groups on file.");
         } else {
@@ -2451,7 +2463,7 @@ export function BlumeApp({
                                   cat === "IE" || cat === "OCG" ? " blume-group-red-text" : ""
                                 }`}
                               >
-                                {cat}
+                                {personSearchCategoryLabel(cat)}
                               </span>
                               <div className="blume-group-list">
                                 {items.map((g) => (
@@ -2568,46 +2580,6 @@ export function BlumeApp({
 
                   {groupsTab === "search" && (
                     <>
-                      <div className="blume-group-sections">
-                        <span className="blume-person-label">Browse a group</span>
-                        <div className="blume-group-settings-list">
-                          {GROUP_CATEGORY_ORDER.map((cat) => {
-                            const items = groupCatalog.filter(
-                              (g) =>
-                                (g.category || (g.tier === "red" ? "OCG" : "Emergency Services")) === cat
-                            );
-                            if (items.length === 0) return null;
-                            return (
-                              <div key={cat} className="blume-group-category-section">
-                                <span
-                                  className={`blume-person-label${
-                                    cat === "IE" || cat === "OCG" ? " blume-group-red-text" : ""
-                                  }`}
-                                >
-                                  {cat} ({items.length})
-                                </span>
-                                <div className="blume-group-list">
-                                  {items.map((g) => (
-                                    <button
-                                      key={g.id}
-                                      className={`blume-group-chip blume-group-section-btn ${
-                                        g.tier === "red" ? "blume-group-red" : ""
-                                      } ${groupQuery === String(g.id) ? "blume-group-section-active" : ""}`}
-                                      onClick={() => {
-                                        setGroupQuery(String(g.id));
-                                        runGroupViewer(String(g.id));
-                                      }}
-                                      disabled={viewerLoading}
-                                    >
-                                      {g.name}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
                       <div className="blume-search-form">
                         <input
                           placeholder="Group ID or URL…"
@@ -2723,7 +2695,7 @@ export function BlumeApp({
                           onChange={(v) => setNewGroupCategory(v as GroupCategory)}
                           options={GROUP_CATEGORY_ORDER.map((cat) => ({
                             value: cat,
-                            label: cat,
+                            label: categoryLabel(cat),
                             tone: cat === "IE" || cat === "OCG" ? "red" : "white",
                           }))}
                         />
@@ -2751,7 +2723,7 @@ export function BlumeApp({
                                   cat === "IE" || cat === "OCG" ? " blume-group-red-text" : ""
                                 }`}
                               >
-                                {cat} ({items.length})
+                                {categoryLabel(cat)} ({items.length})
                               </span>
                               <div className="blume-group-list">
                                 {items.map((g) => (
