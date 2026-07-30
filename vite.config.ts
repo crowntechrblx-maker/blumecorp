@@ -154,8 +154,8 @@ async function resolveRobloxUserId(
   }
 }
 
-type GroupCategory = "Emergency Services" | "Intelligence" | "IE" | "OCG";
-const GROUP_CATEGORIES: GroupCategory[] = ["Emergency Services", "Intelligence", "IE", "OCG"];
+type GroupCategory = "Emergency Services" | "Intelligence" | "IE" | "OCG" | "Other";
+const GROUP_CATEGORIES: GroupCategory[] = ["Emergency Services", "Intelligence", "IE", "OCG", "Other"];
 
 function tierForCategory(category: string): "red" | "white" {
   return category === "IE" || category === "OCG" ? "red" : "white";

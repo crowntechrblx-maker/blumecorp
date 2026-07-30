@@ -23,8 +23,14 @@ interface BlumeBlogPost {
   createdAt: number;
 }
 
-type GroupCategory = "Emergency Services" | "Intelligence" | "IE" | "OCG";
-const GROUP_CATEGORY_ORDER: GroupCategory[] = ["Emergency Services", "Intelligence", "IE", "OCG"];
+type GroupCategory = "Emergency Services" | "Intelligence" | "IE" | "OCG" | "Other";
+const GROUP_CATEGORY_ORDER: GroupCategory[] = [
+  "Emergency Services",
+  "Intelligence",
+  "IE",
+  "OCG",
+  "Other",
+];
 
 interface PersonGroup {
   id: number;

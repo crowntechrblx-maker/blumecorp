@@ -2715,22 +2715,22 @@
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--blume-navy-2);
+  border: 1px solid var(--blume-line);
   border-radius: 6px;
   padding: 7px 10px;
-  color: #e5e7eb;
+  color: var(--blume-mist);
   font-size: 12.5px;
   font-family: inherit;
   cursor: pointer;
   text-align: left;
 }
 .blume-custom-select-trigger:hover {
-  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--blume-accent);
 }
 .blume-custom-select-open {
-  border-color: rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--blume-accent);
+  background: var(--blume-navy);
 }
 .blume-custom-select-value {
   overflow: hidden;
@@ -2738,7 +2738,7 @@
   white-space: nowrap;
 }
 .blume-custom-select-arrow {
-  color: #9ca3af;
+  color: var(--blume-accent);
   font-size: 10px;
   flex-shrink: 0;
 }
@@ -2751,8 +2751,8 @@
   list-style: none;
   margin: 0;
   padding: 4px;
-  background: #14161c;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--blume-navy-deep);
+  border: 1px solid var(--blume-line);
   border-radius: 8px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
   max-height: 220px;
@@ -2762,14 +2762,15 @@
   padding: 7px 9px;
   border-radius: 5px;
   font-size: 12.5px;
-  color: #e5e7eb;
+  color: var(--blume-mist);
   cursor: pointer;
 }
 .blume-custom-select-highlight {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--blume-navy-2);
+  color: var(--blume-accent);
 }
 .blume-custom-select-selected {
-  color: #fff;
+  color: var(--blume-accent);
   font-weight: 600;
 }
 .blume-custom-select-option.blume-group-red {
@@ -2777,6 +2778,7 @@
 }
 .blume-custom-select-option.blume-group-red.blume-custom-select-highlight {
   background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
 }
 .blume-scan-change-banner {
   background: rgba(251, 191, 36, 0.12);
