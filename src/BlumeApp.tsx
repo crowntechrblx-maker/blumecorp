@@ -133,20 +133,70 @@ function normalizeTimestampMs(value: number): number {
   return value > 0 && value < 10_000_000_000 ? value * 1000 : value;
 }
 
-async function loadImageAsDataUrl(url: string): Promise<string | null> {
+function loadImageElement(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+async function loadInvertedLogoDataUrl(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    const img = await loadImageElement(url);
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 255 - data[i];
+      data[i + 1] = 255 - data[i + 1];
+      data[i + 2] = 255 - data[i + 2];
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return canvas.toDataURL("image/png");
   } catch {
     return null;
   }
+}
+
+function generatePaperTextureDataUrl(width = 850, height = 1200): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  ctx.fillStyle = "#fbf9f2";
+  ctx.fillRect(0, 0, width, height);
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const noise = (Math.random() - 0.5) * 9;
+    data[i] = Math.min(255, Math.max(0, data[i] + noise));
+    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
+    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+function formatDateTimeNoSeconds(value: Date | number): string {
+  const d = typeof value === "number" ? new Date(value) : value;
+  const datePart = d.toLocaleDateString();
+  const timePart = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return `${datePart}, ${timePart}`;
+}
+
+function formatDateForFilename(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 function ArrestRecord({ data }: { data: unknown }) {
@@ -507,6 +557,7 @@ export function BlumeApp({
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [confirmingReport, setConfirmingReport] = useState(false);
 
   const [groupsTab, setGroupsTab] = useState<"search" | "settings">("search");
   const [groupQuery, setGroupQuery] = useState("");
@@ -790,8 +841,9 @@ export function BlumeApp({
           historyForReport = [];
         }
       }
-      const logoDataUrl = await loadImageAsDataUrl("/blume-logo.png");
+      const logoDataUrl = await loadInvertedLogoDataUrl("/blume-logo.png");
       const generatedAt = new Date();
+      const textureDataUrl = generatePaperTextureDataUrl();
 
       const doc = new jsPDF({ unit: "pt", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -801,9 +853,16 @@ export function BlumeApp({
       const bottomLimit = pageHeight - 70;
       let y = 56;
 
+      function paintPageBackground() {
+        if (!textureDataUrl) return;
+        doc.addImage(textureDataUrl, "JPEG", 0, 0, pageWidth, pageHeight);
+      }
+      paintPageBackground();
+
       function ensureSpace(lineHeight: number) {
         if (y + lineHeight > bottomLimit) {
           doc.addPage();
+          paintPageBackground();
           y = 56;
         }
       }
@@ -879,7 +938,7 @@ export function BlumeApp({
           .filter(Boolean)
           .join(", ");
         line(
-          `Most recent change detected: ${changed || "none"} — ${new Date(c.at).toLocaleString()}`
+          `Most recent change detected: ${changed || "none"} — ${formatDateTimeNoSeconds(c.at)}`
         );
       }
       spacer();
@@ -954,7 +1013,7 @@ export function BlumeApp({
             line(
               `- ${charges.length > 0 ? charges.join(", ") : "Unspecified charge"}${
                 officer !== undefined ? ` — by ${String(officer)}` : ""
-              }${whenMs !== null ? ` — ${new Date(whenMs).toLocaleString()}` : ""}`
+              }${whenMs !== null ? ` — ${formatDateTimeNoSeconds(whenMs)}` : ""}`
             );
           } else {
             line(`- ${String(item)}`);
@@ -969,10 +1028,22 @@ export function BlumeApp({
       } else {
         for (const h of historyForReport) {
           line(
-            `- ${h.customPlate || "No plate"} — searched by ${h.searchedByUsername} on ${new Date(h.createdAt).toLocaleString()}`
+            `- ${h.customPlate || "No plate"} — searched by ${h.searchedByUsername} on ${formatDateTimeNoSeconds(h.createdAt)}`
           );
         }
       }
+
+      const stampZoneTop = y + 10;
+      const stampZoneBottom = Math.max(stampZoneTop, bottomLimit - 6);
+      const stampY = stampZoneTop + Math.random() * (stampZoneBottom - stampZoneTop);
+      const stampX = marginX + 60 + Math.random() * Math.max(0, maxWidth - 120);
+      const stampAngle = -35 + Math.random() * 70;
+      doc.setGState(doc.GState({ opacity: 0.55 }));
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.setTextColor(160, 30, 30);
+      doc.text("[ VERIFIED ]", stampX, stampY, { angle: stampAngle, align: "center" });
+      doc.setGState(doc.GState({ opacity: 1 }));
 
       const totalPages = doc.getNumberOfPages();
       const logoW = 12;
@@ -992,12 +1063,12 @@ export function BlumeApp({
         }
         doc.text("Powered by Blume Corporation", marginX + logoGap, footerY);
 
-        const generatedText = `Generated by ${username || "an unknown user"} on ${generatedAt.toLocaleString()}`;
+        const generatedText = `Generated by ${username || "an unknown user"} on ${formatDateTimeNoSeconds(generatedAt)}`;
         const textWidth = doc.getTextWidth(generatedText);
         doc.text(generatedText, pageWidth - marginX - textWidth, footerY);
       }
 
-      doc.save(`Blume-Report-${personResult.username}-${Date.now()}.pdf`);
+      doc.save(`Intel-${personResult.username}-${formatDateForFilename(generatedAt)}.pdf`);
     } finally {
       setGeneratingReport(false);
     }
@@ -1823,7 +1894,7 @@ export function BlumeApp({
                     </button>
                     <button
                       className="blume-view-previous-btn"
-                      onClick={generatePersonReport}
+                      onClick={() => setConfirmingReport(true)}
                       disabled={generatingReport}
                     >
                       {generatingReport ? "Generating…" : "Generate Report"}
@@ -2373,6 +2444,33 @@ export function BlumeApp({
       {enlargedImage && (
         <div className="blume-image-lightbox" onClick={() => setEnlargedImage(null)}>
           <img src={enlargedImage} alt="" />
+        </div>
+      )}
+
+      {confirmingReport && (
+        <div className="blume-modal-backdrop">
+          <div className="blume-modal">
+            <p>
+              WestbridgeOS will now download a PDF file. Are you sure you'd like to continue?
+            </p>
+            <div className="blume-modal-actions">
+              <button
+                className="blume-modal-cancel"
+                onClick={() => setConfirmingReport(false)}
+              >
+                No
+              </button>
+              <button
+                className="blume-modal-confirm"
+                onClick={() => {
+                  setConfirmingReport(false);
+                  generatePersonReport();
+                }}
+              >
+                Yes
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
