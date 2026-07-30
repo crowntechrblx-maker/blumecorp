@@ -2948,6 +2948,21 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             }
           }
 
+          const rawFormerGroups = await recordGroupMembershipAndGetFormerGroups(
+            userId,
+            username,
+            groupIds,
+            avatarUrl
+          );
+          const formerGroups = rawFormerGroups
+            .filter((f) => Date.now() - f.lastSeenAt <= FORMER_GROUP_WINDOW_MS)
+            .map((f) => {
+              const info = catalog[f.groupId];
+              return info ? { id: f.groupId, ...info, lastSeenAt: f.lastSeenAt } : null;
+            })
+            .filter((f): f is NonNullable<typeof f> => !!f && f.tier === "red")
+            .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
+
           appendAuditLog({
             type: "blume_person_search",
             username: session.username,
@@ -2963,6 +2978,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               customPlate,
               arrestHistory,
               groups,
+              formerGroups,
               vehicleTags,
               knownFriends,
               groupScanChange,

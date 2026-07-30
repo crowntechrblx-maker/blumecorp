@@ -70,6 +70,10 @@ interface GroupScanChange {
   at: number;
 }
 
+interface FormerGroup extends PersonGroup {
+  lastSeenAt: number;
+}
+
 interface PersonSearchResult {
   userId: string;
   username: string;
@@ -77,6 +81,7 @@ interface PersonSearchResult {
   customPlate: string | null;
   arrestHistory: unknown;
   groups: PersonGroup[];
+  formerGroups?: FormerGroup[];
   vehicleTags: VehicleTag[];
   knownFriends: KnownFriend[];
   groupScanChange: GroupScanChange | null;
@@ -1025,6 +1030,14 @@ export function BlumeApp({
         );
       }
       spacer();
+
+      if (personResult.formerGroups && personResult.formerGroups.length > 0) {
+        heading("Former Group Activity (last 6 months)");
+        for (const g of personResult.formerGroups) {
+          line(`- ${g.name} — last detected ${formatDateTimeNoSeconds(g.lastSeenAt)}`);
+        }
+        spacer();
+      }
 
       heading("Known Vehicles");
       if (personResult.vehicleTags.length === 0) {
@@ -2362,6 +2375,21 @@ export function BlumeApp({
                       </div>
                     )}
                   </div>
+
+                  {personResult.formerGroups && personResult.formerGroups.length > 0 && (
+                    <div className="blume-person-section">
+                      <span className="blume-person-label blume-group-red-text">
+                        Former membership (last 6 months)
+                      </span>
+                      <div className="blume-group-list">
+                        {personResult.formerGroups.map((g) => (
+                          <span key={g.id} className="blume-group-chip blume-group-red">
+                            {g.name} — last seen {formatDateTimeNoSeconds(g.lastSeenAt)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {personResult.knownFriends.length > 0 && (
                     <div className="blume-person-section">
