@@ -1322,12 +1322,14 @@ export function BlumeApp({
       }
       paintPageBackground();
 
-      function ensureSpace(lineHeight: number) {
+      function ensureSpace(lineHeight: number): boolean {
         if (y + lineHeight > bottomLimit) {
           doc.addPage();
           paintPageBackground();
           y = 56;
+          return true;
         }
+        return false;
       }
 
       function heading(text: string) {
@@ -1358,6 +1360,72 @@ export function BlumeApp({
         y += h;
       }
 
+      const lineH = 13;
+      const cellPadX = 6;
+      const idColWidth = 90;
+      const membersColWidth = 74;
+      const nameColWidth = maxWidth - idColWidth - membersColWidth;
+      const colMembersX = marginX + nameColWidth;
+      const colIdX = colMembersX + membersColWidth;
+
+      function drawTableHeaderRow() {
+        const rowH = lineH + 8;
+        ensureSpace(rowH);
+        const top = y - lineH + 3;
+        doc.setFillColor(222, 219, 208);
+        doc.rect(marginX, top, maxWidth, rowH, "F");
+        doc.setDrawColor(150, 145, 130);
+        doc.setLineWidth(0.6);
+        doc.rect(marginX, top, maxWidth, rowH, "S");
+        doc.line(colMembersX, top, colMembersX, top + rowH);
+        doc.line(colIdX, top, colIdX, top + rowH);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(20, 20, 20);
+        doc.text("GROUP NAME", marginX + cellPadX, y);
+        doc.text("MEMBERS", colIdX - cellPadX, y, { align: "right" });
+        doc.text("GROUP ID", pageWidth - marginX - cellPadX, y, { align: "right" });
+        y = top + rowH + lineH - 3;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(40, 40, 40);
+        doc.setLineWidth(0.4);
+      }
+
+      function drawTableDataRow(
+        name: string,
+        members: string,
+        id: string,
+        zebraRef: { i: number }
+      ) {
+        const wrapped = doc.splitTextToSize(name, nameColWidth - cellPadX * 2) as string[];
+        const rowH = Math.max(1, wrapped.length) * lineH + 8;
+        const broke = ensureSpace(rowH);
+        if (broke) {
+          drawTableHeaderRow();
+          zebraRef.i = 0;
+        }
+        const zebra = zebraRef.i % 2 === 1;
+        zebraRef.i += 1;
+        const top = y - lineH + 3;
+        if (zebra) {
+          doc.setFillColor(241, 238, 230);
+          doc.rect(marginX, top, maxWidth, rowH, "F");
+        }
+        doc.setDrawColor(205, 201, 190);
+        doc.setLineWidth(0.4);
+        doc.rect(marginX, top, maxWidth, rowH, "S");
+        doc.line(colMembersX, top, colMembersX, top + rowH);
+        doc.line(colIdX, top, colIdX, top + rowH);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(40, 40, 40);
+        wrapped.forEach((w, i) => doc.text(w, marginX + cellPadX, y + i * lineH));
+        doc.text(members, colIdX - cellPadX, y, { align: "right" });
+        doc.text(id, pageWidth - marginX - cellPadX, y, { align: "right" });
+        y = top + rowH + lineH - 3;
+      }
+
       doc.setFont("helvetica", "bold");
       doc.setFontSize(18);
       doc.setTextColor(20, 20, 20);
@@ -1372,15 +1440,18 @@ export function BlumeApp({
         if (items.length === 0) {
           line("No groups on file.");
         } else {
+          drawTableHeaderRow();
+          const zebraRef = { i: 0 };
           for (const g of items) {
-            line(
-              `- ${g.name} — ${
-                typeof g.memberCount === "number" ? g.memberCount.toLocaleString() : "Unknown"
-              } members — ID ${g.id}`
+            drawTableDataRow(
+              g.name,
+              typeof g.memberCount === "number" ? g.memberCount.toLocaleString() : "Unknown",
+              String(g.id),
+              zebraRef
             );
           }
         }
-        spacer();
+        spacer(10);
       }
 
       const stampZoneTop = y + 10;
