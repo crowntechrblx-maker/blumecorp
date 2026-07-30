@@ -75,18 +75,18 @@ export async function getUserGroupIds(userId: string): Promise<number[]> {
   }
 }
 
-const fullAvatarCache = new Map<string, string | null>();
+const squareAvatarCache = new Map<string, string | null>();
 
-export async function getRobloxFullAvatarUrl(userId: string): Promise<string | null> {
-  if (fullAvatarCache.has(userId)) return fullAvatarCache.get(userId)!;
+export async function getRobloxSquareAvatarUrl(userId: string): Promise<string | null> {
+  if (squareAvatarCache.has(userId)) return squareAvatarCache.get(userId)!;
   try {
     const res = await fetch(
-      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${userId}&size=420x420&format=Png&isCircular=false`,
+      `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=false`,
       { headers: robloxHeaders() }
     );
     const data = (await res.json()) as { data?: { imageUrl?: string }[] };
     const url = data.data?.[0]?.imageUrl || null;
-    fullAvatarCache.set(userId, url);
+    squareAvatarCache.set(userId, url);
     return url;
   } catch {
     return null;

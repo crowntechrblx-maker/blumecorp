@@ -120,18 +120,18 @@ async function getRobloxFriends(userId: string): Promise<{ userId: string; usern
   }
 }
 
-const fullAvatarCache = new Map<string, string | null>();
+const squareAvatarCache = new Map<string, string | null>();
 
-async function getRobloxFullAvatarUrl(userId: string): Promise<string | null> {
-  if (fullAvatarCache.has(userId)) return fullAvatarCache.get(userId)!;
+async function getRobloxSquareAvatarUrl(userId: string): Promise<string | null> {
+  if (squareAvatarCache.has(userId)) return squareAvatarCache.get(userId)!;
   try {
     const res = await fetch(
-      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${userId}&size=420x420&format=Png&isCircular=false`,
+      `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${userId}&size=150x150&format=Png&isCircular=false`,
       { headers: robloxHeaders() }
     );
     const data = (await res.json()) as { data?: { imageUrl?: string }[] };
     const url = data.data?.[0]?.imageUrl || null;
-    fullAvatarCache.set(userId, url);
+    squareAvatarCache.set(userId, url);
     return url;
   } catch {
     return null;
@@ -2502,10 +2502,10 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               res.end(`Couldn't find a Roblox user matching "${q}".`);
               return;
             }
-            const [avatarUrl, fullAvatarUrl, groupIds, catalog, friendsCount, followersCount, createdAt] =
+            const [avatarUrl, avatarSquareUrl, groupIds, catalog, friendsCount, followersCount, createdAt] =
               await Promise.all([
                 getRobloxAvatarUrl(resolved.userId),
-                getRobloxFullAvatarUrl(resolved.userId),
+                getRobloxSquareAvatarUrl(resolved.userId),
                 getUserGroupIds(resolved.userId),
                 getGroupCatalog(),
                 getRobloxFriendsCount(resolved.userId),
@@ -2533,7 +2533,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 userId: resolved.userId,
                 username: resolved.username,
                 avatarUrl,
-                fullAvatarUrl,
+                avatarSquareUrl,
                 groups: relevantGroups(groupIds, catalog),
                 formerGroups,
                 friendsCount,

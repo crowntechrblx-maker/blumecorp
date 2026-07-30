@@ -18,7 +18,7 @@ interface VerifilePerson {
   userId: string;
   username: string;
   avatarUrl: string | null;
-  fullAvatarUrl?: string | null;
+  avatarSquareUrl?: string | null;
   friendsCount?: number | null;
   followersCount?: number | null;
   createdAt?: string | null;
@@ -103,6 +103,63 @@ async function loadRemoteImageAsDataUrl(
   } catch {
     return null;
   }
+}
+
+function loadImageElement(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+async function loadInvertedLogoDataUrl(url: string): Promise<string | null> {
+  try {
+    const img = await loadImageElement(url);
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 255 - data[i];
+      data[i + 1] = 255 - data[i + 1];
+      data[i + 2] = 255 - data[i + 2];
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return canvas.toDataURL("image/png");
+  } catch {
+    return null;
+  }
+}
+
+function generatePaperTextureDataUrl(width = 850, height = 1200): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  ctx.fillStyle = "#fbf9f2";
+  ctx.fillRect(0, 0, width, height);
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const noise = (Math.random() - 0.5) * 9;
+    data[i] = Math.min(255, Math.max(0, data[i] + noise));
+    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
+    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+function randomStampAngle(): number {
+  const magnitude = 10 + Math.random() * 25;
+  return Math.random() < 0.5 ? -magnitude : magnitude;
 }
 
 export function VerifileApp({ username }: { username: string }) {
@@ -252,13 +309,12 @@ export function VerifileApp({ username }: { username: string }) {
     if (!person) return;
     setGeneratingReport(true);
     try {
+      const logoDataUrl = await loadInvertedLogoDataUrl("/blume-logo.png");
       const generatedAt = new Date();
-      const photoUrls = [person.avatarUrl, person.fullAvatarUrl].filter(
-        (u): u is string => !!u
-      );
-      const loadedPhotos = (
-        await Promise.all(photoUrls.map((u) => loadRemoteImageAsDataUrl(u)))
-      ).filter((p): p is { dataUrl: string; format: "PNG" | "JPEG" } => !!p);
+      const textureDataUrl = generatePaperTextureDataUrl();
+
+      const squarePhotoUrl = person.avatarSquareUrl || person.avatarUrl;
+      const loadedPhoto = squarePhotoUrl ? await loadRemoteImageAsDataUrl(squarePhotoUrl) : null;
 
       const doc = new jsPDF({ unit: "pt", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -268,20 +324,25 @@ export function VerifileApp({ username }: { username: string }) {
       const bottomLimit = pageHeight - 70;
       let y = 56;
 
-      function ensureSpace(lineHeight: number): boolean {
+      function paintPageBackground() {
+        if (!textureDataUrl) return;
+        doc.addImage(textureDataUrl, "JPEG", 0, 0, pageWidth, pageHeight);
+      }
+      paintPageBackground();
+
+      function ensureSpace(lineHeight: number) {
         if (y + lineHeight > bottomLimit) {
           doc.addPage();
+          paintPageBackground();
           y = 56;
-          return true;
         }
-        return false;
       }
 
       function heading(text: string) {
         ensureSpace(30);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(11);
-        doc.setTextColor(7, 32, 59);
+        doc.setTextColor(20, 20, 20);
         doc.text(text.toUpperCase(), marginX, y);
         y += 6;
         doc.setDrawColor(200, 200, 200);
@@ -301,75 +362,101 @@ export function VerifileApp({ username }: { username: string }) {
         }
       }
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(18);
-      doc.setTextColor(7, 32, 59);
-      doc.text("VERIFILE IDENTITY RECORD", marginX, y);
-      y += 26;
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.setTextColor(20, 20, 20);
-      doc.text(person.username, marginX, y);
-      y += 16;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(80, 80, 80);
-      doc.text(`User ID: ${person.userId}`, marginX, y);
-      y += 20;
-
-      if (loadedPhotos.length > 0) {
-        const photoTop = y;
-        const photoH = 90;
-        let photoX = marginX;
-        for (const photo of loadedPhotos) {
-          doc.addImage(photo.dataUrl, photo.format, photoX, photoTop, 70, photoH);
-          photoX += 82;
-        }
-        y = photoTop + photoH + 18;
+      function spacer(h = 14) {
+        y += h;
       }
 
-      heading("Account Overview");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(20, 20, 20);
+      doc.text("VERIFILE RECORD", marginX, y);
+
+      if (loadedPhoto) {
+        const photoSize = 36;
+        const photoX = pageWidth - marginX - photoSize;
+        const photoY = y - 26;
+        doc.addImage(loadedPhoto.dataUrl, loadedPhoto.format, photoX, photoY, photoSize, photoSize);
+        doc.setDrawColor(170, 170, 170);
+        doc.rect(photoX, photoY, photoSize, photoSize);
+      }
+      y += 30;
+
+      heading("Subject Overview");
+      line(`Username: ${person.username}`);
+      line(`User ID: ${person.userId}`);
       line(`Friends: ${person.friendsCount ?? "Unknown"}`);
       line(`Followers: ${person.followersCount ?? "Unknown"}`);
       line(`Account age: ${formatAccountAge(person.createdAt)}`);
-      y += 6;
+      spacer();
 
-      heading(`Groups (${person.groups.length})`);
+      heading("Group Membership");
       if (person.groups.length === 0) {
         line("No relevant group memberships found.");
       } else {
         for (const g of person.groups) {
-          ensureSpace(14);
-          if (g.tier === "red") {
-            doc.setTextColor(160, 30, 30);
-          } else {
-            doc.setTextColor(40, 40, 40);
-          }
-          doc.text(`•  ${g.name}${g.category ? ` (${g.category})` : ""}`, marginX, y);
-          y += 14;
+          line(`- ${g.name} (${g.category || (g.tier === "red" ? "OCG" : "Other")})`);
         }
-        doc.setTextColor(40, 40, 40);
       }
+      spacer();
 
       if (person.formerGroups && person.formerGroups.length > 0) {
-        y += 6;
         heading("Former Group Activity (last 6 months)");
         for (const g of person.formerGroups) {
-          line(`•  ${g.name} — last detected ${formatDateTimeNoSeconds(g.lastSeenAt)}`);
+          line(`- ${g.name} — last detected ${formatDateTimeNoSeconds(g.lastSeenAt)}`);
+        }
+        spacer();
+      }
+
+      heading("Logs");
+      if (punishments.length === 0) {
+        line("No entries on file.");
+      } else {
+        for (const p of punishments) {
+          line(`- ${p.type} (${p.serviceGroupName}) — logged by ${p.addedByUsername} on ${formatDateTimeNoSeconds(p.createdAt)}`);
+          line(`  ${p.details}`);
         }
       }
 
+      const stampZoneTop = y + 10;
+      const stampZoneBottom = Math.max(stampZoneTop, bottomLimit - 6);
+      function randomStampPoint() {
+        return {
+          x: marginX + 60 + Math.random() * Math.max(0, maxWidth - 120),
+          y: stampZoneTop + Math.random() * (stampZoneBottom - stampZoneTop),
+        };
+      }
+
+      const stampPoint = randomStampPoint();
+      const stampAngle = randomStampAngle();
+
+      doc.setGState(doc.GState({ opacity: 0.55 }));
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(26);
+      doc.setTextColor(160, 30, 30);
+      doc.text("[ VERIFILE ]", stampPoint.x, stampPoint.y, {
+        angle: stampAngle,
+        align: "center",
+      });
+      doc.setGState(doc.GState({ opacity: 1 }));
+
       const totalPages = doc.getNumberOfPages();
+      const logoW = 12;
+      const logoH = logoW * (903 / 823);
       for (let p = 1; p <= totalPages; p++) {
         doc.setPage(p);
         const footerY = pageHeight - 28;
         doc.setDrawColor(220, 220, 220);
         doc.line(marginX, footerY - 14, pageWidth - marginX, footerY - 14);
+
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8.5);
         doc.setTextColor(120, 120, 120);
-        doc.text("Powered by Blume Corporation", marginX, footerY);
+        const logoGap = logoDataUrl ? logoW + 6 : 0;
+        if (logoDataUrl) {
+          doc.addImage(logoDataUrl, "PNG", marginX, footerY - logoH + 3, logoW, logoH);
+        }
+        doc.text("Powered by Blume Corporation", marginX + logoGap, footerY);
+
         const generatedText = `Generated by ${username || "an unknown user"} on ${formatDateTimeNoSeconds(generatedAt)}`;
         const textWidth = doc.getTextWidth(generatedText);
         doc.text(generatedText, pageWidth - marginX - textWidth, footerY);
