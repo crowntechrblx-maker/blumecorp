@@ -2208,6 +2208,29 @@ interface GroupScanEntry {
   scannedAt: number;
   changed?: { username: boolean; groups: boolean; friends: boolean; at: number } | null;
   lastSeenOnlineAt?: number;
+  formerGroups?: { groupId: number; lastSeenAt: number }[];
+}
+
+const FORMER_GROUP_WINDOW_MS = 1000 * 60 * 60 * 24 * 182;
+
+function diffFormerGroups(
+  existing: GroupScanEntry | undefined,
+  newGroupIds: number[]
+): { groupId: number; lastSeenAt: number }[] {
+  let formerGroups = existing?.formerGroups ? existing.formerGroups.map((f) => ({ ...f })) : [];
+  if (existing) {
+    const newSet = new Set(newGroupIds);
+    for (const oldId of existing.groupIds) {
+      if (!newSet.has(oldId)) {
+        const lastSeenAt = existing.scannedAt;
+        const idx = formerGroups.findIndex((f) => f.groupId === oldId);
+        if (idx >= 0) formerGroups[idx] = { groupId: oldId, lastSeenAt };
+        else formerGroups.push({ groupId: oldId, lastSeenAt });
+      }
+    }
+    formerGroups = formerGroups.filter((f) => !newGroupIds.includes(f.groupId));
+  }
+  return formerGroups;
 }
 
 interface CustomGroup {
@@ -2349,6 +2372,8 @@ async function scanMemberEntry(
     }
   }
 
+  const formerGroups = diffFormerGroups(existing, groupIds);
+
   return {
     userId,
     username,
@@ -2358,7 +2383,47 @@ async function scanMemberEntry(
     friends,
     scannedAt: Date.now(),
     changed,
+    formerGroups,
   };
+}
+
+async function recordGroupMembershipAndGetFormerGroups(
+  userId: string,
+  username: string,
+  groupIds: number[],
+  avatarUrl: string | null
+): Promise<{ groupId: number; lastSeenAt: number }[]> {
+  const all = loadGroupScanDb();
+  const existing = all.find((m) => m.userId === userId);
+  const formerGroups = diffFormerGroups(existing, groupIds);
+
+  let changed: GroupScanEntry["changed"] = null;
+  if (existing) {
+    const usernameChanged = existing.username !== username;
+    const oldGroupIds = new Set(existing.groupIds);
+    const newGroupIds = new Set(groupIds);
+    const groupsChanged =
+      oldGroupIds.size !== newGroupIds.size || [...newGroupIds].some((id) => !oldGroupIds.has(id));
+    if (usernameChanged || groupsChanged) {
+      changed = { username: usernameChanged, groups: groupsChanged, friends: false, at: Date.now() };
+    }
+  }
+
+  const entry: GroupScanEntry = {
+    userId,
+    username,
+    avatarUrl: avatarUrl ?? existing?.avatarUrl ?? null,
+    customPlate: existing?.customPlate ?? null,
+    groupIds,
+    friends: existing?.friends || [],
+    scannedAt: Date.now(),
+    changed,
+    lastSeenOnlineAt: existing?.lastSeenOnlineAt,
+    formerGroups,
+  };
+  const next = [...all.filter((m) => m.userId !== userId), entry];
+  saveGroupScanDb(next);
+  return formerGroups;
 }
 
 function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
@@ -2447,6 +2512,21 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 getRobloxFollowersCount(resolved.userId),
                 getRobloxAccountCreatedAt(resolved.userId),
               ]);
+            const rawFormerGroups = await recordGroupMembershipAndGetFormerGroups(
+              resolved.userId,
+              resolved.username,
+              groupIds,
+              avatarUrl
+            );
+            const formerGroups = rawFormerGroups
+              .filter((f) => Date.now() - f.lastSeenAt <= FORMER_GROUP_WINDOW_MS)
+              .map((f) => {
+                const info = catalog[f.groupId];
+                return info ? { id: f.groupId, ...info, lastSeenAt: f.lastSeenAt } : null;
+              })
+              .filter((f): f is NonNullable<typeof f> => !!f && f.tier === "red")
+              .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
+
             res.setHeader("Content-Type", "application/json");
             res.end(
               JSON.stringify({
@@ -2455,6 +2535,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 avatarUrl,
                 fullAvatarUrl,
                 groups: relevantGroups(groupIds, catalog),
+                formerGroups,
                 friendsCount,
                 followersCount,
                 createdAt,

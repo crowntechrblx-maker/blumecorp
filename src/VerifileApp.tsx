@@ -10,6 +10,10 @@ interface VerifileGroup {
   category?: string;
 }
 
+interface VerifileFormerGroup extends VerifileGroup {
+  lastSeenAt: number;
+}
+
 interface VerifilePerson {
   userId: string;
   username: string;
@@ -19,6 +23,7 @@ interface VerifilePerson {
   followersCount?: number | null;
   createdAt?: string | null;
   groups: VerifileGroup[];
+  formerGroups?: VerifileFormerGroup[];
 }
 
 interface VerifilePunishment {
@@ -347,6 +352,14 @@ export function VerifileApp({ username }: { username: string }) {
         doc.setTextColor(40, 40, 40);
       }
 
+      if (person.formerGroups && person.formerGroups.length > 0) {
+        y += 6;
+        heading("Former Group Activity (last 6 months)");
+        for (const g of person.formerGroups) {
+          line(`•  ${g.name} — last detected ${formatDateTimeNoSeconds(g.lastSeenAt)}`);
+        }
+      }
+
       const totalPages = doc.getNumberOfPages();
       for (let p = 1; p <= totalPages; p++) {
         doc.setPage(p);
@@ -549,6 +562,19 @@ export function VerifileApp({ username }: { username: string }) {
               </div>
             )}
           </div>
+
+          {person.formerGroups && person.formerGroups.length > 0 && (
+            <div className="verifile-person-section">
+              <span className="verifile-person-label">Former membership (last 6 months)</span>
+              <div className="verifile-group-list">
+                {person.formerGroups.map((g) => (
+                  <span key={g.id} className="verifile-group-chip verifile-group-red">
+                    {g.name} — last seen {formatDateTime(g.lastSeenAt)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="verifile-person-section">
             <span className="verifile-person-label">Log an entry</span>
