@@ -73,7 +73,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (target) {
         const punishments = ((await kv.get<VerifilePunishment[]>("verifilePunishments")) || [])
           .filter((p) => p.targetUserId === target)
-          .sort((a, b) => b.createdAt - a.createdAt);
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .map((p) => ({
+            ...p,
+            canDelete: isSuperUser || p.addedByUserId === session!.userId,
+          }));
         res.status(200).json({ punishments });
         return;
       }
@@ -241,6 +245,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (err) {
         res.status(500).send("Failed: " + (err as Error).message);
       }
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      if (!session) {
+        res.status(401).send("You must be signed in.");
+        return;
+      }
+      if (!canAccess) {
+        res.status(403).send("You do not have clearance to use Verifile.");
+        return;
+      }
+      const id = (req.query.id as string) || "";
+      if (!id) {
+        res.status(400).send("Missing entry id.");
+        return;
+      }
+      const punishments = (await kv.get<VerifilePunishment[]>("verifilePunishments")) || [];
+      const target = punishments.find((p) => p.id === id);
+      if (!target) {
+        res.status(404).send("Entry not found.");
+        return;
+      }
+      if (!isSuperUser && target.addedByUserId !== session.userId) {
+        res.status(403).send("You can only remove entries you logged.");
+        return;
+      }
+      const next = punishments.filter((p) => p.id !== id);
+      await kv.set("verifilePunishments", next);
+      await appendAuditLog({
+        type: "verifile_punishment_removed",
+        username: session.username,
+        detail: `Removed ${target.type} for ${target.targetUsername} (${target.serviceGroupName})`,
+      });
+      res.status(200).json({ ok: true });
       return;
     }
 

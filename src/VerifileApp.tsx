@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { jsPDF } from "jspdf";
 import { CustomSelect } from "./CustomSelect";
 import { useFadingError } from "./useFadingError";
 
@@ -13,6 +14,10 @@ interface VerifilePerson {
   userId: string;
   username: string;
   avatarUrl: string | null;
+  fullAvatarUrl?: string | null;
+  friendsCount?: number | null;
+  followersCount?: number | null;
+  createdAt?: string | null;
   groups: VerifileGroup[];
 }
 
@@ -27,6 +32,7 @@ interface VerifilePunishment {
   addedByUserId: string;
   addedByUsername: string;
   createdAt: number;
+  canDelete?: boolean;
 }
 
 interface VerifileWhitelistEntry {
@@ -44,6 +50,56 @@ function formatDateTime(value: number): string {
   return `${d.toLocaleDateString()}, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
+function formatDateTimeNoSeconds(value: Date | number): string {
+  const d = typeof value === "number" ? new Date(value) : value;
+  return `${d.toLocaleDateString()}, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function formatDateForFilename(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+}
+
+function formatAccountAge(createdAt: string | null | undefined): string {
+  if (!createdAt) return "Unknown";
+  const created = new Date(createdAt);
+  if (Number.isNaN(created.getTime())) return "Unknown";
+  const now = new Date();
+  let years = now.getFullYear() - created.getFullYear();
+  let months = now.getMonth() - created.getMonth();
+  if (now.getDate() < created.getDate()) months -= 1;
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  const parts: string[] = [];
+  if (years > 0) parts.push(`${years} year${years === 1 ? "" : "s"}`);
+  parts.push(`${months} month${months === 1 ? "" : "s"}`);
+  return `${parts.join(", ")} (joined ${created.toLocaleDateString()})`;
+}
+
+async function loadRemoteImageAsDataUrl(
+  url: string
+): Promise<{ dataUrl: string; format: "PNG" | "JPEG" } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    const format = blob.type.includes("png") ? "PNG" : "JPEG";
+    return { dataUrl, format };
+  } catch {
+    return null;
+  }
+}
+
 export function VerifileApp({ username }: { username: string }) {
   const [loadingAccess, setLoadingAccess] = useState(true);
   const [canAccess, setCanAccess] = useState(false);
@@ -59,6 +115,8 @@ export function VerifileApp({ username }: { username: string }) {
 
   const [punishments, setPunishments] = useState<VerifilePunishment[]>([]);
   const [punishmentsLoading, setPunishmentsLoading] = useState(false);
+  const [removingPunishmentId, setRemovingPunishmentId] = useState<string | null>(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   const [punishmentType, setPunishmentType] = useState(PUNISHMENT_TYPES[0]);
   const [punishmentDetails, setPunishmentDetails] = useState("");
@@ -170,6 +228,143 @@ export function VerifileApp({ username }: { username: string }) {
       setPunishmentError("Couldn't reach Verifile.");
     } finally {
       setSubmittingPunishment(false);
+    }
+  }
+
+  async function handleRemovePunishment(id: string) {
+    setRemovingPunishmentId(id);
+    try {
+      await fetch(`/api/blume-content?type=verifile&id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      if (person) await loadPunishments(person.userId);
+    } finally {
+      setRemovingPunishmentId(null);
+    }
+  }
+
+  async function generatePersonReport() {
+    if (!person) return;
+    setGeneratingReport(true);
+    try {
+      const generatedAt = new Date();
+      const photoUrls = [person.avatarUrl, person.fullAvatarUrl].filter(
+        (u): u is string => !!u
+      );
+      const loadedPhotos = (
+        await Promise.all(photoUrls.map((u) => loadRemoteImageAsDataUrl(u)))
+      ).filter((p): p is { dataUrl: string; format: "PNG" | "JPEG" } => !!p);
+
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const marginX = 48;
+      const maxWidth = pageWidth - marginX * 2;
+      const bottomLimit = pageHeight - 70;
+      let y = 56;
+
+      function ensureSpace(lineHeight: number): boolean {
+        if (y + lineHeight > bottomLimit) {
+          doc.addPage();
+          y = 56;
+          return true;
+        }
+        return false;
+      }
+
+      function heading(text: string) {
+        ensureSpace(30);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(7, 32, 59);
+        doc.text(text.toUpperCase(), marginX, y);
+        y += 6;
+        doc.setDrawColor(200, 200, 200);
+        doc.line(marginX, y, pageWidth - marginX, y);
+        y += 16;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(40, 40, 40);
+      }
+
+      function line(text: string) {
+        const wrapped = doc.splitTextToSize(text, maxWidth) as string[];
+        for (const w of wrapped) {
+          ensureSpace(14);
+          doc.text(w, marginX, y);
+          y += 14;
+        }
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(7, 32, 59);
+      doc.text("VERIFILE IDENTITY RECORD", marginX, y);
+      y += 26;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(20, 20, 20);
+      doc.text(person.username, marginX, y);
+      y += 16;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(80, 80, 80);
+      doc.text(`User ID: ${person.userId}`, marginX, y);
+      y += 20;
+
+      if (loadedPhotos.length > 0) {
+        const photoTop = y;
+        const photoH = 90;
+        let photoX = marginX;
+        for (const photo of loadedPhotos) {
+          doc.addImage(photo.dataUrl, photo.format, photoX, photoTop, 70, photoH);
+          photoX += 82;
+        }
+        y = photoTop + photoH + 18;
+      }
+
+      heading("Account Overview");
+      line(`Friends: ${person.friendsCount ?? "Unknown"}`);
+      line(`Followers: ${person.followersCount ?? "Unknown"}`);
+      line(`Account age: ${formatAccountAge(person.createdAt)}`);
+      y += 6;
+
+      heading(`Groups (${person.groups.length})`);
+      if (person.groups.length === 0) {
+        line("No relevant group memberships found.");
+      } else {
+        for (const g of person.groups) {
+          ensureSpace(14);
+          if (g.tier === "red") {
+            doc.setTextColor(160, 30, 30);
+          } else {
+            doc.setTextColor(40, 40, 40);
+          }
+          doc.text(`•  ${g.name}${g.category ? ` (${g.category})` : ""}`, marginX, y);
+          y += 14;
+        }
+        doc.setTextColor(40, 40, 40);
+      }
+
+      const totalPages = doc.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        const footerY = pageHeight - 28;
+        doc.setDrawColor(220, 220, 220);
+        doc.line(marginX, footerY - 14, pageWidth - marginX, footerY - 14);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Powered by Blume Corporation", marginX, footerY);
+        const generatedText = `Generated by ${username || "an unknown user"} on ${formatDateTimeNoSeconds(generatedAt)}`;
+        const textWidth = doc.getTextWidth(generatedText);
+        doc.text(generatedText, pageWidth - marginX - textWidth, footerY);
+      }
+
+      doc.save(`Verifile-${person.username}-${formatDateForFilename(generatedAt)}.pdf`);
+    } finally {
+      setGeneratingReport(false);
     }
   }
 
@@ -328,6 +523,13 @@ export function VerifileApp({ username }: { username: string }) {
               <span className="verifile-person-username">{person.username}</span>
               <span className="verifile-person-userid">User ID: {person.userId}</span>
             </div>
+            <button
+              className="verifile-print-btn"
+              disabled={generatingReport}
+              onClick={generatePersonReport}
+            >
+              {generatingReport ? "Preparing…" : "Print"}
+            </button>
           </div>
 
           <div className="verifile-person-section">
@@ -405,9 +607,20 @@ export function VerifileApp({ username }: { username: string }) {
                       <span className="verifile-punishment-service">{p.serviceGroupName}</span>
                     </div>
                     <p className="verifile-punishment-details">{p.details}</p>
-                    <span className="verifile-punishment-meta">
-                      Logged by {p.addedByUsername} on {formatDateTime(p.createdAt)}
-                    </span>
+                    <div className="verifile-punishment-footer">
+                      <span className="verifile-punishment-meta">
+                        Logged by {p.addedByUsername} on {formatDateTime(p.createdAt)}
+                      </span>
+                      {p.canDelete && (
+                        <button
+                          className="verifile-remove-access-btn"
+                          disabled={removingPunishmentId === p.id}
+                          onClick={() => handleRemovePunishment(p.id)}
+                        >
+                          {removingPunishmentId === p.id ? "…" : "Remove"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

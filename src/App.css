@@ -4291,6 +4291,34 @@
   font-size: 10.5px;
   color: var(--blume-mist-dim);
 }
+.verifile-punishment-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+.verifile-print-btn {
+  margin-left: auto;
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--blume-line);
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: var(--blume-mist);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.verifile-print-btn:hover:not(:disabled) {
+  border-color: var(--blume-accent);
+  color: var(--blume-accent);
+}
+.verifile-print-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 .verifile-footer {
   margin-top: auto;
   padding-top: 10px;

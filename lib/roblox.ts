@@ -75,6 +75,90 @@ export async function getUserGroupIds(userId: string): Promise<number[]> {
   }
 }
 
+const fullAvatarCache = new Map<string, string | null>();
+
+export async function getRobloxFullAvatarUrl(userId: string): Promise<string | null> {
+  if (fullAvatarCache.has(userId)) return fullAvatarCache.get(userId)!;
+  try {
+    const res = await fetch(
+      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${userId}&size=420x420&format=Png&isCircular=false`,
+      { headers: robloxHeaders() }
+    );
+    const data = (await res.json()) as { data?: { imageUrl?: string }[] };
+    const url = data.data?.[0]?.imageUrl || null;
+    fullAvatarCache.set(userId, url);
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+const friendsCountCache = new Map<string, number | null>();
+
+export async function getRobloxFriendsCount(userId: string): Promise<number | null> {
+  if (friendsCountCache.has(userId)) return friendsCountCache.get(userId)!;
+  try {
+    const res = await fetch(`https://friends.roblox.com/v1/users/${userId}/friends/count`, {
+      headers: robloxHeaders(),
+    });
+    if (!res.ok) {
+      friendsCountCache.set(userId, null);
+      return null;
+    }
+    const data = (await res.json()) as { count?: number };
+    const count = typeof data.count === "number" ? data.count : null;
+    friendsCountCache.set(userId, count);
+    return count;
+  } catch {
+    friendsCountCache.set(userId, null);
+    return null;
+  }
+}
+
+const followersCountCache = new Map<string, number | null>();
+
+export async function getRobloxFollowersCount(userId: string): Promise<number | null> {
+  if (followersCountCache.has(userId)) return followersCountCache.get(userId)!;
+  try {
+    const res = await fetch(`https://friends.roblox.com/v1/users/${userId}/followers/count`, {
+      headers: robloxHeaders(),
+    });
+    if (!res.ok) {
+      followersCountCache.set(userId, null);
+      return null;
+    }
+    const data = (await res.json()) as { count?: number };
+    const count = typeof data.count === "number" ? data.count : null;
+    followersCountCache.set(userId, count);
+    return count;
+  } catch {
+    followersCountCache.set(userId, null);
+    return null;
+  }
+}
+
+const accountCreatedCache = new Map<string, string | null>();
+
+export async function getRobloxAccountCreatedAt(userId: string): Promise<string | null> {
+  if (accountCreatedCache.has(userId)) return accountCreatedCache.get(userId)!;
+  try {
+    const res = await fetch(`https://users.roblox.com/v1/users/${userId}`, {
+      headers: robloxHeaders(),
+    });
+    if (!res.ok) {
+      accountCreatedCache.set(userId, null);
+      return null;
+    }
+    const data = (await res.json()) as { created?: string };
+    const created = data.created || null;
+    accountCreatedCache.set(userId, created);
+    return created;
+  } catch {
+    accountCreatedCache.set(userId, null);
+    return null;
+  }
+}
+
 export async function resolveRobloxUserId(
   query: string
 ): Promise<{ userId: string; username: string } | null> {

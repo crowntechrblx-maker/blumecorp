@@ -120,6 +120,90 @@ async function getRobloxFriends(userId: string): Promise<{ userId: string; usern
   }
 }
 
+const fullAvatarCache = new Map<string, string | null>();
+
+async function getRobloxFullAvatarUrl(userId: string): Promise<string | null> {
+  if (fullAvatarCache.has(userId)) return fullAvatarCache.get(userId)!;
+  try {
+    const res = await fetch(
+      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${userId}&size=420x420&format=Png&isCircular=false`,
+      { headers: robloxHeaders() }
+    );
+    const data = (await res.json()) as { data?: { imageUrl?: string }[] };
+    const url = data.data?.[0]?.imageUrl || null;
+    fullAvatarCache.set(userId, url);
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+const friendsCountCache = new Map<string, number | null>();
+
+async function getRobloxFriendsCount(userId: string): Promise<number | null> {
+  if (friendsCountCache.has(userId)) return friendsCountCache.get(userId)!;
+  try {
+    const res = await fetch(`https://friends.roblox.com/v1/users/${userId}/friends/count`, {
+      headers: robloxHeaders(),
+    });
+    if (!res.ok) {
+      friendsCountCache.set(userId, null);
+      return null;
+    }
+    const data = (await res.json()) as { count?: number };
+    const count = typeof data.count === "number" ? data.count : null;
+    friendsCountCache.set(userId, count);
+    return count;
+  } catch {
+    friendsCountCache.set(userId, null);
+    return null;
+  }
+}
+
+const followersCountCache = new Map<string, number | null>();
+
+async function getRobloxFollowersCount(userId: string): Promise<number | null> {
+  if (followersCountCache.has(userId)) return followersCountCache.get(userId)!;
+  try {
+    const res = await fetch(`https://friends.roblox.com/v1/users/${userId}/followers/count`, {
+      headers: robloxHeaders(),
+    });
+    if (!res.ok) {
+      followersCountCache.set(userId, null);
+      return null;
+    }
+    const data = (await res.json()) as { count?: number };
+    const count = typeof data.count === "number" ? data.count : null;
+    followersCountCache.set(userId, count);
+    return count;
+  } catch {
+    followersCountCache.set(userId, null);
+    return null;
+  }
+}
+
+const accountCreatedCache = new Map<string, string | null>();
+
+async function getRobloxAccountCreatedAt(userId: string): Promise<string | null> {
+  if (accountCreatedCache.has(userId)) return accountCreatedCache.get(userId)!;
+  try {
+    const res = await fetch(`https://users.roblox.com/v1/users/${userId}`, {
+      headers: robloxHeaders(),
+    });
+    if (!res.ok) {
+      accountCreatedCache.set(userId, null);
+      return null;
+    }
+    const data = (await res.json()) as { created?: string };
+    const created = data.created || null;
+    accountCreatedCache.set(userId, created);
+    return created;
+  } catch {
+    accountCreatedCache.set(userId, null);
+    return null;
+  }
+}
+
 async function resolveRobloxUserId(
   query: string
 ): Promise<{ userId: string; username: string } | null> {
@@ -2353,18 +2437,27 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               res.end(`Couldn't find a Roblox user matching "${q}".`);
               return;
             }
-            const [avatarUrl, groupIds, catalog] = await Promise.all([
-              getRobloxAvatarUrl(resolved.userId),
-              getUserGroupIds(resolved.userId),
-              getGroupCatalog(),
-            ]);
+            const [avatarUrl, fullAvatarUrl, groupIds, catalog, friendsCount, followersCount, createdAt] =
+              await Promise.all([
+                getRobloxAvatarUrl(resolved.userId),
+                getRobloxFullAvatarUrl(resolved.userId),
+                getUserGroupIds(resolved.userId),
+                getGroupCatalog(),
+                getRobloxFriendsCount(resolved.userId),
+                getRobloxFollowersCount(resolved.userId),
+                getRobloxAccountCreatedAt(resolved.userId),
+              ]);
             res.setHeader("Content-Type", "application/json");
             res.end(
               JSON.stringify({
                 userId: resolved.userId,
                 username: resolved.username,
                 avatarUrl,
+                fullAvatarUrl,
                 groups: relevantGroups(groupIds, catalog),
+                friendsCount,
+                followersCount,
+                createdAt,
               })
             );
             return;
@@ -3060,7 +3153,11 @@ function verifilePlugin(sessions: Map<string, RobloxSession>): Plugin {
           if (target) {
             const punishments = loadVerifilePunishmentsDb()
               .filter((p) => p.targetUserId === target)
-              .sort((a, b) => b.createdAt - a.createdAt);
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .map((p) => ({
+                ...p,
+                canDelete: isSuperUser || (!!session && p.addedByUserId === session.userId),
+              }));
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ punishments }));
             return;
@@ -3241,6 +3338,47 @@ function verifilePlugin(sessions: Map<string, RobloxSession>): Plugin {
             res.statusCode = 500;
             res.end("Failed: " + (err as Error).message);
           }
+          return;
+        }
+
+        if (req.method === "DELETE") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          if (!canAccess) {
+            res.statusCode = 403;
+            res.end("You do not have clearance to use Verifile.");
+            return;
+          }
+          const id = url.searchParams.get("id") || "";
+          if (!id) {
+            res.statusCode = 400;
+            res.end("Missing entry id.");
+            return;
+          }
+          const punishments = loadVerifilePunishmentsDb();
+          const target = punishments.find((p) => p.id === id);
+          if (!target) {
+            res.statusCode = 404;
+            res.end("Entry not found.");
+            return;
+          }
+          if (!isSuperUser && target.addedByUserId !== session.userId) {
+            res.statusCode = 403;
+            res.end("You can only remove entries you logged.");
+            return;
+          }
+          const next = punishments.filter((p) => p.id !== id);
+          saveVerifilePunishmentsDb(next);
+          appendAuditLog({
+            type: "verifile_punishment_removed",
+            username: session.username,
+            detail: `Removed ${target.type} for ${target.targetUsername} (${target.serviceGroupName})`,
+          });
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
           return;
         }
 

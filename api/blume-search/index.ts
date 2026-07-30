@@ -14,6 +14,10 @@ import {
   extractGroupId,
   robloxHeaders,
   getRobloxGroupMemberCount,
+  getRobloxFullAvatarUrl,
+  getRobloxFriendsCount,
+  getRobloxFollowersCount,
+  getRobloxAccountCreatedAt,
 } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
@@ -300,16 +304,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(404).send(`Couldn't find a Roblox user matching "${q}".`);
         return;
       }
-      const [avatarUrl, groupIds, catalog] = await Promise.all([
-        getRobloxAvatarUrl(resolved.userId),
-        getUserGroupIds(resolved.userId),
-        getGroupCatalog(),
-      ]);
+      const [avatarUrl, fullAvatarUrl, groupIds, catalog, friendsCount, followersCount, createdAt] =
+        await Promise.all([
+          getRobloxAvatarUrl(resolved.userId),
+          getRobloxFullAvatarUrl(resolved.userId),
+          getUserGroupIds(resolved.userId),
+          getGroupCatalog(),
+          getRobloxFriendsCount(resolved.userId),
+          getRobloxFollowersCount(resolved.userId),
+          getRobloxAccountCreatedAt(resolved.userId),
+        ]);
       res.status(200).json({
         userId: resolved.userId,
         username: resolved.username,
         avatarUrl,
+        fullAvatarUrl,
         groups: relevantGroups(groupIds, catalog),
+        friendsCount,
+        followersCount,
+        createdAt,
       });
       return;
     }
