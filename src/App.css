@@ -2034,6 +2034,7 @@
 }
 .blume-report-expiry-field input {
   flex: 1;
+  text-transform: uppercase;
 }
 .blume-report-expiry-field input::-webkit-calendar-picker-indicator {
   display: none;
@@ -3635,6 +3636,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 6px;
@@ -3643,6 +3645,25 @@
   font-size: 12.5px;
   cursor: pointer;
   text-align: left;
+}
+.blume-monitoring-username {
+  word-break: break-word;
+}
+.blume-monitoring-row-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.blume-monitoring-activity {
+  font-size: 10.5px;
+  color: #9fc7ec;
+  background: rgba(159, 199, 236, 0.12);
+  border: 1px solid rgba(159, 199, 236, 0.3);
+  padding: 1px 6px;
+  border-radius: 999px;
+  min-width: 16px;
+  text-align: center;
 }
 .blume-monitoring-user-row:hover {
   background: rgba(255, 255, 255, 0.06);

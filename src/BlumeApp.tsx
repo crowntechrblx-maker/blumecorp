@@ -509,7 +509,7 @@ export function BlumeApp({
   const { error: addGroupError, fading: addGroupFading, setError: setAddGroupError } = useFadingError();
 
   const [monitoringUsers, setMonitoringUsers] = useState<
-    { username: string; redGroupName: string | null }[]
+    { username: string; redGroupName: string | null; activityCount: number }[]
   >([]);
   const [monitoringLoading, setMonitoringLoading] = useState(false);
   const [monitoringSearch, setMonitoringSearch] = useState("");
@@ -1967,12 +1967,20 @@ export function BlumeApp({
                                   className="blume-monitoring-user-row"
                                   onClick={() => loadMonitoringChats(u.username)}
                                 >
-                                  <span>{u.username}</span>
-                                  {u.redGroupName && (
-                                    <span className="blume-ingame-red-group">
-                                      {u.redGroupName}
+                                  <span className="blume-monitoring-username">{u.username}</span>
+                                  <span className="blume-monitoring-row-right">
+                                    {u.redGroupName && (
+                                      <span className="blume-ingame-red-group">
+                                        {u.redGroupName}
+                                      </span>
+                                    )}
+                                    <span
+                                      className="blume-monitoring-activity"
+                                      title="Posts + messages sent"
+                                    >
+                                      {u.activityCount}
                                     </span>
-                                  )}
+                                  </span>
                                 </button>
                               ))}
                           </div>

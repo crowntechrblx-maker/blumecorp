@@ -2261,16 +2261,27 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             const messages = loadMessagesDb();
             const posts = loadPostsDb();
             const names = new Set<string>();
+            const activityCount = new Map<string, number>();
+            const bumpActivity = (username: string) =>
+              activityCount.set(username, (activityCount.get(username) || 0) + 1);
             for (const m of messages) {
               names.add(m.fromUsername);
               names.add(m.toUsername);
+              bumpActivity(m.fromUsername);
             }
-            for (const p of posts) names.add(p.authorUsername);
+            for (const p of posts) {
+              names.add(p.authorUsername);
+              bumpActivity(p.authorUsername);
+            }
             const users = Array.from(names)
               .map((username) => {
                 const scan = scanByLowerUsername.get(username.toLowerCase());
                 const redGroup = scan ? relevantGroups(scan.groupIds, catalog).find((g) => g.tier === "red") : undefined;
-                return { username, redGroupName: redGroup?.name || null };
+                return {
+                  username,
+                  redGroupName: redGroup?.name || null,
+                  activityCount: activityCount.get(username) || 0,
+                };
               })
               .sort((a, b) => {
                 if (!!a.redGroupName !== !!b.redGroupName) return a.redGroupName ? -1 : 1;
