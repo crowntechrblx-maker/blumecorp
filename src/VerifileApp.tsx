@@ -231,16 +231,16 @@ export function VerifileApp({ username }: { username: string }) {
           <span className="verifile-landing-example-label">Example lookup</span>
           <div className="verifile-person-card verifile-landing-card">
             <div className="verifile-person-header">
-              <div className="verifile-person-avatar verifile-person-avatar-empty" />
+              <img className="verifile-person-avatar" src="/icons/verifile-example-avatar.svg" alt="" />
               <div className="verifile-person-identity">
-                <span className="verifile-person-username">shadowdistrict_12</span>
-                <span className="verifile-person-userid">User ID: 000000000</span>
+                <span className="verifile-person-username">harlow_reeves19</span>
+                <span className="verifile-person-userid">User ID: 12345678</span>
               </div>
             </div>
             <div className="verifile-person-section">
               <span className="verifile-person-label">Groups</span>
               <div className="verifile-group-list">
-                <span className="verifile-group-chip verifile-group-red">Shadow District</span>
+                <span className="verifile-group-chip verifile-group-red">UK Border Force</span>
               </div>
             </div>
             <div className="verifile-person-section">
