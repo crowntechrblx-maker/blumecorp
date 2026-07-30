@@ -13,6 +13,7 @@ import {
   getRobloxFriends,
   extractGroupId,
   robloxHeaders,
+  getRobloxGroupMemberCount,
 } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
@@ -393,9 +394,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.query.groupCatalog) {
       const catalog = await getGroupCatalog();
-      const groups = Object.entries(catalog)
-        .map(([id, g]) => ({ id: Number(id), name: g.name, tier: g.tier, category: g.category }))
-        .sort((a, b) => (a.tier === b.tier ? a.name.localeCompare(b.name) : a.tier === "red" ? -1 : 1));
+      const withCounts = req.query.withCounts === "1";
+      const groups = await Promise.all(
+        Object.entries(catalog).map(async ([id, g]) => ({
+          id: Number(id),
+          name: g.name,
+          tier: g.tier,
+          category: g.category,
+          memberCount: withCounts ? await getRobloxGroupMemberCount(Number(id)) : undefined,
+        }))
+      );
+      groups.sort((a, b) => (a.tier === b.tier ? a.name.localeCompare(b.name) : a.tier === "red" ? -1 : 1));
       res.status(200).json({ groups, canManage: isBlumeSuperUser(session.userId) });
       return;
     }

@@ -270,6 +270,26 @@ async function getRobloxGroupName(groupId: number): Promise<string | null> {
   }
 }
 
+const groupMemberCountCache = new Map<number, number | null>();
+
+async function getRobloxGroupMemberCount(groupId: number): Promise<number | null> {
+  if (groupMemberCountCache.has(groupId)) return groupMemberCountCache.get(groupId)!;
+  try {
+    const res = await fetch(`https://groups.roblox.com/v1/groups/${groupId}`);
+    if (!res.ok) {
+      groupMemberCountCache.set(groupId, null);
+      return null;
+    }
+    const data = (await res.json()) as { memberCount?: number };
+    const count = typeof data.memberCount === "number" ? data.memberCount : null;
+    groupMemberCountCache.set(groupId, count);
+    return count;
+  } catch {
+    groupMemberCountCache.set(groupId, null);
+    return null;
+  }
+}
+
 async function getMemberGroupNames(userId: string): Promise<string[]> {
   const memberships = await Promise.all(
     ALL_KNOWN_GROUPS.map(async (g) => ({
@@ -2274,9 +2294,17 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
           if (url.searchParams.get("groupCatalog")) {
             const catalog = await getGroupCatalog();
-            const groups = Object.entries(catalog)
-              .map(([id, g]) => ({ id: Number(id), name: g.name, tier: g.tier, category: g.category }))
-              .sort((a, b) => (a.tier === b.tier ? a.name.localeCompare(b.name) : a.tier === "red" ? -1 : 1));
+            const withCounts = url.searchParams.get("withCounts") === "1";
+            const groups = await Promise.all(
+              Object.entries(catalog).map(async ([id, g]) => ({
+                id: Number(id),
+                name: g.name,
+                tier: g.tier,
+                category: g.category,
+                memberCount: withCounts ? await getRobloxGroupMemberCount(Number(id)) : undefined,
+              }))
+            );
+            groups.sort((a, b) => (a.tier === b.tier ? a.name.localeCompare(b.name) : a.tier === "red" ? -1 : 1));
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ groups, canManage: isBlumeSuperUser(session.userId) }));
             return;

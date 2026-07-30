@@ -708,6 +708,8 @@ export function BlumeApp({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [confirmingReport, setConfirmingReport] = useState(false);
+  const [generatingGroupReport, setGeneratingGroupReport] = useState(false);
+  const [confirmingGroupReport, setConfirmingGroupReport] = useState(false);
 
   const [groupsTab, setGroupsTab] = useState<"search" | "settings">("search");
   const [groupQuery, setGroupQuery] = useState("");
@@ -1286,6 +1288,143 @@ export function BlumeApp({
       doc.save(`Intel-${personResult.username}-${formatDateForFilename(generatedAt)}.pdf`);
     } finally {
       setGeneratingReport(false);
+    }
+  }
+
+  async function generateGroupReport() {
+    setGeneratingGroupReport(true);
+    try {
+      const res = await fetch("/api/blume-search?groupCatalog=1&withCounts=1");
+      const data = await res.json();
+      const allGroups: (PersonGroup & { memberCount?: number | null })[] = data.groups || [];
+
+      const logoDataUrl = await loadInvertedLogoDataUrl("/blume-logo.png");
+      const generatedAt = new Date();
+      const textureDataUrl = generatePaperTextureDataUrl();
+
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const marginX = 48;
+      const maxWidth = pageWidth - marginX * 2;
+      const bottomLimit = pageHeight - 70;
+      let y = 56;
+
+      function paintPageBackground() {
+        if (!textureDataUrl) return;
+        doc.addImage(textureDataUrl, "JPEG", 0, 0, pageWidth, pageHeight);
+      }
+      paintPageBackground();
+
+      function ensureSpace(lineHeight: number) {
+        if (y + lineHeight > bottomLimit) {
+          doc.addPage();
+          paintPageBackground();
+          y = 56;
+        }
+      }
+
+      function heading(text: string) {
+        ensureSpace(30);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(20, 20, 20);
+        doc.text(text.toUpperCase(), marginX, y);
+        y += 6;
+        doc.setDrawColor(200, 200, 200);
+        doc.line(marginX, y, pageWidth - marginX, y);
+        y += 16;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(40, 40, 40);
+      }
+
+      function line(text: string) {
+        const wrapped = doc.splitTextToSize(text, maxWidth);
+        for (const w of wrapped) {
+          ensureSpace(14);
+          doc.text(w, marginX, y);
+          y += 14;
+        }
+      }
+
+      function spacer(h = 14) {
+        y += h;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(20, 20, 20);
+      doc.text("GROUP REGISTRY REPORT", marginX, y);
+      y += 30;
+
+      for (const cat of GROUP_CATEGORY_ORDER) {
+        const items = allGroups.filter(
+          (g) => (g.category || (g.tier === "red" ? "OCG" : "Emergency Services")) === cat
+        );
+        heading(`${cat} (${items.length})`);
+        if (items.length === 0) {
+          line("No groups on file.");
+        } else {
+          for (const g of items) {
+            line(
+              `- ${g.name} — ${
+                typeof g.memberCount === "number" ? g.memberCount.toLocaleString() : "Unknown"
+              } members — ID ${g.id}`
+            );
+          }
+        }
+        spacer();
+      }
+
+      const stampZoneTop = y + 10;
+      const stampZoneBottom = Math.max(stampZoneTop, bottomLimit - 6);
+      function randomStampPoint() {
+        return {
+          x: marginX + 60 + Math.random() * Math.max(0, maxWidth - 120),
+          y: stampZoneTop + Math.random() * (stampZoneBottom - stampZoneTop),
+        };
+      }
+
+      const verifiedPoint = randomStampPoint();
+      const verifiedAngle = randomStampAngle();
+
+      doc.setGState(doc.GState({ opacity: 0.55 }));
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(26);
+      doc.setTextColor(160, 30, 30);
+      doc.text("[ VERIFIED ]", verifiedPoint.x, verifiedPoint.y, {
+        angle: verifiedAngle,
+        align: "center",
+      });
+      doc.setGState(doc.GState({ opacity: 1 }));
+
+      const totalPages = doc.getNumberOfPages();
+      const logoW = 12;
+      const logoH = logoW * (903 / 823);
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        const footerY = pageHeight - 28;
+        doc.setDrawColor(220, 220, 220);
+        doc.line(marginX, footerY - 14, pageWidth - marginX, footerY - 14);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(120, 120, 120);
+        const logoGap = logoDataUrl ? logoW + 6 : 0;
+        if (logoDataUrl) {
+          doc.addImage(logoDataUrl, "PNG", marginX, footerY - logoH + 3, logoW, logoH);
+        }
+        doc.text("Powered by Blume Corporation", marginX + logoGap, footerY);
+
+        const generatedText = `Generated by ${username || "an unknown user"} on ${formatDateTimeNoSeconds(generatedAt)}`;
+        const textWidth = doc.getTextWidth(generatedText);
+        doc.text(generatedText, pageWidth - marginX - textWidth, footerY);
+      }
+
+      doc.save(`Group-Registry-${formatDateForFilename(generatedAt)}.pdf`);
+    } finally {
+      setGeneratingGroupReport(false);
     }
   }
 
@@ -2319,6 +2458,15 @@ export function BlumeApp({
                         Group Settings
                       </button>
                     )}
+                    {isSuperUser && (
+                      <button
+                        className="blume-groups-tab-btn"
+                        onClick={() => setConfirmingGroupReport(true)}
+                        disabled={generatingGroupReport}
+                      >
+                        {generatingGroupReport ? "Generating…" : "Generate Group Report"}
+                      </button>
+                    )}
                   </div>
 
                   {groupsTab === "search" && (
@@ -2734,6 +2882,33 @@ export function BlumeApp({
                 onClick={() => {
                   setConfirmingReport(false);
                   generatePersonReport();
+                }}
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmingGroupReport && (
+        <div className="blume-modal-backdrop">
+          <div className="blume-modal">
+            <p>
+              WestbridgeOS will now download a PDF file. Are you sure you'd like to continue?
+            </p>
+            <div className="blume-modal-actions">
+              <button
+                className="blume-modal-cancel"
+                onClick={() => setConfirmingGroupReport(false)}
+              >
+                No
+              </button>
+              <button
+                className="blume-modal-confirm"
+                onClick={() => {
+                  setConfirmingGroupReport(false);
+                  generateGroupReport();
                 }}
               >
                 Yes

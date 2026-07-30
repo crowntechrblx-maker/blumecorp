@@ -181,6 +181,28 @@ export async function getRobloxGroupName(groupId: number): Promise<string | null
   }
 }
 
+const groupMemberCountCache = new Map<number, number | null>();
+
+export async function getRobloxGroupMemberCount(groupId: number): Promise<number | null> {
+  if (groupMemberCountCache.has(groupId)) return groupMemberCountCache.get(groupId)!;
+  try {
+    const res = await fetch(`https://groups.roblox.com/v1/groups/${groupId}`, {
+      headers: robloxHeaders(),
+    });
+    if (!res.ok) {
+      groupMemberCountCache.set(groupId, null);
+      return null;
+    }
+    const data = (await res.json()) as { memberCount?: number };
+    const count = typeof data.memberCount === "number" ? data.memberCount : null;
+    groupMemberCountCache.set(groupId, count);
+    return count;
+  } catch {
+    groupMemberCountCache.set(groupId, null);
+    return null;
+  }
+}
+
 export async function getMemberGroupNames(userId: string): Promise<string[]> {
   const memberships = await Promise.all(
     ALL_KNOWN_GROUPS.map(async (g) => ({
