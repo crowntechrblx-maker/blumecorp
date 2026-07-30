@@ -4393,3 +4393,205 @@
   cursor: pointer;
   padding: 4px 0;
 }
+
+.thames-app {
+  --thames-blue: #009ede;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px;
+  background: #ffffff;
+  color: #14212b;
+  font-size: 13px;
+  overflow-y: auto;
+}
+.thames-hero {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 2px;
+}
+.thames-logo {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+}
+.thames-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.thames-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.thames-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--thames-blue);
+}
+.thames-service-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.thames-service-card {
+  background: #f4fbff;
+  border: 1px solid #d3edf9;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.thames-service-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #14212b;
+}
+.thames-service-desc {
+  margin: 0;
+  font-size: 11.5px;
+  color: #526674;
+  line-height: 1.4;
+}
+.thames-btn {
+  background: var(--thames-blue);
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.thames-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.thames-btn-small {
+  padding: 6px 12px;
+  font-size: 11.5px;
+}
+.thames-add-job-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f4fbff;
+  border: 1px solid #d3edf9;
+  border-radius: 8px;
+  padding: 12px;
+}
+.thames-input {
+  background: #ffffff;
+  border: 1px solid #cfd8dd;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #14212b;
+  font-size: 12.5px;
+}
+.thames-input:focus,
+.thames-textarea:focus {
+  outline: none;
+  border-color: var(--thames-blue);
+}
+.thames-textarea {
+  background: #ffffff;
+  border: 1px solid #cfd8dd;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #14212b;
+  font-size: 12.5px;
+  font-family: inherit;
+  min-height: 70px;
+  resize: vertical;
+}
+.thames-error {
+  color: #d64545;
+  font-size: 11.5px;
+  margin: 0;
+}
+.thames-muted {
+  color: #7a8a94;
+  font-size: 12px;
+  margin: 0;
+}
+.thames-job-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.thames-job-card {
+  background: #f4fbff;
+  border: 1px solid #d3edf9;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.thames-job-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.thames-job-title {
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #14212b;
+}
+.thames-job-department {
+  font-size: 10.5px;
+  color: #ffffff;
+  background: var(--thames-blue);
+  border-radius: 20px;
+  padding: 2px 8px;
+}
+.thames-job-desc {
+  margin: 0;
+  font-size: 12px;
+  color: #33454f;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.thames-job-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: #7a8a94;
+}
+.thames-remove-btn {
+  background: transparent;
+  border: 1px solid #cfd8dd;
+  border-radius: 5px;
+  padding: 3px 8px;
+  color: #7a8a94;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.thames-remove-btn:hover:not(:disabled) {
+  border-color: var(--thames-blue);
+  color: var(--thames-blue);
+}
+.thames-contact-section {
+  align-items: flex-start;
+}
+.thames-contact-btn {
+  align-self: flex-start;
+}
+.thames-coming-soon {
+  font-style: italic;
+}
+.thames-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid #e4ecf0;
+}
+.thames-footer-note {
+  font-size: 10.5px;
+  color: #7a8a94;
+}

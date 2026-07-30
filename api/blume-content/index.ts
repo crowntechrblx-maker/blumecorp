@@ -26,6 +26,15 @@ interface VerifilePunishment {
   createdAt: number;
 }
 
+interface ThamesWaterJob {
+  id: string;
+  title: string;
+  department: string;
+  description: string;
+  postedByUsername: string;
+  createdAt: number;
+}
+
 interface BlumeReport {
   id: string;
   title: string;
@@ -232,6 +241,109 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (err) {
         res.status(500).send("Failed: " + (err as Error).message);
       }
+      return;
+    }
+
+    res.status(405).send("Method not allowed");
+    return;
+  }
+
+  if (type === "thamesWater") {
+    const canManage = session
+      ? isBlumeSuperUser(session.userId) || session.username.toLowerCase() === "camhse"
+      : false;
+
+    if (req.method === "GET") {
+      const jobs = ((await kv.get<ThamesWaterJob[]>("thamesWaterJobs")) || []).sort(
+        (a, b) => b.createdAt - a.createdAt
+      );
+      res.status(200).json({ jobs, canManage });
+      return;
+    }
+
+    if (req.method === "POST") {
+      if (!session) {
+        res.status(401).send("You must be signed in.");
+        return;
+      }
+      if (!canManage) {
+        res.status(403).send("You don't have access to manage Thames Water job openings.");
+        return;
+      }
+      try {
+        const body = req.body as { title?: string; department?: string; description?: string };
+        const title = (body.title || "").toString().trim();
+        const department = (body.department || "").toString().trim();
+        const description = (body.description || "").toString().trim();
+        if (!title || !description) {
+          res.status(400).send("Title and description are required.");
+          return;
+        }
+        if (title.length > 120) {
+          res.status(400).send("Title is too long (max 120 characters).");
+          return;
+        }
+        if (department.length > 80) {
+          res.status(400).send("Department is too long (max 80 characters).");
+          return;
+        }
+        if (description.length > 2000) {
+          res.status(400).send("Description is too long (max 2000 characters).");
+          return;
+        }
+        if (containsBlockedLanguage(title) || containsBlockedLanguage(description)) {
+          res.status(400).send(MODERATION_REJECTION_MESSAGE);
+          return;
+        }
+        const entry: ThamesWaterJob = {
+          id: crypto.randomBytes(12).toString("hex"),
+          title,
+          department,
+          description,
+          postedByUsername: session.username,
+          createdAt: Date.now(),
+        };
+        const jobs = (await kv.get<ThamesWaterJob[]>("thamesWaterJobs")) || [];
+        jobs.push(entry);
+        await kv.set("thamesWaterJobs", jobs);
+        await appendAuditLog({
+          type: "thames_water_job_added",
+          username: session.username,
+          detail: `Posted job opening "${title}"`,
+        });
+        res.status(200).json(entry);
+      } catch (err) {
+        res.status(500).send("Failed: " + (err as Error).message);
+      }
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      if (!session) {
+        res.status(401).send("You must be signed in.");
+        return;
+      }
+      if (!canManage) {
+        res.status(403).send("You don't have access to manage Thames Water job openings.");
+        return;
+      }
+      const id = (req.query.id as string) || "";
+      if (!id) {
+        res.status(400).send("Missing job id.");
+        return;
+      }
+      const jobs = (await kv.get<ThamesWaterJob[]>("thamesWaterJobs")) || [];
+      const target = jobs.find((j) => j.id === id);
+      const next = jobs.filter((j) => j.id !== id);
+      await kv.set("thamesWaterJobs", next);
+      if (target) {
+        await appendAuditLog({
+          type: "thames_water_job_removed",
+          username: session.username,
+          detail: `Removed job opening "${target.title}"`,
+        });
+      }
+      res.status(200).json({ ok: true });
       return;
     }
 

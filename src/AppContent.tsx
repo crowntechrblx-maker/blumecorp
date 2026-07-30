@@ -9,6 +9,7 @@ import { SettingsApp } from "./SettingsApp";
 import { PsRollsApp } from "./PsRollsApp";
 import { SwiftCorporateApp } from "./SwiftCorporateApp";
 import { VerifileApp } from "./VerifileApp";
+import { ThamesWaterApp } from "./ThamesWaterApp";
 
 const TFL_STATIONS = [
   { name: "King Edward Station", street: "Commercial Street" },
@@ -173,6 +174,8 @@ export function AppContent({
       return <SettingsApp />;
     case "verifile":
       return <VerifileApp username={username} />;
+    case "thamesWater":
+      return <ThamesWaterApp username={username} />;
     default:
       return <div className="app-content">Coming soon</div>;
   }

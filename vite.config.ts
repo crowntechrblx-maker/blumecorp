@@ -1783,6 +1783,157 @@ function blumeBlogPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
+interface ThamesWaterJob {
+  id: string;
+  title: string;
+  department: string;
+  description: string;
+  postedByUsername: string;
+  createdAt: number;
+}
+
+const THAMES_WATER_JOBS_DB = path.resolve(process.cwd(), "thames-water-jobs-data.json");
+
+function loadThamesWaterJobsDb(): ThamesWaterJob[] {
+  try {
+    return JSON.parse(fs.readFileSync(THAMES_WATER_JOBS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveThamesWaterJobsDb(jobs: ThamesWaterJob[]) {
+  fs.writeFileSync(THAMES_WATER_JOBS_DB, JSON.stringify(jobs, null, 2));
+}
+
+function thamesWaterPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "thames-water-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "thamesWater") {
+          next();
+          return;
+        }
+
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        const canManage = session
+          ? isBlumeSuperUser(session.userId) || session.username.toLowerCase() === "camhse"
+          : false;
+
+        if (req.method === "GET") {
+          const jobs = loadThamesWaterJobsDb().sort((a, b) => b.createdAt - a.createdAt);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ jobs, canManage }));
+          return;
+        }
+
+        if (req.method === "POST") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          if (!canManage) {
+            res.statusCode = 403;
+            res.end("You don't have access to manage Thames Water job openings.");
+            return;
+          }
+          try {
+            const body = await readJsonBody(req);
+            const title = (body.title || "").toString().trim();
+            const department = (body.department || "").toString().trim();
+            const description = (body.description || "").toString().trim();
+            if (!title || !description) {
+              res.statusCode = 400;
+              res.end("Title and description are required.");
+              return;
+            }
+            if (title.length > 120) {
+              res.statusCode = 400;
+              res.end("Title is too long (max 120 characters).");
+              return;
+            }
+            if (department.length > 80) {
+              res.statusCode = 400;
+              res.end("Department is too long (max 80 characters).");
+              return;
+            }
+            if (description.length > 2000) {
+              res.statusCode = 400;
+              res.end("Description is too long (max 2000 characters).");
+              return;
+            }
+            if (containsBlockedLanguage(title) || containsBlockedLanguage(description)) {
+              res.statusCode = 400;
+              res.end(MODERATION_REJECTION_MESSAGE);
+              return;
+            }
+            const entry: ThamesWaterJob = {
+              id: crypto.randomBytes(12).toString("hex"),
+              title,
+              department,
+              description,
+              postedByUsername: session.username,
+              createdAt: Date.now(),
+            };
+            const jobs = loadThamesWaterJobsDb();
+            jobs.push(entry);
+            saveThamesWaterJobsDb(jobs);
+            appendAuditLog({
+              type: "thames_water_job_added",
+              username: session.username,
+              detail: title,
+            });
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(entry));
+          } catch (err) {
+            res.statusCode = 500;
+            res.end("Failed: " + (err as Error).message);
+          }
+          return;
+        }
+
+        if (req.method === "DELETE") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          if (!canManage) {
+            res.statusCode = 403;
+            res.end("You don't have access to manage Thames Water job openings.");
+            return;
+          }
+          const id = url.searchParams.get("id") || "";
+          if (!id) {
+            res.statusCode = 400;
+            res.end("Missing job id.");
+            return;
+          }
+          const target = loadThamesWaterJobsDb().find((j) => j.id === id);
+          const jobs = loadThamesWaterJobsDb().filter((j) => j.id !== id);
+          saveThamesWaterJobsDb(jobs);
+          if (target) {
+            appendAuditLog({
+              type: "thames_water_job_removed",
+              username: session.username,
+              detail: target.title,
+            });
+          }
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
+
+        next();
+      });
+    },
+  };
+}
+
 function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
   return {
     name: "admin-api",
@@ -3115,6 +3266,7 @@ export default defineConfig(({ mode }) => {
       adminPlugin(sessions),
       blumeSearchPlugin(sessions),
       verifilePlugin(sessions),
+      thamesWaterPlugin(sessions),
     ],
   };
 });

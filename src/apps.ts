@@ -9,7 +9,8 @@ export type AppId =
   | "messages"
   | "backgrounds"
   | "settings"
-  | "verifile";
+  | "verifile"
+  | "thamesWater";
 
 export interface AppDef {
   id: AppId;
@@ -116,5 +117,13 @@ export const APPS: AppDef[] = [
     iconFull: true,
     color: "#07203b",
     defaultSize: { width: 560, height: 640 },
+  },
+  {
+    id: "thamesWater",
+    name: "Thames Water",
+    icon: "",
+    iconImage: "/thames-water-logo.png",
+    color: "#ffffff",
+    defaultSize: { width: 620, height: 640 },
   },
 ];
