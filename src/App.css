@@ -2647,6 +2647,18 @@
 .blume-group-sections .blume-group-list {
   margin-top: 6px;
 }
+.blume-group-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.blume-group-category-section .blume-person-label {
+  display: block;
+  margin-bottom: 6px;
+}
+.blume-group-category-section .blume-group-list {
+  margin-top: 0;
+}
 .blume-group-section-btn {
   border: 1px solid rgba(255, 255, 255, 0.1);
   cursor: pointer;
@@ -2691,13 +2703,80 @@
   flex: 1;
   min-width: 100px;
 }
-.blume-add-group-form select {
+.blume-custom-select {
+  position: relative;
+}
+.blume-group-category-select {
+  min-width: 168px;
+}
+.blume-custom-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   padding: 7px 10px;
   color: #e5e7eb;
   font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.blume-custom-select-trigger:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.blume-custom-select-open {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.07);
+}
+.blume-custom-select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blume-custom-select-arrow {
+  color: #9ca3af;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.blume-custom-select-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  background: #14161c;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  max-height: 220px;
+  overflow-y: auto;
+}
+.blume-custom-select-option {
+  padding: 7px 9px;
+  border-radius: 5px;
+  font-size: 12.5px;
+  color: #e5e7eb;
+  cursor: pointer;
+}
+.blume-custom-select-highlight {
+  background: rgba(255, 255, 255, 0.08);
+}
+.blume-custom-select-selected {
+  color: #fff;
+  font-weight: 600;
+}
+.blume-custom-select-option.blume-group-red {
+  background: transparent;
+}
+.blume-custom-select-option.blume-group-red.blume-custom-select-highlight {
+  background: rgba(248, 113, 113, 0.12);
 }
 .blume-scan-change-banner {
   background: rgba(251, 191, 36, 0.12);
