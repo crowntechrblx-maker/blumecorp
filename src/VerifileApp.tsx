@@ -179,6 +179,7 @@ export function VerifileApp({ username }: { username: string }) {
   const [punishmentsLoading, setPunishmentsLoading] = useState(false);
   const [removingPunishmentId, setRemovingPunishmentId] = useState<string | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [confirmingReport, setConfirmingReport] = useState(false);
 
   const [punishmentType, setPunishmentType] = useState(PUNISHMENT_TYPES[0]);
   const [punishmentDetails, setPunishmentDetails] = useState("");
@@ -626,7 +627,7 @@ export function VerifileApp({ username }: { username: string }) {
             <button
               className="verifile-print-btn"
               disabled={generatingReport}
-              onClick={generatePersonReport}
+              onClick={() => setConfirmingReport(true)}
             >
               {generatingReport ? "Preparing…" : "Print"}
             </button>
@@ -782,6 +783,31 @@ export function VerifileApp({ username }: { username: string }) {
             <button className="verifile-modal-close" onClick={() => setShowAddAccess(false)}>
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {confirmingReport && (
+        <div className="verifile-download-modal-backdrop">
+          <div className="verifile-download-modal">
+            <p>WestbridgeOS will now download a PDF file. Are you sure you'd like to continue?</p>
+            <div className="verifile-download-modal-actions">
+              <button
+                className="verifile-download-modal-cancel"
+                onClick={() => setConfirmingReport(false)}
+              >
+                No
+              </button>
+              <button
+                className="verifile-download-modal-confirm"
+                onClick={() => {
+                  setConfirmingReport(false);
+                  generatePersonReport();
+                }}
+              >
+                Yes
+              </button>
+            </div>
           </div>
         </div>
       )}
