@@ -3647,15 +3647,26 @@
   text-align: left;
 }
 .blume-monitoring-username {
+  min-width: 0;
+  flex: 1 1 auto;
   word-break: break-word;
+  overflow-wrap: break-word;
 }
 .blume-monitoring-row-right {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
-  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+.blume-monitoring-row-right .blume-ingame-red-group {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 .blume-monitoring-activity {
+  flex-shrink: 0;
   font-size: 10.5px;
   color: #9fc7ec;
   background: rgba(159, 199, 236, 0.12);

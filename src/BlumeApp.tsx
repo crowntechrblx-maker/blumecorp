@@ -1993,6 +1993,7 @@ export function BlumeApp({
                           onClick={() => {
                             setMonitoringSelected(null);
                             setMonitoringData(null);
+                            loadMonitoringUsers();
                           }}
                         >
                           ← Back to list
