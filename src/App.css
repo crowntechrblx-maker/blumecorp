@@ -2572,6 +2572,31 @@
   color: #f87171;
   background: rgba(248, 113, 113, 0.1);
 }
+.blume-group-chip-removable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 6px;
+}
+.blume-group-remove-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 11px;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.blume-group-remove-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.blume-group-remove-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .blume-friend-list {
   display: flex;
   flex-wrap: wrap;

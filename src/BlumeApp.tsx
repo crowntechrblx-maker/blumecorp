@@ -23,10 +23,13 @@ interface BlumeBlogPost {
   createdAt: number;
 }
 
+type GroupCategory = "Emergency Services" | "Intelligence" | "IE" | "OCG";
+
 interface PersonGroup {
   id: number;
   name: string;
   tier: "red" | "white";
+  category?: GroupCategory;
 }
 
 interface VehicleTag {
@@ -535,6 +538,7 @@ export function BlumeApp({
   onMaximize?: () => void;
 }) {
   const [canAccess, setCanAccess] = useState(false);
+  const [isSuperUser, setIsSuperUser] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const heroIndex = useHeroCycle(HERO_IMAGES.length, HERO_CYCLE_MS);
 
@@ -599,8 +603,9 @@ export function BlumeApp({
   const [groupCatalog, setGroupCatalog] = useState<PersonGroup[]>([]);
   const [newGroupId, setNewGroupId] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
-  const [newGroupTier, setNewGroupTier] = useState<"red" | "white">("white");
+  const [newGroupCategory, setNewGroupCategory] = useState<GroupCategory>("Emergency Services");
   const [addingGroup, setAddingGroup] = useState(false);
+  const [removingGroupId, setRemovingGroupId] = useState<number | null>(null);
   const { error: addGroupError, fading: addGroupFading, setError: setAddGroupError } = useFadingError();
 
   const [monitoringUsers, setMonitoringUsers] = useState<
@@ -627,6 +632,7 @@ export function BlumeApp({
       const res = await fetch("/api/blume-content?type=report");
       const data = await res.json();
       setCanAccess(!!data.canAccess);
+      setIsSuperUser(!!data.isSuperUser);
       setReports(data.reports || []);
     } finally {
       setLoadingReports(false);
@@ -979,7 +985,7 @@ export function BlumeApp({
         line("No relevant group memberships found.");
       } else {
         for (const g of personResult.groups) {
-          line(`- ${g.name} (${g.tier === "red" ? "Flagged" : "Standard"})`);
+          line(`- ${g.name} (${g.category || (g.tier === "red" ? "Flagged" : "Standard")})`);
         }
       }
       if (personResult.groupScanChange) {
@@ -1344,7 +1350,7 @@ export function BlumeApp({
           action: "addCustomGroup",
           groupId: newGroupId.trim(),
           groupName: newGroupName.trim(),
-          groupTier: newGroupTier,
+          groupCategory: newGroupCategory,
         }),
       });
       if (!res.ok) {
@@ -1353,12 +1359,33 @@ export function BlumeApp({
       }
       setNewGroupId("");
       setNewGroupName("");
-      setNewGroupTier("white");
+      setNewGroupCategory("Emergency Services");
       await loadGroupCatalog();
     } catch {
       setAddGroupError("Couldn't reach Group Settings.");
     } finally {
       setAddingGroup(false);
+    }
+  }
+
+  async function handleRemoveCustomGroup(id: number) {
+    setRemovingGroupId(id);
+    setAddGroupError(null);
+    try {
+      const res = await fetch("/api/blume-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "removeCustomGroup", groupId: id }),
+      });
+      if (!res.ok) {
+        setAddGroupError(await res.text());
+        return;
+      }
+      await loadGroupCatalog();
+    } catch {
+      setAddGroupError("Couldn't reach Group Settings.");
+    } finally {
+      setRemovingGroupId(null);
     }
   }
 
@@ -2163,12 +2190,14 @@ export function BlumeApp({
                     >
                       Search
                     </button>
-                    <button
-                      className={`blume-groups-tab-btn${groupsTab === "settings" ? " blume-groups-tab-active" : ""}`}
-                      onClick={() => setGroupsTab("settings")}
-                    >
-                      Group Settings
-                    </button>
+                    {isSuperUser && (
+                      <button
+                        className={`blume-groups-tab-btn${groupsTab === "settings" ? " blume-groups-tab-active" : ""}`}
+                        onClick={() => setGroupsTab("settings")}
+                      >
+                        Group Settings
+                      </button>
+                    )}
                   </div>
 
                   {groupsTab === "search" && (
@@ -2289,11 +2318,11 @@ export function BlumeApp({
                     </>
                   )}
 
-                  {groupsTab === "settings" && (
+                  {groupsTab === "settings" && isSuperUser && (
                     <>
                       <div className="blume-add-group-form">
                         <input
-                          placeholder="Group ID…"
+                          placeholder="Group ID or link…"
                           value={newGroupId}
                           onChange={(e) => setNewGroupId(e.target.value)}
                         />
@@ -2303,11 +2332,13 @@ export function BlumeApp({
                           onChange={(e) => setNewGroupName(e.target.value)}
                         />
                         <select
-                          value={newGroupTier}
-                          onChange={(e) => setNewGroupTier(e.target.value as "red" | "white")}
+                          value={newGroupCategory}
+                          onChange={(e) => setNewGroupCategory(e.target.value as GroupCategory)}
                         >
-                          <option value="white">Standard</option>
-                          <option value="red">Flagged</option>
+                          <option value="Emergency Services">Emergency Services</option>
+                          <option value="Intelligence">Intelligence</option>
+                          <option value="IE">IE</option>
+                          <option value="OCG">OCG</option>
                         </select>
                         <button
                           className="blume-cta-btn"
@@ -2324,9 +2355,18 @@ export function BlumeApp({
                         {groupCatalog.map((g) => (
                           <span
                             key={g.id}
-                            className={`blume-group-chip ${g.tier === "red" ? "blume-group-red" : ""}`}
+                            className={`blume-group-chip blume-group-chip-removable ${
+                              g.tier === "red" ? "blume-group-red" : ""
+                            }`}
                           >
                             {g.name}
+                            <button
+                              className="blume-group-remove-btn"
+                              disabled={removingGroupId === g.id}
+                              onClick={() => handleRemoveCustomGroup(g.id)}
+                            >
+                              {removingGroupId === g.id ? "…" : "×"}
+                            </button>
                           </span>
                         ))}
                       </div>

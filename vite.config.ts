@@ -154,57 +154,64 @@ async function resolveRobloxUserId(
   }
 }
 
-const PERSON_SEARCH_GROUPS: Record<number, { name: string; tier: "red" | "white" }> = {
-  10742221: { name: "G-Block", tier: "red" },
-  223035360: { name: "Shadow District", tier: "red" },
-  679403020: { name: "Harakat", tier: "red" },
-  16684944: { name: "National Liberation Movement", tier: "red" },
-  34067916: { name: "CHS", tier: "red" },
-  541807: { name: "UK | United Kingdom", tier: "red" },
-  14641286: { name: "TUI Airways | Roblox", tier: "red" },
-  696897291: { name: "Motorway Roleplay", tier: "red" },
-  11939831: { name: "Nottinghamshire, England", tier: "red" },
-  16339807: { name: "Liber Studios", tier: "red" },
-  34544324: { name: "UK | Sandford Studios", tier: "red" },
-  12982639: { name: "NEMG | North East Medical Group", tier: "red" },
-  8103: { name: "UK Explorium Studios", tier: "red" },
+type GroupCategory = "Emergency Services" | "Intelligence" | "IE" | "OCG";
+const GROUP_CATEGORIES: GroupCategory[] = ["Emergency Services", "Intelligence", "IE", "OCG"];
 
-  32650605: { name: "London Air Ambulance", tier: "white" },
-  879056831: { name: "London Ambulance Service", tier: "white" },
-  493990898: { name: "Metropolitan Police Service", tier: "white" },
-  360230741: { name: "London Fire Brigade", tier: "white" },
-  931656944: { name: "British Forces", tier: "white" },
-  820909258: { name: "British Transport Police", tier: "white" },
-  743983922: { name: "Greater Manchester Police", tier: "white" },
-  987422423: { name: "Police Service of Northern Ireland", tier: "white" },
-  154853936: { name: "MI5", tier: "white" },
-  142915989: { name: "National Crime Agency", tier: "white" },
-  685466511: { name: "SIS (MI6)", tier: "white" },
-  34974741: { name: "Immigration Enforcement", tier: "white" },
-  11086948: { name: "Hatzola", tier: "white" },
-  35167585: { name: "Royal Households", tier: "white" },
-  841518502: { name: "Home Office", tier: "white" },
-  278125181: { name: "National Police Air Service", tier: "white" },
-  740750486: { name: "Kent Police", tier: "white" },
-  567563234: { name: "HM Revenue and Customs", tier: "white" },
-  187507831: { name: "Central Intelligence Agency", tier: "white" },
-  963189576: { name: "JTF2", tier: "white" },
-  315987361: { name: "Regional Organised Crime Unit", tier: "white" },
-  496716538: { name: "U.S Marshals Service", tier: "white" },
-  841282433: { name: "London Freemasons", tier: "white" },
-  1033941381: { name: "Consulate of the People's Republic of China", tier: "white" },
+function tierForCategory(category: string): "red" | "white" {
+  return category === "IE" || category === "OCG" ? "red" : "white";
+}
 
-  1176461: { name: "Union Studios", tier: "red" },
-  2792847: { name: "Crown Studios", tier: "red" },
-  1059884: { name: "Imperium Studios", tier: "red" },
-  979414846: { name: "[IP] Interactive Productions", tier: "red" },
-  32324698: { name: "PHOENIX Studios Group", tier: "red" },
-  33392881: { name: "Aris Production", tier: "red" },
-  34564109: { name: "Liber Studios ND", tier: "red" },
-  35662128: { name: "United Establishment", tier: "red" },
-  5081986: { name: "Yaris United Kingdom", tier: "red" },
-  35273143: { name: "Explorium Studios", tier: "red" },
-};
+const GROUP_SEED: { id: number; name: string; category: GroupCategory }[] = [
+  { id: 10742221, name: "G-Block", category: "OCG" },
+  { id: 223035360, name: "Shadow District", category: "OCG" },
+  { id: 679403020, name: "Harakat", category: "OCG" },
+  { id: 16684944, name: "National Liberation Movement", category: "OCG" },
+  { id: 34067916, name: "CHS", category: "OCG" },
+  { id: 541807, name: "UK | United Kingdom", category: "OCG" },
+  { id: 14641286, name: "TUI Airways | Roblox", category: "OCG" },
+  { id: 696897291, name: "Motorway Roleplay", category: "OCG" },
+  { id: 11939831, name: "Nottinghamshire, England", category: "OCG" },
+  { id: 16339807, name: "Liber Studios", category: "OCG" },
+  { id: 34544324, name: "UK | Sandford Studios", category: "OCG" },
+  { id: 12982639, name: "NEMG | North East Medical Group", category: "OCG" },
+  { id: 8103, name: "UK Explorium Studios", category: "OCG" },
+  { id: 1176461, name: "Union Studios", category: "OCG" },
+  { id: 2792847, name: "Crown Studios", category: "OCG" },
+  { id: 1059884, name: "Imperium Studios", category: "OCG" },
+  { id: 979414846, name: "[IP] Interactive Productions", category: "OCG" },
+  { id: 32324698, name: "PHOENIX Studios Group", category: "OCG" },
+  { id: 33392881, name: "Aris Production", category: "OCG" },
+  { id: 34564109, name: "Liber Studios ND", category: "OCG" },
+  { id: 35662128, name: "United Establishment", category: "OCG" },
+  { id: 5081986, name: "Yaris United Kingdom", category: "OCG" },
+  { id: 35273143, name: "Explorium Studios", category: "OCG" },
+
+  { id: 32650605, name: "London Air Ambulance", category: "Emergency Services" },
+  { id: 879056831, name: "London Ambulance Service", category: "Emergency Services" },
+  { id: 493990898, name: "Metropolitan Police Service", category: "Emergency Services" },
+  { id: 360230741, name: "London Fire Brigade", category: "Emergency Services" },
+  { id: 820909258, name: "British Transport Police", category: "Emergency Services" },
+  { id: 743983922, name: "Greater Manchester Police", category: "Emergency Services" },
+  { id: 987422423, name: "Police Service of Northern Ireland", category: "Emergency Services" },
+  { id: 278125181, name: "National Police Air Service", category: "Emergency Services" },
+  { id: 740750486, name: "Kent Police", category: "Emergency Services" },
+
+  { id: 931656944, name: "British Forces", category: "Intelligence" },
+  { id: 567563234, name: "HM Revenue and Customs", category: "Intelligence" },
+  { id: 154853936, name: "MI5", category: "Intelligence" },
+  { id: 142915989, name: "National Crime Agency", category: "Intelligence" },
+  { id: 685466511, name: "SIS (MI6)", category: "Intelligence" },
+  { id: 34974741, name: "Immigration Enforcement", category: "Intelligence" },
+  { id: 11086948, name: "Hatzola", category: "Intelligence" },
+  { id: 35167585, name: "Royal Households", category: "Intelligence" },
+  { id: 841518502, name: "Home Office", category: "Intelligence" },
+  { id: 187507831, name: "Central Intelligence Agency", category: "Intelligence" },
+  { id: 963189576, name: "JTF2", category: "Intelligence" },
+  { id: 315987361, name: "Regional Organised Crime Unit", category: "Intelligence" },
+  { id: 496716538, name: "U.S Marshals Service", category: "Intelligence" },
+  { id: 841282433, name: "London Freemasons", category: "Intelligence" },
+  { id: 1033941381, name: "Consulate of the People's Republic of China", category: "Intelligence" },
+];
 
 interface BlumeReportEntry {
   id: string;
@@ -1482,11 +1489,12 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
         const cookies = parseCookies(req);
         const session = sessions.get(cookies.wb_session);
         const canAccess = session ? await isBlumeAuthorized(session.userId) : false;
+        const isSuperUser = session ? isBlumeSuperUser(session.userId) : false;
 
         if (req.method === "GET") {
           if (!canAccess) {
             res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ reports: [], canAccess: false }));
+            res.end(JSON.stringify({ reports: [], canAccess: false, isSuperUser: false }));
             return;
           }
           let reports = loadBlumeReportsDb()
@@ -1497,7 +1505,7 @@ function blumeReportsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             reports = reports.filter((r) => r.linkedUserId === personId);
           }
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ reports, canAccess: true }));
+          res.end(JSON.stringify({ reports, canAccess: true, isSuperUser }));
           return;
         }
 
@@ -1947,7 +1955,7 @@ interface GroupScanEntry {
 interface CustomGroup {
   id: number;
   name: string;
-  tier: "red" | "white";
+  category: GroupCategory;
 }
 
 function loadCustomGroupsDb(): CustomGroup[] {
@@ -1993,16 +2001,22 @@ function saveVehicleTagsDb(entries: VehicleTag[]) {
   fs.writeFileSync(BLUME_VEHICLE_TAGS_DB, JSON.stringify(entries, null, 2));
 }
 
-async function getGroupCatalog(): Promise<Record<number, { name: string; tier: "red" | "white" }>> {
-  const custom = loadCustomGroupsDb();
-  const merged: Record<number, { name: string; tier: "red" | "white" }> = { ...PERSON_SEARCH_GROUPS };
-  for (const c of custom) merged[c.id] = { name: c.name, tier: c.tier };
+async function getGroupCatalog(): Promise<
+  Record<number, { name: string; tier: "red" | "white"; category: GroupCategory }>
+> {
+  let custom = loadCustomGroupsDb();
+  if (!fs.existsSync(BLUME_CUSTOM_GROUPS_DB)) {
+    custom = GROUP_SEED;
+    saveCustomGroupsDb(custom);
+  }
+  const merged: Record<number, { name: string; tier: "red" | "white"; category: GroupCategory }> = {};
+  for (const c of custom) merged[c.id] = { name: c.name, tier: tierForCategory(c.category), category: c.category };
   return merged;
 }
 
 function relevantGroups(
   groupIds: number[],
-  catalog: Record<number, { name: string; tier: "red" | "white" }>
+  catalog: Record<number, { name: string; tier: "red" | "white"; category?: GroupCategory }>
 ) {
   return groupIds
     .filter((id) => id in catalog)
@@ -2261,10 +2275,10 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           if (url.searchParams.get("groupCatalog")) {
             const catalog = await getGroupCatalog();
             const groups = Object.entries(catalog)
-              .map(([id, g]) => ({ id: Number(id), name: g.name, tier: g.tier }))
+              .map(([id, g]) => ({ id: Number(id), name: g.name, tier: g.tier, category: g.category }))
               .sort((a, b) => (a.tier === b.tier ? a.name.localeCompare(b.name) : a.tier === "red" ? -1 : 1));
             res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ groups }));
+            res.end(JSON.stringify({ groups, canManage: isBlumeSuperUser(session.userId) }));
             return;
           }
 
@@ -2560,13 +2574,22 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             const body = (req as any)._parsedBody ?? (await readJsonBody(req));
             const action = (body.action || "").toString();
 
+            if (action === "addCustomGroup" || action === "removeCustomGroup") {
+              if (!isBlumeSuperUser(session.userId)) {
+                res.statusCode = 403;
+                res.end("Only Blume administrators can manage the group catalog.");
+                return;
+              }
+            }
+
             if (action === "addCustomGroup") {
-              const groupId = Number((body.groupId || "").toString().trim());
+              const rawGroupId = (body.groupId || "").toString().trim();
+              const groupId = Number(extractGroupId(rawGroupId) || rawGroupId);
               const groupName = (body.groupName || "").toString().trim();
-              const groupTier = (body.groupTier || "").toString().trim();
+              const groupCategory = (body.groupCategory || "").toString().trim() as GroupCategory;
               if (!groupId || Number.isNaN(groupId)) {
                 res.statusCode = 400;
-                res.end("Group ID must be numeric.");
+                res.end("Group ID must be numeric, or a valid Roblox group link.");
                 return;
               }
               if (!groupName) {
@@ -2579,9 +2602,9 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 res.end("Group name is too long (max 80 characters).");
                 return;
               }
-              if (groupTier !== "red" && groupTier !== "white") {
+              if (!GROUP_CATEGORIES.includes(groupCategory)) {
                 res.statusCode = 400;
-                res.end('Tier must be "red" or "white".');
+                res.end(`Category must be one of: ${GROUP_CATEGORIES.join(", ")}.`);
                 return;
               }
               if (containsBlockedLanguage(groupName)) {
@@ -2592,16 +2615,43 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
               const custom = loadCustomGroupsDb();
               const next = [
                 ...custom.filter((c) => c.id !== groupId),
-                { id: groupId, name: groupName, tier: groupTier as "red" | "white" },
+                { id: groupId, name: groupName, category: groupCategory },
               ];
               saveCustomGroupsDb(next);
               appendAuditLog({
                 type: "blume_group_added",
                 username: session.username,
-                detail: `Added ${groupTier} group "${groupName}" (${groupId})`,
+                detail: `Added ${groupCategory} group "${groupName}" (${groupId})`,
               });
               res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ group: { id: groupId, name: groupName, tier: groupTier } }));
+              res.end(
+                JSON.stringify({
+                  group: { id: groupId, name: groupName, tier: tierForCategory(groupCategory), category: groupCategory },
+                })
+              );
+              return;
+            }
+
+            if (action === "removeCustomGroup") {
+              const groupId = Number((body.groupId || "").toString().trim());
+              if (!groupId || Number.isNaN(groupId)) {
+                res.statusCode = 400;
+                res.end("Group ID must be numeric.");
+                return;
+              }
+              const custom = loadCustomGroupsDb();
+              const removed = custom.find((c) => c.id === groupId);
+              const next = custom.filter((c) => c.id !== groupId);
+              saveCustomGroupsDb(next);
+              if (removed) {
+                appendAuditLog({
+                  type: "blume_group_removed",
+                  username: session.username,
+                  detail: `Removed group "${removed.name}" (${groupId})`,
+                });
+              }
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ ok: true }));
               return;
             }
 

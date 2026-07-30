@@ -127,10 +127,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const canAccess = session ? await isBlumeAuthorized(session.userId) : false;
+  const isSuperUser = session ? isBlumeSuperUser(session.userId) : false;
 
   if (req.method === "GET") {
     if (!canAccess) {
-      res.status(200).json({ reports: [], canAccess: false });
+      res.status(200).json({ reports: [], canAccess: false, isSuperUser: false });
       return;
     }
     let reports = ((await kv.get<BlumeReport[]>("blumeReports")) || [])
@@ -140,7 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (personId) {
       reports = reports.filter((r) => r.linkedUserId === personId);
     }
-    res.status(200).json({ reports, canAccess: true });
+    res.status(200).json({ reports, canAccess: true, isSuperUser });
     return;
   }
 
