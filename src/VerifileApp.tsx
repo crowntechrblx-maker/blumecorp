@@ -233,14 +233,14 @@ export function VerifileApp({ username }: { username: string }) {
             <div className="verifile-person-header">
               <div className="verifile-person-avatar verifile-person-avatar-empty" />
               <div className="verifile-person-identity">
-                <span className="verifile-person-username">westbridge_agent04</span>
+                <span className="verifile-person-username">shadowdistrict_12</span>
                 <span className="verifile-person-userid">User ID: 000000000</span>
               </div>
             </div>
             <div className="verifile-person-section">
               <span className="verifile-person-label">Groups</span>
               <div className="verifile-group-list">
-                <span className="verifile-group-chip verifile-group-red">Immigration Enforcement</span>
+                <span className="verifile-group-chip verifile-group-red">Shadow District</span>
               </div>
             </div>
             <div className="verifile-person-section">
@@ -248,13 +248,13 @@ export function VerifileApp({ username }: { username: string }) {
               <div className="verifile-punishment-list">
                 <div className="verifile-punishment-card">
                   <div className="verifile-punishment-head">
-                    <span className="verifile-punishment-type">Warning</span>
-                    <span className="verifile-punishment-service">Immigration Enforcement</span>
+                    <span className="verifile-punishment-type">Ban</span>
+                    <span className="verifile-punishment-service">Home Office</span>
                   </div>
                   <p className="verifile-punishment-details">
-                    Logged for procedural non-compliance during a routine stop.
+                    Permanently blacklisted from government groups for NST.
                   </p>
-                  <span className="verifile-punishment-meta">Logged by a verified IE member</span>
+                  <span className="verifile-punishment-meta">Logged by a verified government service member</span>
                 </div>
               </div>
             </div>
