@@ -1849,9 +1849,9 @@ function thamesWaterPlugin(sessions: Map<string, RobloxSession>): Plugin {
             const title = (body.title || "").toString().trim();
             const department = (body.department || "").toString().trim();
             const description = (body.description || "").toString().trim();
-            if (!title || !description) {
+            if (!title) {
               res.statusCode = 400;
-              res.end("Title and description are required.");
+              res.end("Title is required.");
               return;
             }
             if (title.length > 120) {

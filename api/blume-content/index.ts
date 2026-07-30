@@ -278,8 +278,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const title = (body.title || "").toString().trim();
         const department = (body.department || "").toString().trim();
         const description = (body.description || "").toString().trim();
-        if (!title || !description) {
-          res.status(400).send("Title and description are required.");
+        if (!title) {
+          res.status(400).send("Title is required.");
           return;
         }
         if (title.length > 120) {

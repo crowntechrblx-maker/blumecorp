@@ -5,7 +5,7 @@ interface ThamesWaterJob {
   id: string;
   title: string;
   department: string;
-  description: string;
+  description?: string;
   postedByUsername?: string;
   createdAt?: number;
 }
@@ -60,7 +60,7 @@ export function ThamesWaterApp({ username }: { username: string }) {
   }, []);
 
   async function handleAddJob() {
-    if (!jobTitle.trim() || !jobDescription.trim()) return;
+    if (!jobTitle.trim()) return;
     setSubmittingJob(true);
     setJobError(null);
     try {
@@ -145,13 +145,13 @@ export function ThamesWaterApp({ username }: { username: string }) {
             />
             <textarea
               className="thames-textarea"
-              placeholder="Description"
+              placeholder="Description (optional)"
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
             />
             <button
               className="thames-btn"
-              disabled={!jobTitle.trim() || !jobDescription.trim() || submittingJob}
+              disabled={!jobTitle.trim() || submittingJob}
               onClick={handleAddJob}
             >
               {submittingJob ? "Posting…" : "Post opening"}
@@ -172,7 +172,7 @@ export function ThamesWaterApp({ username }: { username: string }) {
                   <span className="thames-job-title">{j.title}</span>
                   {j.department && <span className="thames-job-department">{j.department}</span>}
                 </div>
-                <p className="thames-job-desc">{j.description}</p>
+                {j.description && <p className="thames-job-desc">{j.description}</p>}
                 {canManage && (
                   <div className="thames-job-meta">
                     <span>
