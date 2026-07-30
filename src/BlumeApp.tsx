@@ -199,6 +199,31 @@ function formatDateForFilename(d: Date): string {
   return `${dd}-${mm}-${yyyy}`;
 }
 
+async function loadRemoteImageAsDataUrl(
+  url: string
+): Promise<{ dataUrl: string; format: "PNG" | "JPEG" } | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    const format = blob.type.includes("png") ? "PNG" : "JPEG";
+    return { dataUrl, format };
+  } catch {
+    return null;
+  }
+}
+
+function randomStampAngle(): number {
+  const magnitude = 10 + Math.random() * 25;
+  return Math.random() < 0.5 ? -magnitude : magnitude;
+}
+
 function ArrestRecord({ data }: { data: unknown }) {
   if (data === null || data === undefined) {
     return <p className="blume-muted">None on file.</p>;
@@ -845,6 +870,22 @@ export function BlumeApp({
       const generatedAt = new Date();
       const textureDataUrl = generatePaperTextureDataUrl();
 
+      const photoCandidates: { url: string; at: number }[] = [];
+      if (personResult.avatarUrl) {
+        photoCandidates.push({ url: personResult.avatarUrl, at: Number.MAX_SAFE_INTEGER });
+      }
+      for (const h of historyForReport) {
+        if (h.avatarUrl) photoCandidates.push({ url: h.avatarUrl, at: h.createdAt });
+      }
+      const seenPhotoUrls = new Set<string>();
+      const topPhotoUrls = photoCandidates
+        .filter((p) => (seenPhotoUrls.has(p.url) ? false : (seenPhotoUrls.add(p.url), true)))
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 3);
+      const loadedPhotos = (
+        await Promise.all(topPhotoUrls.map((p) => loadRemoteImageAsDataUrl(p.url)))
+      ).filter((p): p is { dataUrl: string; format: "PNG" | "JPEG" } => !!p);
+
       const doc = new jsPDF({ unit: "pt", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -899,6 +940,20 @@ export function BlumeApp({
       doc.setFontSize(18);
       doc.setTextColor(20, 20, 20);
       doc.text("INTELLIGENCE REPORT", marginX, y);
+
+      if (loadedPhotos.length > 0) {
+        const photoSize = 36;
+        const photoGap = 8;
+        const rowWidth = loadedPhotos.length * photoSize + (loadedPhotos.length - 1) * photoGap;
+        let photoX = pageWidth - marginX - rowWidth;
+        const photoY = y - 26;
+        for (const photo of loadedPhotos) {
+          doc.addImage(photo.dataUrl, photo.format, photoX, photoY, photoSize, photoSize);
+          doc.setDrawColor(170, 170, 170);
+          doc.rect(photoX, photoY, photoSize, photoSize);
+          photoX += photoSize + photoGap;
+        }
+      }
       y += 30;
 
       heading("Subject Overview");
@@ -985,23 +1040,25 @@ export function BlumeApp({
         : personResult.arrestHistory != null
           ? [personResult.arrestHistory]
           : [];
+      let hasNstArrest = false;
+      const renderChargeLike = (value: unknown) => {
+        if (typeof value === "number") return getChargeName(value);
+        if (typeof value === "string" && /^\d+$/.test(value)) return getChargeName(value);
+        return String(value);
+      };
       if (arrestList.length === 0) {
         line("None on file.");
       } else {
         for (const item of arrestList) {
           if (item && typeof item === "object") {
             const obj = item as Record<string, unknown>;
-            const renderChargeLike = (value: unknown) => {
-              if (typeof value === "number") return getChargeName(value);
-              if (typeof value === "string" && /^\d+$/.test(value)) return getChargeName(value);
-              return String(value);
-            };
             const chargeField = getFieldCI(obj, ARREST_CHARGE_KEYS);
             const charges = Array.isArray(chargeField)
               ? chargeField.map(renderChargeLike)
               : chargeField !== undefined
                 ? [renderChargeLike(chargeField)]
                 : [];
+            if (charges.some((c) => c === "National Security Threat")) hasNstArrest = true;
             const officer = getFieldCI(obj, ARREST_OFFICER_KEYS);
             const when = getFieldCI(obj, ARREST_DATE_KEYS);
             let whenMs: number | null = null;
@@ -1016,7 +1073,9 @@ export function BlumeApp({
               }${whenMs !== null ? ` — ${formatDateTimeNoSeconds(whenMs)}` : ""}`
             );
           } else {
-            line(`- ${String(item)}`);
+            const resolved = renderChargeLike(item);
+            if (resolved === "National Security Threat") hasNstArrest = true;
+            line(`- ${resolved}`);
           }
         }
       }
@@ -1035,14 +1094,43 @@ export function BlumeApp({
 
       const stampZoneTop = y + 10;
       const stampZoneBottom = Math.max(stampZoneTop, bottomLimit - 6);
-      const stampY = stampZoneTop + Math.random() * (stampZoneBottom - stampZoneTop);
-      const stampX = marginX + 60 + Math.random() * Math.max(0, maxWidth - 120);
-      const stampAngle = -35 + Math.random() * 70;
+      function randomStampPoint() {
+        return {
+          x: marginX + 60 + Math.random() * Math.max(0, maxWidth - 120),
+          y: stampZoneTop + Math.random() * (stampZoneBottom - stampZoneTop),
+        };
+      }
+
+      const verifiedPoint = randomStampPoint();
+      const verifiedAngle = randomStampAngle();
+
+      let nstPoint: { x: number; y: number } | null = null;
+      let nstAngle = 0;
+      if (hasNstArrest) {
+        const minDist = 80;
+        let candidate = randomStampPoint();
+        for (let attempt = 0; attempt < 20; attempt++) {
+          const dx = candidate.x - verifiedPoint.x;
+          const dy = candidate.y - verifiedPoint.y;
+          if (Math.sqrt(dx * dx + dy * dy) >= minDist) break;
+          candidate = randomStampPoint();
+        }
+        nstPoint = candidate;
+        nstAngle = randomStampAngle();
+      }
+
       doc.setGState(doc.GState({ opacity: 0.55 }));
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(20);
+      doc.setFontSize(26);
       doc.setTextColor(160, 30, 30);
-      doc.text("[ VERIFIED ]", stampX, stampY, { angle: stampAngle, align: "center" });
+      doc.text("[ VERIFIED ]", verifiedPoint.x, verifiedPoint.y, {
+        angle: verifiedAngle,
+        align: "center",
+      });
+      if (nstPoint) {
+        doc.setTextColor(110, 10, 10);
+        doc.text("[ NST ]", nstPoint.x, nstPoint.y, { angle: nstAngle, align: "center" });
+      }
       doc.setGState(doc.GState({ opacity: 1 }));
 
       const totalPages = doc.getNumberOfPages();
@@ -1845,8 +1933,8 @@ export function BlumeApp({
                               onClick={() => handleCopyUsername(personResult.username)}
                             >
                               {personResult.username}
-                              {usernameCopied && <span className="blume-copied-tag">Copied</span>}
                               {isPersonActive && <span className="blume-person-active-tag">ACTIVE</span>}
+                              {usernameCopied && <span className="blume-copied-tag">Copied</span>}
                             </strong>
                             <span className="blume-person-id">ID {personResult.userId}</span>
                             {!isPersonActive && personResult.lastSeenOnlineAt && (

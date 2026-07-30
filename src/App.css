@@ -2353,12 +2353,15 @@
 }
 .blume-copied-tag {
   font-size: 10px;
-  font-weight: 400;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   color: #34d399;
   background: rgba(52, 211, 153, 0.12);
-  border: 1px solid rgba(52, 211, 153, 0.3);
+  border: 1px solid rgba(52, 211, 153, 0.35);
   padding: 1px 6px;
   border-radius: 999px;
+  margin-left: 6px;
+  vertical-align: middle;
 }
 .blume-person-active-tag {
   font-size: 10px;
