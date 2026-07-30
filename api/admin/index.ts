@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
 import { isPlatformAdmin, getMemberGroupNames } from "../../lib/roblox.js";
-import { findKnownUser } from "../../lib/known-users.js";
+import { findKnownUser, getLoggedInUsernames } from "../../lib/known-users.js";
 import { getAuditLog, appendAuditLog } from "../../lib/audit.js";
 import { getBans, addBan, removeBan } from "../../lib/bans.js";
 import { kv } from "../../lib/kv.js";
@@ -50,10 +50,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const [auditLog, bans, allMessages] = await Promise.all([
+    const [auditLog, bans, allMessages, loggedInUsernames] = await Promise.all([
       getAuditLog(300),
       getBans(),
       kv.get<MessageEntry[]>("messages"),
+      getLoggedInUsernames(),
     ]);
     const messages = (allMessages || [])
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -70,6 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       auditLog,
       bans,
       messages,
+      loggedInUsernames,
     });
     return;
   }

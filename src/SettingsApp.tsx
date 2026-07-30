@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { jsPDF } from "jspdf";
 
 interface AuditEntry {
   id: string;
@@ -35,6 +36,7 @@ export function SettingsApp() {
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [bans, setBans] = useState<BanEntry[]>([]);
   const [messages, setMessages] = useState<AdminMessage[]>([]);
+  const [loggedInUsernames, setLoggedInUsernames] = useState<string[]>([]);
   const [messageFilter, setMessageFilter] = useState("");
   const [auditFilter, setAuditFilter] = useState("");
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
@@ -55,9 +57,24 @@ export function SettingsApp() {
       setAuditLog(data.auditLog || []);
       setBans(data.bans || []);
       setMessages(data.messages || []);
+      setLoggedInUsernames(data.loggedInUsernames || []);
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleDownloadLoggedInUsers() {
+    const doc = new jsPDF();
+    let y = 10;
+    for (const username of loggedInUsernames) {
+      if (y > 280) {
+        doc.addPage();
+        y = 10;
+      }
+      doc.text(username, 10, y);
+      y += 10;
+    }
+    doc.save("logged-in-users.pdf");
   }
 
   async function handleDeleteMessage(id: string) {
@@ -168,6 +185,18 @@ export function SettingsApp() {
             ))}
           </div>
         )}
+      </div>
+
+      <hr className="settings-divider" />
+
+      <div className="section settings-section">
+        <h3>Logged-in users</h3>
+        <p className="settings-audit-hint">
+          Every unique user currently logged into Westbridge OS, as a plain PDF list.
+        </p>
+        <button className="cta" onClick={handleDownloadLoggedInUsers}>
+          Download PDF
+        </button>
       </div>
 
       <hr className="settings-divider" />

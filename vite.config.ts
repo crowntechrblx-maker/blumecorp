@@ -38,6 +38,7 @@ interface KnownUser {
   username: string;
   avatarUrl: string | null;
   lastSeen: number;
+  loggedOut?: boolean;
 }
 
 interface MessageEntry {
@@ -528,7 +529,7 @@ function saveUsersDb(entries: KnownUser[]) {
 function upsertKnownUser(user: { userId: string; username: string; avatarUrl: string | null }) {
   const users = loadUsersDb();
   const index = users.findIndex((u) => u.userId === user.userId);
-  const entry: KnownUser = { ...user, lastSeen: Date.now() };
+  const entry: KnownUser = { ...user, lastSeen: Date.now(), loggedOut: false };
   if (index === -1) {
     users.push(entry);
   } else {
@@ -546,6 +547,21 @@ function findKnownUser(query: string): KnownUser | null {
     users.find((u) => u.username.toLowerCase() === raw.toLowerCase()) ||
     null
   );
+}
+
+function markKnownUserLoggedOut(userId: string) {
+  const users = loadUsersDb();
+  const index = users.findIndex((u) => u.userId === userId);
+  if (index === -1) return;
+  users[index] = { ...users[index], loggedOut: true };
+  saveUsersDb(users);
+}
+
+function getLoggedInUsernames(): string[] {
+  return loadUsersDb()
+    .filter((u) => !u.loggedOut)
+    .map((u) => u.username)
+    .sort((a, b) => a.localeCompare(b));
 }
 
 interface BanEntry {
@@ -783,6 +799,8 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
 
         if (url.pathname === "/api/auth/logout") {
           const cookies = parseCookies(req);
+          const loggingOut = sessions.get(cookies.wb_session);
+          if (loggingOut) markKnownUserLoggedOut(loggingOut.userId);
           sessions.delete(cookies.wb_session);
           res.setHeader("Set-Cookie", "wb_session=; Path=/; HttpOnly; Max-Age=0");
           res.statusCode = 302;
@@ -2087,6 +2105,7 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
               auditLog: getAuditLog(300),
               bans: loadBansDb(),
               messages: allMessages,
+              loggedInUsernames: getLoggedInUsernames(),
             })
           );
           return;

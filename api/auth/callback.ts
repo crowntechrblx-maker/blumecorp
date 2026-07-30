@@ -2,32 +2,9 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { parseCookies, setCookie } from "../../lib/cookies.js";
 import { encodeSession } from "../../lib/session.js";
 import { getRobloxAvatarUrl } from "../../lib/roblox.js";
-import { kv } from "../../lib/kv.js";
 import { isBanned } from "../../lib/bans.js";
 import { appendAuditLog } from "../../lib/audit.js";
-
-interface KnownUser {
-  userId: string;
-  username: string;
-  avatarUrl: string | null;
-  lastSeen: number;
-}
-
-async function upsertKnownUser(user: {
-  userId: string;
-  username: string;
-  avatarUrl: string | null;
-}) {
-  const users = (await kv.get<KnownUser[]>("users")) || [];
-  const index = users.findIndex((u) => u.userId === user.userId);
-  const entry: KnownUser = { ...user, lastSeen: Date.now() };
-  if (index === -1) {
-    users.push(entry);
-  } else {
-    users[index] = entry;
-  }
-  await kv.set("users", users);
-}
+import { upsertKnownUser } from "../../lib/known-users.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const CLIENT_ID = process.env.ROBLOX_CLIENT_ID || "";
