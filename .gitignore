@@ -42,6 +42,8 @@ blume-group-scan-data.json
 blume-settings-data.json
 blume-custom-groups-data.json
 blume-server-presence-data.json
+redline-whitelist-data.json
+redline-punishments-data.json
 
 # Editor directories and files
 .vscode/*

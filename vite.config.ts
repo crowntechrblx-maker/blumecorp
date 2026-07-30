@@ -2178,6 +2178,54 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           res.end("You must be signed in.");
           return;
         }
+
+        if (req.method === "GET" && (url.searchParams.get("redlineSearch") || url.searchParams.get("redlineMyServices"))) {
+          if (!(await isRedlineAuthorized(session.userId))) {
+            res.statusCode = 403;
+            res.end("You do not have clearance to use Redline.");
+            return;
+          }
+          const redlineSearchQuery = url.searchParams.get("redlineSearch");
+          if (redlineSearchQuery) {
+            const q = redlineSearchQuery.trim();
+            if (!q) {
+              res.statusCode = 400;
+              res.end("Missing search query.");
+              return;
+            }
+            const resolved = await resolveRobloxUserId(q);
+            if (!resolved) {
+              res.statusCode = 404;
+              res.end(`Couldn't find a Roblox user matching "${q}".`);
+              return;
+            }
+            const [avatarUrl, groupIds, catalog] = await Promise.all([
+              getRobloxAvatarUrl(resolved.userId),
+              getUserGroupIds(resolved.userId),
+              getGroupCatalog(),
+            ]);
+            res.setHeader("Content-Type", "application/json");
+            res.end(
+              JSON.stringify({
+                userId: resolved.userId,
+                username: resolved.username,
+                avatarUrl,
+                groups: relevantGroups(groupIds, catalog),
+              })
+            );
+            return;
+          }
+          if (url.searchParams.get("redlineMyServices")) {
+            const [groupIds, catalog] = await Promise.all([
+              getUserGroupIds(session.userId),
+              getGroupCatalog(),
+            ]);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ services: relevantGroups(groupIds, catalog) }));
+            return;
+          }
+        }
+
         if (!(await isBlumeAuthorized(session.userId))) {
           res.statusCode = 403;
           res.end("You do not have clearance to use Person Search.");
@@ -2783,6 +2831,272 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
+interface RedlineWhitelistEntry {
+  userId: string;
+  username: string;
+  addedByUsername: string;
+  addedAt: number;
+}
+
+interface RedlinePunishment {
+  id: string;
+  targetUserId: string;
+  targetUsername: string;
+  type: string;
+  details: string;
+  serviceGroupId: number;
+  serviceGroupName: string;
+  addedByUserId: string;
+  addedByUsername: string;
+  createdAt: number;
+}
+
+const REDLINE_WHITELIST_DB = path.resolve(process.cwd(), "redline-whitelist-data.json");
+const REDLINE_PUNISHMENTS_DB = path.resolve(process.cwd(), "redline-punishments-data.json");
+
+function loadRedlineWhitelistDb(): RedlineWhitelistEntry[] {
+  try {
+    return JSON.parse(fs.readFileSync(REDLINE_WHITELIST_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveRedlineWhitelistDb(entries: RedlineWhitelistEntry[]) {
+  fs.writeFileSync(REDLINE_WHITELIST_DB, JSON.stringify(entries, null, 2));
+}
+function loadRedlinePunishmentsDb(): RedlinePunishment[] {
+  try {
+    return JSON.parse(fs.readFileSync(REDLINE_PUNISHMENTS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveRedlinePunishmentsDb(entries: RedlinePunishment[]) {
+  fs.writeFileSync(REDLINE_PUNISHMENTS_DB, JSON.stringify(entries, null, 2));
+}
+
+async function isRedlineAuthorized(userId: string): Promise<boolean> {
+  if (isBlumeSuperUser(userId)) return true;
+  return loadRedlineWhitelistDb().some((w) => w.userId === userId);
+}
+
+function redlinePlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "redline-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "redline") {
+          next();
+          return;
+        }
+
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        const canAccess = session ? await isRedlineAuthorized(session.userId) : false;
+        const isSuperUser = session ? isBlumeSuperUser(session.userId) : false;
+
+        if (req.method === "GET") {
+          if (!canAccess) {
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ canAccess: false, isSuperUser: false, whitelist: [] }));
+            return;
+          }
+          const target = url.searchParams.get("target") || "";
+          if (target) {
+            const punishments = loadRedlinePunishmentsDb()
+              .filter((p) => p.targetUserId === target)
+              .sort((a, b) => b.createdAt - a.createdAt);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ punishments }));
+            return;
+          }
+          const whitelist = isSuperUser ? loadRedlineWhitelistDb() : [];
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ canAccess: true, isSuperUser, whitelist }));
+          return;
+        }
+
+        if (req.method === "POST") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          try {
+            const body = await readJsonBody(req);
+            const action = body.action || "";
+
+            if (action === "addWhitelist" || action === "removeWhitelist") {
+              if (!isSuperUser) {
+                res.statusCode = 403;
+                res.end("Only Redline administrators can manage access.");
+                return;
+              }
+            }
+
+            if (action === "addWhitelist") {
+              const rawUsername = (body.username || "").toString().trim();
+              if (!rawUsername) {
+                res.statusCode = 400;
+                res.end("Missing username.");
+                return;
+              }
+              const resolved = await resolveRobloxUserId(rawUsername);
+              if (!resolved) {
+                res.statusCode = 400;
+                res.end(`Couldn't find a Roblox user matching "${rawUsername}".`);
+                return;
+              }
+              const list = loadRedlineWhitelistDb();
+              if (list.some((w) => w.userId === resolved.userId)) {
+                res.statusCode = 400;
+                res.end(`${resolved.username} already has access.`);
+                return;
+              }
+              const next = [
+                ...list,
+                {
+                  userId: resolved.userId,
+                  username: resolved.username,
+                  addedByUsername: session.username,
+                  addedAt: Date.now(),
+                },
+              ];
+              saveRedlineWhitelistDb(next);
+              appendAuditLog({
+                type: "redline_whitelist_added",
+                username: session.username,
+                detail: `Added ${resolved.username} to Redline access`,
+              });
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ whitelist: next }));
+              return;
+            }
+
+            if (action === "removeWhitelist") {
+              const targetUserId = (body.userId || "").toString().trim();
+              if (!targetUserId) {
+                res.statusCode = 400;
+                res.end("Missing userId.");
+                return;
+              }
+              const list = loadRedlineWhitelistDb();
+              const removed = list.find((w) => w.userId === targetUserId);
+              const next = list.filter((w) => w.userId !== targetUserId);
+              saveRedlineWhitelistDb(next);
+              if (removed) {
+                appendAuditLog({
+                  type: "redline_whitelist_removed",
+                  username: session.username,
+                  detail: `Removed ${removed.username} from Redline access`,
+                });
+              }
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ whitelist: next }));
+              return;
+            }
+
+            if (action === "addPunishment") {
+              if (!canAccess) {
+                res.statusCode = 403;
+                res.end("You do not have clearance to use Redline.");
+                return;
+              }
+              const targetUserId = (body.targetUserId || "").toString().trim();
+              const targetUsername = (body.targetUsername || "").toString().trim();
+              const punishmentType = (body.type || "").toString().trim();
+              const details = (body.details || "").toString().trim();
+              const serviceGroupId = Number(body.serviceGroupId);
+              if (!targetUserId || !targetUsername) {
+                res.statusCode = 400;
+                res.end("Missing target user.");
+                return;
+              }
+              if (!punishmentType) {
+                res.statusCode = 400;
+                res.end("Missing punishment type.");
+                return;
+              }
+              if (punishmentType.length > 60) {
+                res.statusCode = 400;
+                res.end("Type is too long (max 60 characters).");
+                return;
+              }
+              if (!details) {
+                res.statusCode = 400;
+                res.end("Missing details.");
+                return;
+              }
+              if (details.length > 2000) {
+                res.statusCode = 400;
+                res.end("Details are too long (max 2000 characters).");
+                return;
+              }
+              if (containsBlockedLanguage(punishmentType) || containsBlockedLanguage(details)) {
+                res.statusCode = 400;
+                res.end(MODERATION_REJECTION_MESSAGE);
+                return;
+              }
+              if (!serviceGroupId || Number.isNaN(serviceGroupId)) {
+                res.statusCode = 400;
+                res.end("Missing service.");
+                return;
+              }
+              const customGroups = loadCustomGroupsDb();
+              const service = customGroups.find((g) => g.id === serviceGroupId);
+              if (!service) {
+                res.statusCode = 400;
+                res.end("Unrecognized service.");
+                return;
+              }
+              const isMember = await isRobloxGroupMember(session.userId, serviceGroupId);
+              if (!isMember) {
+                res.statusCode = 403;
+                res.end(`You are not confirmed as a member of ${service.name}.`);
+                return;
+              }
+              const entry: RedlinePunishment = {
+                id: crypto.randomBytes(12).toString("hex"),
+                targetUserId,
+                targetUsername,
+                type: punishmentType,
+                details,
+                serviceGroupId,
+                serviceGroupName: service.name,
+                addedByUserId: session.userId,
+                addedByUsername: session.username,
+                createdAt: Date.now(),
+              };
+              const punishments = loadRedlinePunishmentsDb();
+              punishments.push(entry);
+              saveRedlinePunishmentsDb(punishments);
+              appendAuditLog({
+                type: "redline_punishment_added",
+                username: session.username,
+                detail: `Logged ${punishmentType} for ${targetUsername} (${service.name})`,
+              });
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify(entry));
+              return;
+            }
+
+            res.statusCode = 400;
+            res.end("Unknown action.");
+          } catch (err) {
+            res.statusCode = 500;
+            res.end("Failed: " + (err as Error).message);
+          }
+          return;
+        }
+
+        res.statusCode = 405;
+        res.end("Method not allowed");
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   if (env.ROBLOX_SCAN_COOKIE) process.env.ROBLOX_SCAN_COOKIE = env.ROBLOX_SCAN_COOKIE;
@@ -2800,6 +3114,7 @@ export default defineConfig(({ mode }) => {
       blumeBlogPlugin(sessions),
       adminPlugin(sessions),
       blumeSearchPlugin(sessions),
+      redlinePlugin(sessions),
     ],
   };
 });

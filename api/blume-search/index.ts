@@ -17,6 +17,7 @@ import {
 } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
+import { isRedlineAuthorized } from "../../lib/redline.js";
 
 const READONLY_API = "https://polarisreadonly.up.railway.app";
 
@@ -282,6 +283,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(401).send("You must be signed in.");
     return;
   }
+
+  if (req.method === "GET" && (req.query.redlineSearch || req.query.redlineMyServices)) {
+    if (!(await isRedlineAuthorized(session.userId))) {
+      res.status(403).send("You do not have clearance to use Redline.");
+      return;
+    }
+    if (req.query.redlineSearch) {
+      const q = (req.query.redlineSearch as string).trim();
+      if (!q) {
+        res.status(400).send("Missing search query.");
+        return;
+      }
+      const resolved = await resolveRobloxUserId(q);
+      if (!resolved) {
+        res.status(404).send(`Couldn't find a Roblox user matching "${q}".`);
+        return;
+      }
+      const [avatarUrl, groupIds, catalog] = await Promise.all([
+        getRobloxAvatarUrl(resolved.userId),
+        getUserGroupIds(resolved.userId),
+        getGroupCatalog(),
+      ]);
+      res.status(200).json({
+        userId: resolved.userId,
+        username: resolved.username,
+        avatarUrl,
+        groups: relevantGroups(groupIds, catalog),
+      });
+      return;
+    }
+    if (req.query.redlineMyServices) {
+      const [groupIds, catalog] = await Promise.all([
+        getUserGroupIds(session.userId),
+        getGroupCatalog(),
+      ]);
+      res.status(200).json({ services: relevantGroups(groupIds, catalog) });
+      return;
+    }
+  }
+
   if (!(await isBlumeAuthorized(session.userId))) {
     res.status(403).send("You do not have clearance to use Person Search.");
     return;

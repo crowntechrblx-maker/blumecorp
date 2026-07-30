@@ -8,7 +8,8 @@ export type AppId =
   | "instagram"
   | "messages"
   | "backgrounds"
-  | "settings";
+  | "settings"
+  | "redline";
 
 export interface AppDef {
   id: AppId;
@@ -106,5 +107,14 @@ export const APPS: AppDef[] = [
     iconFull: true,
     color: "#83868e",
     defaultSize: { width: 720, height: 600 },
+  },
+  {
+    id: "redline",
+    name: "Redline",
+    icon: "",
+    iconImage: "/icons/redline-icon.svg",
+    iconFull: true,
+    color: "#8f1414",
+    defaultSize: { width: 560, height: 640 },
   },
 ];

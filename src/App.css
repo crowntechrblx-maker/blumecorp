@@ -3982,3 +3982,327 @@
   font-size: 12.5px;
   cursor: pointer;
 }
+
+.redline-app {
+  --blume-navy: #3a0d0d;
+  --blume-navy-2: #4a1414;
+  --blume-navy-deep: #260808;
+  --blume-mist: rgba(255, 255, 255, 0.78);
+  --blume-mist-dim: rgba(255, 255, 255, 0.45);
+  --blume-line: rgba(255, 255, 255, 0.14);
+  --blume-accent: #ff8a8a;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--blume-navy-deep);
+  color: var(--blume-mist);
+  font-size: 13px;
+  overflow-y: auto;
+}
+.redline-loading {
+  align-items: center;
+  justify-content: center;
+  color: var(--blume-mist-dim, rgba(255, 255, 255, 0.45));
+}
+.redline-restricted {
+  align-items: center;
+  justify-content: center;
+}
+.redline-restricted-card {
+  text-align: center;
+  max-width: 320px;
+}
+.redline-restricted-card h2 {
+  margin: 0 0 8px;
+  color: #ff8a8a;
+}
+.redline-restricted-card p {
+  margin: 0;
+  color: var(--blume-mist-dim);
+}
+.redline-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.redline-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #ff8a8a;
+}
+.redline-add-access-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--blume-line);
+  background: var(--blume-navy-2);
+  color: var(--blume-mist);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.redline-add-access-btn:hover {
+  border-color: var(--blume-accent);
+  color: var(--blume-accent);
+}
+.redline-search-row {
+  display: flex;
+  gap: 8px;
+}
+.redline-search-input {
+  flex: 1;
+  background: var(--blume-navy-2);
+  border: 1px solid var(--blume-line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--blume-mist);
+  font-size: 12.5px;
+}
+.redline-search-input:focus {
+  outline: none;
+  border-color: var(--blume-accent);
+}
+.redline-cta-btn {
+  background: #d33939;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.redline-cta-btn:hover:not(:disabled) {
+  background: #e24747;
+}
+.redline-cta-btn:disabled {
+  background: rgba(211, 57, 57, 0.35);
+  cursor: default;
+}
+.redline-error {
+  color: #ff8a8a;
+  font-size: 11.5px;
+  margin: 0;
+}
+.redline-muted {
+  color: var(--blume-mist-dim);
+  font-size: 12px;
+  margin: 0;
+}
+.redline-person-card {
+  background: var(--blume-navy);
+  border: 1px solid var(--blume-line);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.redline-person-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.redline-person-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--blume-navy-2);
+}
+.redline-person-avatar-empty {
+  border: 1px solid var(--blume-line);
+}
+.redline-person-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.redline-person-username {
+  font-size: 15px;
+  font-weight: 700;
+}
+.redline-person-userid {
+  font-size: 11.5px;
+  color: var(--blume-mist-dim);
+}
+.redline-person-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.redline-person-label {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--blume-mist-dim);
+}
+.redline-group-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.redline-group-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--blume-mist);
+}
+.redline-group-red {
+  color: #ff8a8a;
+  background: rgba(255, 138, 138, 0.12);
+}
+.redline-add-punishment-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+.redline-type-select {
+  min-width: 140px;
+}
+.redline-service-select {
+  min-width: 180px;
+}
+.redline-details-input {
+  flex: 1;
+  min-width: 200px;
+  min-height: 60px;
+  background: var(--blume-navy-2);
+  border: 1px solid var(--blume-line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--blume-mist);
+  font-size: 12.5px;
+  font-family: inherit;
+  resize: vertical;
+}
+.redline-details-input:focus {
+  outline: none;
+  border-color: var(--blume-accent);
+}
+.redline-punishment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.redline-punishment-card {
+  background: var(--blume-navy-2);
+  border: 1px solid var(--blume-line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.redline-punishment-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.redline-punishment-type {
+  font-weight: 700;
+  font-size: 12.5px;
+  color: #ff8a8a;
+}
+.redline-punishment-service {
+  font-size: 11px;
+  color: var(--blume-mist-dim);
+}
+.redline-punishment-details {
+  margin: 0;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.redline-punishment-meta {
+  font-size: 10.5px;
+  color: var(--blume-mist-dim);
+}
+.redline-footer-note {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--blume-mist-dim);
+  text-align: right;
+}
+.redline-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+.redline-modal {
+  background: var(--blume-navy);
+  border: 1px solid var(--blume-line);
+  border-radius: 10px;
+  padding: 18px;
+  width: 320px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.redline-modal h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--blume-mist);
+}
+.redline-add-access-form {
+  display: flex;
+  gap: 8px;
+}
+.redline-add-access-form input {
+  flex: 1;
+  background: var(--blume-navy-2);
+  border: 1px solid var(--blume-line);
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: var(--blume-mist);
+  font-size: 12.5px;
+}
+.redline-access-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.redline-access-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--blume-navy-2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.redline-remove-access-btn {
+  background: transparent;
+  border: 1px solid var(--blume-line);
+  border-radius: 5px;
+  padding: 3px 8px;
+  color: var(--blume-mist-dim);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.redline-remove-access-btn:hover:not(:disabled) {
+  border-color: #ff8a8a;
+  color: #ff8a8a;
+}
+.redline-modal-close {
+  align-self: flex-end;
+  background: transparent;
+  border: none;
+  color: var(--blume-mist-dim);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 4px 0;
+}

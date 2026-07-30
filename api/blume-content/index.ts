@@ -3,9 +3,28 @@ import crypto from "node:crypto";
 import { kv } from "../../lib/kv.js";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
-import { isBlumeAuthorized, isBlumeSuperUser, resolveRobloxUserId } from "../../lib/roblox.js";
+import {
+  isBlumeAuthorized,
+  isBlumeSuperUser,
+  resolveRobloxUserId,
+  isRobloxGroupMember,
+} from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
+import { isRedlineAuthorized, getRedlineWhitelist } from "../../lib/redline.js";
+
+interface RedlinePunishment {
+  id: string;
+  targetUserId: string;
+  targetUsername: string;
+  type: string;
+  details: string;
+  serviceGroupId: number;
+  serviceGroupName: string;
+  addedByUserId: string;
+  addedByUsername: string;
+  createdAt: number;
+}
 
 interface BlumeReport {
   id: string;
@@ -31,6 +50,194 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const type = (req.query.type as string) || "report";
   const cookies = parseCookies(req);
   const session = decodeSession(cookies.wb_session);
+
+  if (type === "redline") {
+    const canAccess = session ? await isRedlineAuthorized(session.userId) : false;
+    const isSuperUser = session ? isBlumeSuperUser(session.userId) : false;
+
+    if (req.method === "GET") {
+      if (!canAccess) {
+        res.status(200).json({ canAccess: false, isSuperUser: false, whitelist: [] });
+        return;
+      }
+      const target = (req.query.target as string) || "";
+      if (target) {
+        const punishments = ((await kv.get<RedlinePunishment[]>("redlinePunishments")) || [])
+          .filter((p) => p.targetUserId === target)
+          .sort((a, b) => b.createdAt - a.createdAt);
+        res.status(200).json({ punishments });
+        return;
+      }
+      const whitelist = isSuperUser ? await getRedlineWhitelist() : [];
+      res.status(200).json({ canAccess: true, isSuperUser, whitelist });
+      return;
+    }
+
+    if (req.method === "POST") {
+      if (!session) {
+        res.status(401).send("You must be signed in.");
+        return;
+      }
+      try {
+        const body = req.body as {
+          action?: string;
+          username?: string;
+          userId?: string;
+          targetUserId?: string;
+          targetUsername?: string;
+          type?: string;
+          details?: string;
+          serviceGroupId?: string | number;
+        };
+        const action = body.action || "";
+
+        if (action === "addWhitelist" || action === "removeWhitelist") {
+          if (!isSuperUser) {
+            res.status(403).send("Only Redline administrators can manage access.");
+            return;
+          }
+        }
+
+        if (action === "addWhitelist") {
+          const rawUsername = (body.username || "").toString().trim();
+          if (!rawUsername) {
+            res.status(400).send("Missing username.");
+            return;
+          }
+          const resolved = await resolveRobloxUserId(rawUsername);
+          if (!resolved) {
+            res.status(400).send(`Couldn't find a Roblox user matching "${rawUsername}".`);
+            return;
+          }
+          const list = await getRedlineWhitelist();
+          if (list.some((w) => w.userId === resolved.userId)) {
+            res.status(400).send(`${resolved.username} already has access.`);
+            return;
+          }
+          const next = [
+            ...list,
+            {
+              userId: resolved.userId,
+              username: resolved.username,
+              addedByUsername: session.username,
+              addedAt: Date.now(),
+            },
+          ];
+          await kv.set("redlineWhitelist", next);
+          await appendAuditLog({
+            type: "redline_whitelist_added",
+            username: session.username,
+            detail: `Added ${resolved.username} to Redline access`,
+          });
+          res.status(200).json({ whitelist: next });
+          return;
+        }
+
+        if (action === "removeWhitelist") {
+          const targetUserId = (body.userId || "").toString().trim();
+          if (!targetUserId) {
+            res.status(400).send("Missing userId.");
+            return;
+          }
+          const list = await getRedlineWhitelist();
+          const removed = list.find((w) => w.userId === targetUserId);
+          const next = list.filter((w) => w.userId !== targetUserId);
+          await kv.set("redlineWhitelist", next);
+          if (removed) {
+            await appendAuditLog({
+              type: "redline_whitelist_removed",
+              username: session.username,
+              detail: `Removed ${removed.username} from Redline access`,
+            });
+          }
+          res.status(200).json({ whitelist: next });
+          return;
+        }
+
+        if (action === "addPunishment") {
+          if (!canAccess) {
+            res.status(403).send("You do not have clearance to use Redline.");
+            return;
+          }
+          const targetUserId = (body.targetUserId || "").toString().trim();
+          const targetUsername = (body.targetUsername || "").toString().trim();
+          const punishmentType = (body.type || "").toString().trim();
+          const details = (body.details || "").toString().trim();
+          const serviceGroupId = Number(body.serviceGroupId);
+          if (!targetUserId || !targetUsername) {
+            res.status(400).send("Missing target user.");
+            return;
+          }
+          if (!punishmentType) {
+            res.status(400).send("Missing punishment type.");
+            return;
+          }
+          if (punishmentType.length > 60) {
+            res.status(400).send("Type is too long (max 60 characters).");
+            return;
+          }
+          if (!details) {
+            res.status(400).send("Missing details.");
+            return;
+          }
+          if (details.length > 2000) {
+            res.status(400).send("Details are too long (max 2000 characters).");
+            return;
+          }
+          if (containsBlockedLanguage(punishmentType) || containsBlockedLanguage(details)) {
+            res.status(400).send(MODERATION_REJECTION_MESSAGE);
+            return;
+          }
+          if (!serviceGroupId || Number.isNaN(serviceGroupId)) {
+            res.status(400).send("Missing service.");
+            return;
+          }
+          const customGroups =
+            (await kv.get<{ id: number; name: string }[]>("blumeCustomGroups")) || [];
+          const service = customGroups.find((g) => g.id === serviceGroupId);
+          if (!service) {
+            res.status(400).send("Unrecognized service.");
+            return;
+          }
+          const isMember = await isRobloxGroupMember(session.userId, serviceGroupId);
+          if (!isMember) {
+            res.status(403).send(`You are not confirmed as a member of ${service.name}.`);
+            return;
+          }
+          const entry: RedlinePunishment = {
+            id: crypto.randomBytes(12).toString("hex"),
+            targetUserId,
+            targetUsername,
+            type: punishmentType,
+            details,
+            serviceGroupId,
+            serviceGroupName: service.name,
+            addedByUserId: session.userId,
+            addedByUsername: session.username,
+            createdAt: Date.now(),
+          };
+          const punishments = (await kv.get<RedlinePunishment[]>("redlinePunishments")) || [];
+          punishments.push(entry);
+          await kv.set("redlinePunishments", punishments);
+          await appendAuditLog({
+            type: "redline_punishment_added",
+            username: session.username,
+            detail: `Logged ${punishmentType} for ${targetUsername} (${service.name})`,
+          });
+          res.status(200).json(entry);
+          return;
+        }
+
+        res.status(400).send("Unknown action.");
+      } catch (err) {
+        res.status(500).send("Failed: " + (err as Error).message);
+      }
+      return;
+    }
+
+    res.status(405).send("Method not allowed");
+    return;
+  }
 
   if (type === "blog") {
     const canEdit = session ? isBlumeSuperUser(session.userId) : false;
