@@ -2,21 +2,21 @@ import { useEffect, useState } from "react";
 import { CustomSelect } from "./CustomSelect";
 import { useFadingError } from "./useFadingError";
 
-interface RedlineGroup {
+interface VerifileGroup {
   id: number;
   name: string;
   tier: "red" | "white";
   category?: string;
 }
 
-interface RedlinePerson {
+interface VerifilePerson {
   userId: string;
   username: string;
   avatarUrl: string | null;
-  groups: RedlineGroup[];
+  groups: VerifileGroup[];
 }
 
-interface RedlinePunishment {
+interface VerifilePunishment {
   id: string;
   targetUserId: string;
   targetUsername: string;
@@ -29,7 +29,7 @@ interface RedlinePunishment {
   createdAt: number;
 }
 
-interface RedlineWhitelistEntry {
+interface VerifileWhitelistEntry {
   userId: string;
   username: string;
   addedByUsername: string;
@@ -43,20 +43,20 @@ function formatDateTime(value: number): string {
   return `${d.toLocaleDateString()}, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
-export function RedlineApp({ username }: { username: string }) {
+export function VerifileApp({ username }: { username: string }) {
   const [loadingAccess, setLoadingAccess] = useState(true);
   const [canAccess, setCanAccess] = useState(false);
   const [isSuperUser, setIsSuperUser] = useState(false);
-  const [whitelist, setWhitelist] = useState<RedlineWhitelistEntry[]>([]);
+  const [whitelist, setWhitelist] = useState<VerifileWhitelistEntry[]>([]);
 
-  const [services, setServices] = useState<RedlineGroup[]>([]);
+  const [services, setServices] = useState<VerifileGroup[]>([]);
 
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const { error: searchError, setError: setSearchError } = useFadingError();
-  const [person, setPerson] = useState<RedlinePerson | null>(null);
+  const [person, setPerson] = useState<VerifilePerson | null>(null);
 
-  const [punishments, setPunishments] = useState<RedlinePunishment[]>([]);
+  const [punishments, setPunishments] = useState<VerifilePunishment[]>([]);
   const [punishmentsLoading, setPunishmentsLoading] = useState(false);
 
   const [punishmentType, setPunishmentType] = useState(PUNISHMENT_TYPES[0]);
@@ -74,7 +74,7 @@ export function RedlineApp({ username }: { username: string }) {
   async function loadAccess() {
     setLoadingAccess(true);
     try {
-      const res = await fetch("/api/blume-content?type=redline");
+      const res = await fetch("/api/blume-content?type=verifile");
       const data = await res.json();
       setCanAccess(!!data.canAccess);
       setIsSuperUser(!!data.isSuperUser);
@@ -86,7 +86,7 @@ export function RedlineApp({ username }: { username: string }) {
 
   async function loadServices() {
     try {
-      const res = await fetch("/api/blume-search?redlineMyServices=1");
+      const res = await fetch("/api/blume-search?verifileMyServices=1");
       if (!res.ok) return;
       const data = await res.json();
       setServices(data.services || []);
@@ -111,7 +111,7 @@ export function RedlineApp({ username }: { username: string }) {
   async function loadPunishments(userId: string) {
     setPunishmentsLoading(true);
     try {
-      const res = await fetch(`/api/blume-content?type=redline&target=${encodeURIComponent(userId)}`);
+      const res = await fetch(`/api/blume-content?type=verifile&target=${encodeURIComponent(userId)}`);
       const data = await res.json();
       setPunishments(data.punishments || []);
     } finally {
@@ -127,16 +127,16 @@ export function RedlineApp({ username }: { username: string }) {
     setPerson(null);
     setPunishments([]);
     try {
-      const res = await fetch(`/api/blume-search?redlineSearch=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/blume-search?verifileSearch=${encodeURIComponent(q)}`);
       if (!res.ok) {
         setSearchError(await res.text());
         return;
       }
-      const data: RedlinePerson = await res.json();
+      const data: VerifilePerson = await res.json();
       setPerson(data);
       await loadPunishments(data.userId);
     } catch {
-      setSearchError("Couldn't reach Redline search.");
+      setSearchError("Couldn't reach Verifile search.");
     } finally {
       setSearching(false);
     }
@@ -147,7 +147,7 @@ export function RedlineApp({ username }: { username: string }) {
     setSubmittingPunishment(true);
     setPunishmentError(null);
     try {
-      const res = await fetch("/api/blume-content?type=redline", {
+      const res = await fetch("/api/blume-content?type=verifile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -166,7 +166,7 @@ export function RedlineApp({ username }: { username: string }) {
       setPunishmentDetails("");
       await loadPunishments(person.userId);
     } catch {
-      setPunishmentError("Couldn't reach Redline.");
+      setPunishmentError("Couldn't reach Verifile.");
     } finally {
       setSubmittingPunishment(false);
     }
@@ -177,7 +177,7 @@ export function RedlineApp({ username }: { username: string }) {
     setAddingAccess(true);
     setAddAccessError(null);
     try {
-      const res = await fetch("/api/blume-content?type=redline", {
+      const res = await fetch("/api/blume-content?type=verifile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "addWhitelist", username: newAccessUsername.trim() }),
@@ -189,7 +189,7 @@ export function RedlineApp({ username }: { username: string }) {
       setNewAccessUsername("");
       await loadAccess();
     } catch {
-      setAddAccessError("Couldn't reach Redline.");
+      setAddAccessError("Couldn't reach Verifile.");
     } finally {
       setAddingAccess(false);
     }
@@ -198,7 +198,7 @@ export function RedlineApp({ username }: { username: string }) {
   async function handleRemoveAccess(userId: string) {
     setRemovingAccessId(userId);
     try {
-      await fetch("/api/blume-content?type=redline", {
+      await fetch("/api/blume-content?type=verifile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "removeWhitelist", userId }),
@@ -210,34 +210,34 @@ export function RedlineApp({ username }: { username: string }) {
   }
 
   if (loadingAccess) {
-    return <div className="redline-app redline-loading">Loading…</div>;
+    return <div className="verifile-app verifile-loading">Loading…</div>;
   }
 
   if (!canAccess) {
     return (
-      <div className="redline-app redline-restricted">
-        <div className="redline-restricted-card">
+      <div className="verifile-app verifile-restricted">
+        <div className="verifile-restricted-card">
           <h2>Access restricted</h2>
-          <p>You aren't cleared to use Redline. Contact a Redline administrator for access.</p>
+          <p>You aren't cleared to use Verifile. Contact a Verifile administrator for access.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="redline-app">
-      <div className="redline-topbar">
-        <span className="redline-title">Redline</span>
+    <div className="verifile-app">
+      <div className="verifile-topbar">
+        <span className="verifile-title">Verifile</span>
         {isSuperUser && (
-          <button className="redline-add-access-btn" onClick={() => setShowAddAccess(true)}>
+          <button className="verifile-add-access-btn" onClick={() => setShowAddAccess(true)}>
             +
           </button>
         )}
       </div>
 
-      <div className="redline-search-row">
+      <div className="verifile-search-row">
         <input
-          className="redline-search-input"
+          className="verifile-search-input"
           placeholder="Search a username…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -246,39 +246,39 @@ export function RedlineApp({ username }: { username: string }) {
           }}
         />
         <button
-          className="redline-cta-btn"
+          className="verifile-cta-btn"
           disabled={!query.trim() || searching}
           onClick={handleSearch}
         >
           {searching ? "Searching…" : "Search"}
         </button>
       </div>
-      {searchError && <p className="redline-error">{searchError}</p>}
+      {searchError && <p className="verifile-error">{searchError}</p>}
 
       {person && (
-        <div className="redline-person-card">
-          <div className="redline-person-header">
+        <div className="verifile-person-card">
+          <div className="verifile-person-header">
             {person.avatarUrl ? (
-              <img className="redline-person-avatar" src={person.avatarUrl} alt="" />
+              <img className="verifile-person-avatar" src={person.avatarUrl} alt="" />
             ) : (
-              <div className="redline-person-avatar redline-person-avatar-empty" />
+              <div className="verifile-person-avatar verifile-person-avatar-empty" />
             )}
-            <div className="redline-person-identity">
-              <span className="redline-person-username">{person.username}</span>
-              <span className="redline-person-userid">User ID: {person.userId}</span>
+            <div className="verifile-person-identity">
+              <span className="verifile-person-username">{person.username}</span>
+              <span className="verifile-person-userid">User ID: {person.userId}</span>
             </div>
           </div>
 
-          <div className="redline-person-section">
-            <span className="redline-person-label">Groups</span>
+          <div className="verifile-person-section">
+            <span className="verifile-person-label">Groups</span>
             {person.groups.length === 0 ? (
-              <p className="redline-muted">No relevant group memberships found.</p>
+              <p className="verifile-muted">No relevant group memberships found.</p>
             ) : (
-              <div className="redline-group-list">
+              <div className="verifile-group-list">
                 {person.groups.map((g) => (
                   <span
                     key={g.id}
-                    className={`redline-group-chip ${g.tier === "red" ? "redline-group-red" : ""}`}
+                    className={`verifile-group-chip ${g.tier === "red" ? "verifile-group-red" : ""}`}
                   >
                     {g.name}
                   </span>
@@ -287,22 +287,22 @@ export function RedlineApp({ username }: { username: string }) {
             )}
           </div>
 
-          <div className="redline-person-section">
-            <span className="redline-person-label">Log an entry</span>
+          <div className="verifile-person-section">
+            <span className="verifile-person-label">Log an entry</span>
             {services.length === 0 ? (
-              <p className="redline-muted">
+              <p className="verifile-muted">
                 You aren't confirmed as a member of any recognized service, so you can't log entries.
               </p>
             ) : (
-              <div className="redline-add-punishment-form">
+              <div className="verifile-add-punishment-form">
                 <CustomSelect
-                  className="redline-type-select"
+                  className="verifile-type-select"
                   value={punishmentType}
                   onChange={setPunishmentType}
                   options={PUNISHMENT_TYPES.map((t) => ({ value: t, label: t }))}
                 />
                 <CustomSelect
-                  className="redline-service-select"
+                  className="verifile-service-select"
                   value={punishmentServiceId}
                   onChange={setPunishmentServiceId}
                   options={services.map((s) => ({
@@ -312,13 +312,13 @@ export function RedlineApp({ username }: { username: string }) {
                   }))}
                 />
                 <textarea
-                  className="redline-details-input"
+                  className="verifile-details-input"
                   placeholder="Details…"
                   value={punishmentDetails}
                   onChange={(e) => setPunishmentDetails(e.target.value)}
                 />
                 <button
-                  className="redline-cta-btn"
+                  className="verifile-cta-btn"
                   disabled={!punishmentDetails.trim() || submittingPunishment}
                   onClick={handleAddPunishment}
                 >
@@ -326,25 +326,25 @@ export function RedlineApp({ username }: { username: string }) {
                 </button>
               </div>
             )}
-            {punishmentError && <p className="redline-error">{punishmentError}</p>}
+            {punishmentError && <p className="verifile-error">{punishmentError}</p>}
           </div>
 
-          <div className="redline-person-section">
-            <span className="redline-person-label">History</span>
+          <div className="verifile-person-section">
+            <span className="verifile-person-label">History</span>
             {punishmentsLoading ? (
-              <p className="redline-muted">Loading…</p>
+              <p className="verifile-muted">Loading…</p>
             ) : punishments.length === 0 ? (
-              <p className="redline-muted">No entries on file.</p>
+              <p className="verifile-muted">No entries on file.</p>
             ) : (
-              <div className="redline-punishment-list">
+              <div className="verifile-punishment-list">
                 {punishments.map((p) => (
-                  <div key={p.id} className="redline-punishment-card">
-                    <div className="redline-punishment-head">
-                      <span className="redline-punishment-type">{p.type}</span>
-                      <span className="redline-punishment-service">{p.serviceGroupName}</span>
+                  <div key={p.id} className="verifile-punishment-card">
+                    <div className="verifile-punishment-head">
+                      <span className="verifile-punishment-type">{p.type}</span>
+                      <span className="verifile-punishment-service">{p.serviceGroupName}</span>
                     </div>
-                    <p className="redline-punishment-details">{p.details}</p>
-                    <span className="redline-punishment-meta">
+                    <p className="verifile-punishment-details">{p.details}</p>
+                    <span className="verifile-punishment-meta">
                       Logged by {p.addedByUsername} on {formatDateTime(p.createdAt)}
                     </span>
                   </div>
@@ -356,33 +356,33 @@ export function RedlineApp({ username }: { username: string }) {
       )}
 
       {showAddAccess && (
-        <div className="redline-modal-backdrop" onClick={() => setShowAddAccess(false)}>
-          <div className="redline-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Redline access</h3>
-            <div className="redline-add-access-form">
+        <div className="verifile-modal-backdrop" onClick={() => setShowAddAccess(false)}>
+          <div className="verifile-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Verifile access</h3>
+            <div className="verifile-add-access-form">
               <input
                 placeholder="Roblox username…"
                 value={newAccessUsername}
                 onChange={(e) => setNewAccessUsername(e.target.value)}
               />
               <button
-                className="redline-cta-btn"
+                className="verifile-cta-btn"
                 disabled={!newAccessUsername.trim() || addingAccess}
                 onClick={handleAddAccess}
               >
                 {addingAccess ? "Adding…" : "Add"}
               </button>
             </div>
-            {addAccessError && <p className="redline-error">{addAccessError}</p>}
-            <div className="redline-access-list">
+            {addAccessError && <p className="verifile-error">{addAccessError}</p>}
+            <div className="verifile-access-list">
               {whitelist.length === 0 ? (
-                <p className="redline-muted">No additional people have been granted access.</p>
+                <p className="verifile-muted">No additional people have been granted access.</p>
               ) : (
                 whitelist.map((w) => (
-                  <div key={w.userId} className="redline-access-row">
+                  <div key={w.userId} className="verifile-access-row">
                     <span>{w.username}</span>
                     <button
-                      className="redline-remove-access-btn"
+                      className="verifile-remove-access-btn"
                       disabled={removingAccessId === w.userId}
                       onClick={() => handleRemoveAccess(w.userId)}
                     >
@@ -392,14 +392,20 @@ export function RedlineApp({ username }: { username: string }) {
                 ))
               )}
             </div>
-            <button className="redline-modal-close" onClick={() => setShowAddAccess(false)}>
+            <button className="verifile-modal-close" onClick={() => setShowAddAccess(false)}>
               Close
             </button>
           </div>
         </div>
       )}
 
-      <p className="redline-footer-note">Signed in as {username}</p>
+      <div className="verifile-footer">
+        <span className="verifile-footer-note">Signed in as {username}</span>
+        <span className="verifile-powered-by">
+          <img className="verifile-powered-by-mark" src="/blume-logo.png" alt="" />
+          Powered by Blume
+        </span>
+      </div>
     </div>
   );
 }

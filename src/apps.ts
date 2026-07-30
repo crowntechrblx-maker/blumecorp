@@ -9,7 +9,7 @@ export type AppId =
   | "messages"
   | "backgrounds"
   | "settings"
-  | "redline";
+  | "verifile";
 
 export interface AppDef {
   id: AppId;
@@ -109,12 +109,12 @@ export const APPS: AppDef[] = [
     defaultSize: { width: 720, height: 600 },
   },
   {
-    id: "redline",
-    name: "Redline",
+    id: "verifile",
+    name: "Verifile",
     icon: "",
-    iconImage: "/icons/redline-icon.svg",
+    iconImage: "/icons/verifile-icon.svg",
     iconFull: true,
-    color: "#8f1414",
+    color: "#07203b",
     defaultSize: { width: 560, height: 640 },
   },
 ];

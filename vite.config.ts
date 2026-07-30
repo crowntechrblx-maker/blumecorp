@@ -2179,15 +2179,15 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           return;
         }
 
-        if (req.method === "GET" && (url.searchParams.get("redlineSearch") || url.searchParams.get("redlineMyServices"))) {
-          if (!(await isRedlineAuthorized(session.userId))) {
+        if (req.method === "GET" && (url.searchParams.get("verifileSearch") || url.searchParams.get("verifileMyServices"))) {
+          if (!(await isVerifileAuthorized(session.userId))) {
             res.statusCode = 403;
-            res.end("You do not have clearance to use Redline.");
+            res.end("You do not have clearance to use Verifile.");
             return;
           }
-          const redlineSearchQuery = url.searchParams.get("redlineSearch");
-          if (redlineSearchQuery) {
-            const q = redlineSearchQuery.trim();
+          const verifileSearchQuery = url.searchParams.get("verifileSearch");
+          if (verifileSearchQuery) {
+            const q = verifileSearchQuery.trim();
             if (!q) {
               res.statusCode = 400;
               res.end("Missing search query.");
@@ -2215,7 +2215,7 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             );
             return;
           }
-          if (url.searchParams.get("redlineMyServices")) {
+          if (url.searchParams.get("verifileMyServices")) {
             const [groupIds, catalog] = await Promise.all([
               getUserGroupIds(session.userId),
               getGroupCatalog(),
@@ -2831,14 +2831,14 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
-interface RedlineWhitelistEntry {
+interface VerifileWhitelistEntry {
   userId: string;
   username: string;
   addedByUsername: string;
   addedAt: number;
 }
 
-interface RedlinePunishment {
+interface VerifilePunishment {
   id: string;
   targetUserId: string;
   targetUsername: string;
@@ -2851,49 +2851,49 @@ interface RedlinePunishment {
   createdAt: number;
 }
 
-const REDLINE_WHITELIST_DB = path.resolve(process.cwd(), "redline-whitelist-data.json");
-const REDLINE_PUNISHMENTS_DB = path.resolve(process.cwd(), "redline-punishments-data.json");
+const VERIFILE_WHITELIST_DB = path.resolve(process.cwd(), "verifile-whitelist-data.json");
+const VERIFILE_PUNISHMENTS_DB = path.resolve(process.cwd(), "verifile-punishments-data.json");
 
-function loadRedlineWhitelistDb(): RedlineWhitelistEntry[] {
+function loadVerifileWhitelistDb(): VerifileWhitelistEntry[] {
   try {
-    return JSON.parse(fs.readFileSync(REDLINE_WHITELIST_DB, "utf-8"));
+    return JSON.parse(fs.readFileSync(VERIFILE_WHITELIST_DB, "utf-8"));
   } catch {
     return [];
   }
 }
-function saveRedlineWhitelistDb(entries: RedlineWhitelistEntry[]) {
-  fs.writeFileSync(REDLINE_WHITELIST_DB, JSON.stringify(entries, null, 2));
+function saveVerifileWhitelistDb(entries: VerifileWhitelistEntry[]) {
+  fs.writeFileSync(VERIFILE_WHITELIST_DB, JSON.stringify(entries, null, 2));
 }
-function loadRedlinePunishmentsDb(): RedlinePunishment[] {
+function loadVerifilePunishmentsDb(): VerifilePunishment[] {
   try {
-    return JSON.parse(fs.readFileSync(REDLINE_PUNISHMENTS_DB, "utf-8"));
+    return JSON.parse(fs.readFileSync(VERIFILE_PUNISHMENTS_DB, "utf-8"));
   } catch {
     return [];
   }
 }
-function saveRedlinePunishmentsDb(entries: RedlinePunishment[]) {
-  fs.writeFileSync(REDLINE_PUNISHMENTS_DB, JSON.stringify(entries, null, 2));
+function saveVerifilePunishmentsDb(entries: VerifilePunishment[]) {
+  fs.writeFileSync(VERIFILE_PUNISHMENTS_DB, JSON.stringify(entries, null, 2));
 }
 
-async function isRedlineAuthorized(userId: string): Promise<boolean> {
+async function isVerifileAuthorized(userId: string): Promise<boolean> {
   if (isBlumeSuperUser(userId)) return true;
-  return loadRedlineWhitelistDb().some((w) => w.userId === userId);
+  return loadVerifileWhitelistDb().some((w) => w.userId === userId);
 }
 
-function redlinePlugin(sessions: Map<string, RobloxSession>): Plugin {
+function verifilePlugin(sessions: Map<string, RobloxSession>): Plugin {
   return {
-    name: "redline-api",
+    name: "verifile-api",
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const url = new URL(req.url || "", "http://localhost");
-        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "redline") {
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "verifile") {
           next();
           return;
         }
 
         const cookies = parseCookies(req);
         const session = sessions.get(cookies.wb_session);
-        const canAccess = session ? await isRedlineAuthorized(session.userId) : false;
+        const canAccess = session ? await isVerifileAuthorized(session.userId) : false;
         const isSuperUser = session ? isBlumeSuperUser(session.userId) : false;
 
         if (req.method === "GET") {
@@ -2904,14 +2904,14 @@ function redlinePlugin(sessions: Map<string, RobloxSession>): Plugin {
           }
           const target = url.searchParams.get("target") || "";
           if (target) {
-            const punishments = loadRedlinePunishmentsDb()
+            const punishments = loadVerifilePunishmentsDb()
               .filter((p) => p.targetUserId === target)
               .sort((a, b) => b.createdAt - a.createdAt);
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ punishments }));
             return;
           }
-          const whitelist = isSuperUser ? loadRedlineWhitelistDb() : [];
+          const whitelist = isSuperUser ? loadVerifileWhitelistDb() : [];
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ canAccess: true, isSuperUser, whitelist }));
           return;
@@ -2930,7 +2930,7 @@ function redlinePlugin(sessions: Map<string, RobloxSession>): Plugin {
             if (action === "addWhitelist" || action === "removeWhitelist") {
               if (!isSuperUser) {
                 res.statusCode = 403;
-                res.end("Only Redline administrators can manage access.");
+                res.end("Only Verifile administrators can manage access.");
                 return;
               }
             }
@@ -2948,7 +2948,7 @@ function redlinePlugin(sessions: Map<string, RobloxSession>): Plugin {
                 res.end(`Couldn't find a Roblox user matching "${rawUsername}".`);
                 return;
               }
-              const list = loadRedlineWhitelistDb();
+              const list = loadVerifileWhitelistDb();
               if (list.some((w) => w.userId === resolved.userId)) {
                 res.statusCode = 400;
                 res.end(`${resolved.username} already has access.`);
@@ -2963,11 +2963,11 @@ function redlinePlugin(sessions: Map<string, RobloxSession>): Plugin {
                   addedAt: Date.now(),
                 },
               ];
-              saveRedlineWhitelistDb(next);
+              saveVerifileWhitelistDb(next);
               appendAuditLog({
-                type: "redline_whitelist_added",
+                type: "verifile_whitelist_added",
                 username: session.username,
-                detail: `Added ${resolved.username} to Redline access`,
+                detail: `Added ${resolved.username} to Verifile access`,
               });
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ whitelist: next }));
@@ -2981,15 +2981,15 @@ function redlinePlugin(sessions: Map<string, RobloxSession>): Plugin {
                 res.end("Missing userId.");
                 return;
               }
-              const list = loadRedlineWhitelistDb();
+              const list = loadVerifileWhitelistDb();
               const removed = list.find((w) => w.userId === targetUserId);
               const next = list.filter((w) => w.userId !== targetUserId);
-              saveRedlineWhitelistDb(next);
+              saveVerifileWhitelistDb(next);
               if (removed) {
                 appendAuditLog({
-                  type: "redline_whitelist_removed",
+                  type: "verifile_whitelist_removed",
                   username: session.username,
-                  detail: `Removed ${removed.username} from Redline access`,
+                  detail: `Removed ${removed.username} from Verifile access`,
                 });
               }
               res.setHeader("Content-Type", "application/json");
@@ -3000,7 +3000,7 @@ function redlinePlugin(sessions: Map<string, RobloxSession>): Plugin {
             if (action === "addPunishment") {
               if (!canAccess) {
                 res.statusCode = 403;
-                res.end("You do not have clearance to use Redline.");
+                res.end("You do not have clearance to use Verifile.");
                 return;
               }
               const targetUserId = (body.targetUserId || "").toString().trim();
@@ -3056,7 +3056,7 @@ function redlinePlugin(sessions: Map<string, RobloxSession>): Plugin {
                 res.end(`You are not confirmed as a member of ${service.name}.`);
                 return;
               }
-              const entry: RedlinePunishment = {
+              const entry: VerifilePunishment = {
                 id: crypto.randomBytes(12).toString("hex"),
                 targetUserId,
                 targetUsername,
@@ -3068,11 +3068,11 @@ function redlinePlugin(sessions: Map<string, RobloxSession>): Plugin {
                 addedByUsername: session.username,
                 createdAt: Date.now(),
               };
-              const punishments = loadRedlinePunishmentsDb();
+              const punishments = loadVerifilePunishmentsDb();
               punishments.push(entry);
-              saveRedlinePunishmentsDb(punishments);
+              saveVerifilePunishmentsDb(punishments);
               appendAuditLog({
-                type: "redline_punishment_added",
+                type: "verifile_punishment_added",
                 username: session.username,
                 detail: `Logged ${punishmentType} for ${targetUsername} (${service.name})`,
               });
@@ -3114,7 +3114,7 @@ export default defineConfig(({ mode }) => {
       blumeBlogPlugin(sessions),
       adminPlugin(sessions),
       blumeSearchPlugin(sessions),
-      redlinePlugin(sessions),
+      verifilePlugin(sessions),
     ],
   };
 });

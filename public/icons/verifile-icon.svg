@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="verifileGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0b2c4d" />
+      <stop offset="100%" stop-color="#04142a" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="100" height="100" rx="22" fill="url(#verifileGrad)" />
+  <path
+    d="M50,18 L75,28 L75,50 C75,67 63,78 50,83 C37,78 25,67 25,50 L25,28 Z"
+    fill="#ffffff"
+  />
+  <rect x="46.5" y="34" width="7" height="26" rx="3.5" fill="#07203b" />
+  <circle cx="50" cy="68" r="4.5" fill="#07203b" />
+</svg>

@@ -8,7 +8,7 @@ import { BlumeApp } from "./BlumeApp";
 import { SettingsApp } from "./SettingsApp";
 import { PsRollsApp } from "./PsRollsApp";
 import { SwiftCorporateApp } from "./SwiftCorporateApp";
-import { RedlineApp } from "./RedlineApp";
+import { VerifileApp } from "./VerifileApp";
 
 const TFL_STATIONS = [
   { name: "King Edward Station", street: "Commercial Street" },
@@ -171,8 +171,8 @@ export function AppContent({
       return <BackgroundsApp />;
     case "settings":
       return <SettingsApp />;
-    case "redline":
-      return <RedlineApp username={username} />;
+    case "verifile":
+      return <VerifileApp username={username} />;
     default:
       return <div className="app-content">Coming soon</div>;
   }

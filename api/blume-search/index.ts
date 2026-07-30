@@ -17,7 +17,7 @@ import {
 } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
-import { isRedlineAuthorized } from "../../lib/redline.js";
+import { isVerifileAuthorized } from "../../lib/verifile.js";
 
 const READONLY_API = "https://polarisreadonly.up.railway.app";
 
@@ -284,13 +284,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  if (req.method === "GET" && (req.query.redlineSearch || req.query.redlineMyServices)) {
-    if (!(await isRedlineAuthorized(session.userId))) {
-      res.status(403).send("You do not have clearance to use Redline.");
+  if (req.method === "GET" && (req.query.verifileSearch || req.query.verifileMyServices)) {
+    if (!(await isVerifileAuthorized(session.userId))) {
+      res.status(403).send("You do not have clearance to use Verifile.");
       return;
     }
-    if (req.query.redlineSearch) {
-      const q = (req.query.redlineSearch as string).trim();
+    if (req.query.verifileSearch) {
+      const q = (req.query.verifileSearch as string).trim();
       if (!q) {
         res.status(400).send("Missing search query.");
         return;
@@ -313,7 +313,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
       return;
     }
-    if (req.query.redlineMyServices) {
+    if (req.query.verifileMyServices) {
       const [groupIds, catalog] = await Promise.all([
         getUserGroupIds(session.userId),
         getGroupCatalog(),

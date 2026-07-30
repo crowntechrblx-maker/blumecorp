@@ -11,9 +11,9 @@ import {
 } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
-import { isRedlineAuthorized, getRedlineWhitelist } from "../../lib/redline.js";
+import { isVerifileAuthorized, getVerifileWhitelist } from "../../lib/verifile.js";
 
-interface RedlinePunishment {
+interface VerifilePunishment {
   id: string;
   targetUserId: string;
   targetUsername: string;
@@ -51,8 +51,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cookies = parseCookies(req);
   const session = decodeSession(cookies.wb_session);
 
-  if (type === "redline") {
-    const canAccess = session ? await isRedlineAuthorized(session.userId) : false;
+  if (type === "verifile") {
+    const canAccess = session ? await isVerifileAuthorized(session.userId) : false;
     const isSuperUser = session ? isBlumeSuperUser(session.userId) : false;
 
     if (req.method === "GET") {
@@ -62,13 +62,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const target = (req.query.target as string) || "";
       if (target) {
-        const punishments = ((await kv.get<RedlinePunishment[]>("redlinePunishments")) || [])
+        const punishments = ((await kv.get<VerifilePunishment[]>("verifilePunishments")) || [])
           .filter((p) => p.targetUserId === target)
           .sort((a, b) => b.createdAt - a.createdAt);
         res.status(200).json({ punishments });
         return;
       }
-      const whitelist = isSuperUser ? await getRedlineWhitelist() : [];
+      const whitelist = isSuperUser ? await getVerifileWhitelist() : [];
       res.status(200).json({ canAccess: true, isSuperUser, whitelist });
       return;
     }
@@ -93,7 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (action === "addWhitelist" || action === "removeWhitelist") {
           if (!isSuperUser) {
-            res.status(403).send("Only Redline administrators can manage access.");
+            res.status(403).send("Only Verifile administrators can manage access.");
             return;
           }
         }
@@ -109,7 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             res.status(400).send(`Couldn't find a Roblox user matching "${rawUsername}".`);
             return;
           }
-          const list = await getRedlineWhitelist();
+          const list = await getVerifileWhitelist();
           if (list.some((w) => w.userId === resolved.userId)) {
             res.status(400).send(`${resolved.username} already has access.`);
             return;
@@ -123,11 +123,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               addedAt: Date.now(),
             },
           ];
-          await kv.set("redlineWhitelist", next);
+          await kv.set("verifileWhitelist", next);
           await appendAuditLog({
-            type: "redline_whitelist_added",
+            type: "verifile_whitelist_added",
             username: session.username,
-            detail: `Added ${resolved.username} to Redline access`,
+            detail: `Added ${resolved.username} to Verifile access`,
           });
           res.status(200).json({ whitelist: next });
           return;
@@ -139,15 +139,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             res.status(400).send("Missing userId.");
             return;
           }
-          const list = await getRedlineWhitelist();
+          const list = await getVerifileWhitelist();
           const removed = list.find((w) => w.userId === targetUserId);
           const next = list.filter((w) => w.userId !== targetUserId);
-          await kv.set("redlineWhitelist", next);
+          await kv.set("verifileWhitelist", next);
           if (removed) {
             await appendAuditLog({
-              type: "redline_whitelist_removed",
+              type: "verifile_whitelist_removed",
               username: session.username,
-              detail: `Removed ${removed.username} from Redline access`,
+              detail: `Removed ${removed.username} from Verifile access`,
             });
           }
           res.status(200).json({ whitelist: next });
@@ -156,7 +156,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (action === "addPunishment") {
           if (!canAccess) {
-            res.status(403).send("You do not have clearance to use Redline.");
+            res.status(403).send("You do not have clearance to use Verifile.");
             return;
           }
           const targetUserId = (body.targetUserId || "").toString().trim();
@@ -204,7 +204,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             res.status(403).send(`You are not confirmed as a member of ${service.name}.`);
             return;
           }
-          const entry: RedlinePunishment = {
+          const entry: VerifilePunishment = {
             id: crypto.randomBytes(12).toString("hex"),
             targetUserId,
             targetUsername,
@@ -216,11 +216,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             addedByUsername: session.username,
             createdAt: Date.now(),
           };
-          const punishments = (await kv.get<RedlinePunishment[]>("redlinePunishments")) || [];
+          const punishments = (await kv.get<VerifilePunishment[]>("verifilePunishments")) || [];
           punishments.push(entry);
-          await kv.set("redlinePunishments", punishments);
+          await kv.set("verifilePunishments", punishments);
           await appendAuditLog({
-            type: "redline_punishment_added",
+            type: "verifile_punishment_added",
             username: session.username,
             detail: `Logged ${punishmentType} for ${targetUsername} (${service.name})`,
           });
