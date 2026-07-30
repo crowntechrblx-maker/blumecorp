@@ -37,6 +37,7 @@ interface VerifileWhitelistEntry {
 }
 
 const PUNISHMENT_TYPES = ["Warning", "Suspension", "Demotion", "Termination", "Ban", "Note"];
+const REQUEST_ACCESS_URL = "https://discord.gg/DHs9HnQ3JE";
 
 function formatDateTime(value: number): string {
   const d = new Date(value);
@@ -215,10 +216,70 @@ export function VerifileApp({ username }: { username: string }) {
 
   if (!canAccess) {
     return (
-      <div className="verifile-app verifile-restricted">
-        <div className="verifile-restricted-card">
-          <h2>Access restricted</h2>
-          <p>You aren't cleared to use Verifile. Contact a Verifile administrator for access.</p>
+      <div className="verifile-app verifile-landing">
+        <div className="verifile-landing-hero">
+          <span className="verifile-landing-eyebrow">Blume</span>
+          <h2 className="verifile-landing-title">Verifile</h2>
+          <p className="verifile-landing-lede">
+            Verifile lets whitelisted services confirm who someone is and log conduct against
+            their name. Search a Roblox username to see their verified group standing, then
+            record warnings, suspensions, or terminations tied to your service and your name.
+          </p>
+        </div>
+
+        <div className="verifile-landing-example">
+          <span className="verifile-landing-example-label">Example lookup</span>
+          <div className="verifile-person-card verifile-landing-card">
+            <div className="verifile-person-header">
+              <div className="verifile-person-avatar verifile-person-avatar-empty" />
+              <div className="verifile-person-identity">
+                <span className="verifile-person-username">westbridge_agent04</span>
+                <span className="verifile-person-userid">User ID: 000000000</span>
+              </div>
+            </div>
+            <div className="verifile-person-section">
+              <span className="verifile-person-label">Groups</span>
+              <div className="verifile-group-list">
+                <span className="verifile-group-chip verifile-group-red">Immigration Enforcement</span>
+              </div>
+            </div>
+            <div className="verifile-person-section">
+              <span className="verifile-person-label">History</span>
+              <div className="verifile-punishment-list">
+                <div className="verifile-punishment-card">
+                  <div className="verifile-punishment-head">
+                    <span className="verifile-punishment-type">Warning</span>
+                    <span className="verifile-punishment-service">Immigration Enforcement</span>
+                  </div>
+                  <p className="verifile-punishment-details">
+                    Logged for procedural non-compliance during a routine stop.
+                  </p>
+                  <span className="verifile-punishment-meta">Logged by a verified IE member</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <span className="verifile-landing-example-note">Illustrative — not a real record.</span>
+        </div>
+
+        <div className="verifile-landing-cta">
+          <p>Access is by whitelist only. Join the Blume Discord to request it.</p>
+          <a
+            className="verifile-cta-btn verifile-landing-btn"
+            href={REQUEST_ACCESS_URL}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Join the Blume Discord
+          </a>
+        </div>
+
+        <div className="verifile-footer">
+          <span className="verifile-footer-note">Signed in as {username}</span>
+          <span className="verifile-powered-by">
+            <img className="verifile-powered-by-mark" src="/blume-logo.png" alt="" />
+            Powered by Blume
+          </span>
         </div>
       </div>
     );
