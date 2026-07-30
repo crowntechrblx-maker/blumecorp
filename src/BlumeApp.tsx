@@ -2580,6 +2580,45 @@ export function BlumeApp({
 
                   {groupsTab === "search" && (
                     <>
+                      <div className="blume-group-sections">
+                        <div className="blume-group-settings-list">
+                          {GROUP_CATEGORY_ORDER.map((cat) => {
+                            const items = groupCatalog.filter(
+                              (g) =>
+                                (g.category || (g.tier === "red" ? "OCG" : "Emergency Services")) === cat
+                            );
+                            if (items.length === 0) return null;
+                            return (
+                              <div key={cat} className="blume-group-category-section">
+                                <span
+                                  className={`blume-person-label${
+                                    cat === "IE" || cat === "OCG" ? " blume-group-red-text" : ""
+                                  }`}
+                                >
+                                  {categoryLabel(cat)} ({items.length})
+                                </span>
+                                <div className="blume-group-list">
+                                  {items.map((g) => (
+                                    <button
+                                      key={g.id}
+                                      className={`blume-group-chip blume-group-section-btn ${
+                                        g.tier === "red" ? "blume-group-red" : ""
+                                      } ${groupQuery === String(g.id) ? "blume-group-section-active" : ""}`}
+                                      onClick={() => {
+                                        setGroupQuery(String(g.id));
+                                        runGroupViewer(String(g.id));
+                                      }}
+                                      disabled={viewerLoading}
+                                    >
+                                      {g.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                       <div className="blume-search-form">
                         <input
                           placeholder="Group ID or URL…"
