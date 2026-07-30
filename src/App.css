@@ -2388,6 +2388,9 @@
   align-items: center;
   font-size: 12px;
 }
+.blume-person-row .blume-person-label {
+  margin-bottom: 0;
+}
 .blume-person-label {
   display: block;
   font-size: 10px;
