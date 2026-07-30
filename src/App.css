@@ -2572,6 +2572,9 @@
   color: #f87171;
   background: rgba(248, 113, 113, 0.1);
 }
+.blume-group-red-text {
+  color: #f87171;
+}
 .blume-group-chip-removable {
   display: inline-flex;
   align-items: center;

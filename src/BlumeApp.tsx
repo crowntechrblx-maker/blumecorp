@@ -2437,15 +2437,35 @@ export function BlumeApp({
                     {personResult.groups.length === 0 ? (
                       <p className="blume-muted">No relevant group memberships found.</p>
                     ) : (
-                      <div className="blume-group-list">
-                        {personResult.groups.map((g) => (
-                          <span
-                            key={g.id}
-                            className={`blume-group-chip ${g.tier === "red" ? "blume-group-red" : ""}`}
-                          >
-                            {g.name}
-                          </span>
-                        ))}
+                      <div className="blume-group-settings-list">
+                        {GROUP_CATEGORY_ORDER.map((cat) => {
+                          const items = personResult.groups.filter(
+                            (g) =>
+                              (g.category || (g.tier === "red" ? "OCG" : "Emergency Services")) === cat
+                          );
+                          if (items.length === 0) return null;
+                          return (
+                            <div key={cat} className="blume-group-category-section">
+                              <span
+                                className={`blume-person-label${
+                                  cat === "IE" || cat === "OCG" ? " blume-group-red-text" : ""
+                                }`}
+                              >
+                                {cat}
+                              </span>
+                              <div className="blume-group-list">
+                                {items.map((g) => (
+                                  <span
+                                    key={g.id}
+                                    className={`blume-group-chip ${g.tier === "red" ? "blume-group-red" : ""}`}
+                                  >
+                                    {g.name}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -2550,22 +2570,42 @@ export function BlumeApp({
                     <>
                       <div className="blume-group-sections">
                         <span className="blume-person-label">Browse a group</span>
-                        <div className="blume-group-list">
-                          {groupCatalog.map((g) => (
-                            <button
-                              key={g.id}
-                              className={`blume-group-chip blume-group-section-btn ${
-                                g.tier === "red" ? "blume-group-red" : ""
-                              } ${groupQuery === String(g.id) ? "blume-group-section-active" : ""}`}
-                              onClick={() => {
-                                setGroupQuery(String(g.id));
-                                runGroupViewer(String(g.id));
-                              }}
-                              disabled={viewerLoading}
-                            >
-                              {g.name}
-                            </button>
-                          ))}
+                        <div className="blume-group-settings-list">
+                          {GROUP_CATEGORY_ORDER.map((cat) => {
+                            const items = groupCatalog.filter(
+                              (g) =>
+                                (g.category || (g.tier === "red" ? "OCG" : "Emergency Services")) === cat
+                            );
+                            if (items.length === 0) return null;
+                            return (
+                              <div key={cat} className="blume-group-category-section">
+                                <span
+                                  className={`blume-person-label${
+                                    cat === "IE" || cat === "OCG" ? " blume-group-red-text" : ""
+                                  }`}
+                                >
+                                  {cat} ({items.length})
+                                </span>
+                                <div className="blume-group-list">
+                                  {items.map((g) => (
+                                    <button
+                                      key={g.id}
+                                      className={`blume-group-chip blume-group-section-btn ${
+                                        g.tier === "red" ? "blume-group-red" : ""
+                                      } ${groupQuery === String(g.id) ? "blume-group-section-active" : ""}`}
+                                      onClick={() => {
+                                        setGroupQuery(String(g.id));
+                                        runGroupViewer(String(g.id));
+                                      }}
+                                      disabled={viewerLoading}
+                                    >
+                                      {g.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                       <div className="blume-search-form">
@@ -2708,7 +2748,7 @@ export function BlumeApp({
                             <div key={cat} className="blume-group-category-section">
                               <span
                                 className={`blume-person-label${
-                                  cat === "IE" || cat === "OCG" ? " blume-group-red" : ""
+                                  cat === "IE" || cat === "OCG" ? " blume-group-red-text" : ""
                                 }`}
                               >
                                 {cat} ({items.length})
