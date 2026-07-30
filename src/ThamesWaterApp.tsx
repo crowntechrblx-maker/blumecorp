@@ -6,8 +6,8 @@ interface ThamesWaterJob {
   title: string;
   department: string;
   description: string;
-  postedByUsername: string;
-  createdAt: number;
+  postedByUsername?: string;
+  createdAt?: number;
 }
 
 interface ThamesWaterService {
@@ -173,9 +173,11 @@ export function ThamesWaterApp({ username }: { username: string }) {
                   {j.department && <span className="thames-job-department">{j.department}</span>}
                 </div>
                 <p className="thames-job-desc">{j.description}</p>
-                <div className="thames-job-meta">
-                  <span>Posted by {j.postedByUsername} on {formatDate(j.createdAt)}</span>
-                  {canManage && (
+                {canManage && (
+                  <div className="thames-job-meta">
+                    <span>
+                      Posted by {j.postedByUsername} on {formatDate(j.createdAt!)}
+                    </span>
                     <button
                       className="thames-remove-btn"
                       disabled={removingJobId === j.id}
@@ -183,8 +185,8 @@ export function ThamesWaterApp({ username }: { username: string }) {
                     >
                       {removingJobId === j.id ? "…" : "Remove"}
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

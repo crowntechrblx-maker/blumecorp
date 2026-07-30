@@ -257,7 +257,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const jobs = ((await kv.get<ThamesWaterJob[]>("thamesWaterJobs")) || []).sort(
         (a, b) => b.createdAt - a.createdAt
       );
-      res.status(200).json({ jobs, canManage });
+      const payloadJobs = canManage
+        ? jobs
+        : jobs.map(({ postedByUsername, createdAt, ...rest }) => rest);
+      res.status(200).json({ jobs: payloadJobs, canManage });
       return;
     }
 

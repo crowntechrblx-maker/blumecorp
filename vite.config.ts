@@ -1825,8 +1825,11 @@ function thamesWaterPlugin(sessions: Map<string, RobloxSession>): Plugin {
 
         if (req.method === "GET") {
           const jobs = loadThamesWaterJobsDb().sort((a, b) => b.createdAt - a.createdAt);
+          const payloadJobs = canManage
+            ? jobs
+            : jobs.map(({ postedByUsername, createdAt, ...rest }) => rest);
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ jobs, canManage }));
+          res.end(JSON.stringify({ jobs: payloadJobs, canManage }));
           return;
         }
 
