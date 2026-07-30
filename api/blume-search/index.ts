@@ -339,22 +339,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const catalog = await getGroupCatalog();
       const scanCache = (await kv.get<GroupScanEntry[]>("blumeGroupScanCache")) || [];
       const scanByLowerUsername = new Map(scanCache.map((s) => [s.username.toLowerCase(), s]));
-      const [messages, posts] = await Promise.all([
+      const [messages, posts, views] = await Promise.all([
         kv.get<MonitoringMessageEntry[]>("messages"),
         kv.get<MonitoringPostEntry[]>("posts"),
+        kv.get<Record<string, number>>("blumeMonitoringViews"),
       ]);
+      const viewMap = views || {};
       const names = new Set<string>();
       const activityCount = new Map<string, number>();
-      const bumpActivity = (username: string) =>
+      const bumpActivity = (username: string, createdAt: number) => {
+        const lastViewed = viewMap[`${session.userId}:${username.toLowerCase()}`] || 0;
+        if (createdAt <= lastViewed) return;
         activityCount.set(username, (activityCount.get(username) || 0) + 1);
+      };
       for (const m of messages || []) {
         names.add(m.fromUsername);
         names.add(m.toUsername);
-        bumpActivity(m.fromUsername);
+        bumpActivity(m.fromUsername, m.createdAt);
       }
       for (const p of posts || []) {
         names.add(p.authorUsername);
-        bumpActivity(p.authorUsername);
+        bumpActivity(p.authorUsername, p.createdAt);
       }
       const users = Array.from(names)
         .map((username) => {
@@ -421,6 +426,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           createdAt: p.createdAt,
           deleted: !!p.deleted,
         }));
+
+      const views = (await kv.get<Record<string, number>>("blumeMonitoringViews")) || {};
+      views[`${session.userId}:${target}`] = Date.now();
+      await kv.set("blumeMonitoringViews", views);
 
       res.status(200).json({ conversations, posts: myPosts });
       return;

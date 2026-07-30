@@ -1086,6 +1086,20 @@ function saveMessagesDb(entries: MessageEntry[]) {
   fs.writeFileSync(MESSAGES_DB, JSON.stringify(entries, null, 2));
 }
 
+const MONITORING_VIEWS_DB = path.resolve(process.cwd(), "monitoring-views-data.json");
+
+function loadMonitoringViewsDb(): Record<string, number> {
+  try {
+    return JSON.parse(fs.readFileSync(MONITORING_VIEWS_DB, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveMonitoringViewsDb(views: Record<string, number>) {
+  fs.writeFileSync(MONITORING_VIEWS_DB, JSON.stringify(views, null, 2));
+}
+
 function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
   return {
     name: "messages-api",
@@ -2260,18 +2274,22 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             const scanByLowerUsername = new Map(scanCache.map((s) => [s.username.toLowerCase(), s]));
             const messages = loadMessagesDb();
             const posts = loadPostsDb();
+            const viewMap = loadMonitoringViewsDb();
             const names = new Set<string>();
             const activityCount = new Map<string, number>();
-            const bumpActivity = (username: string) =>
+            const bumpActivity = (username: string, createdAt: number) => {
+              const lastViewed = viewMap[`${session.userId}:${username.toLowerCase()}`] || 0;
+              if (createdAt <= lastViewed) return;
               activityCount.set(username, (activityCount.get(username) || 0) + 1);
+            };
             for (const m of messages) {
               names.add(m.fromUsername);
               names.add(m.toUsername);
-              bumpActivity(m.fromUsername);
+              bumpActivity(m.fromUsername, m.createdAt);
             }
             for (const p of posts) {
               names.add(p.authorUsername);
-              bumpActivity(p.authorUsername);
+              bumpActivity(p.authorUsername, p.createdAt);
             }
             const users = Array.from(names)
               .map((username) => {
@@ -2335,6 +2353,9 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 createdAt: p.createdAt,
                 deleted: !!p.deleted,
               }));
+            const views = loadMonitoringViewsDb();
+            views[`${session.userId}:${target}`] = Date.now();
+            saveMonitoringViewsDb(views);
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ conversations, posts: myPosts }));
             return;
