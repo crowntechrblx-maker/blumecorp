@@ -240,7 +240,7 @@ export function VerifileApp({ username }: { username: string }) {
             <div className="verifile-person-section">
               <span className="verifile-person-label">Groups</span>
               <div className="verifile-group-list">
-                <span className="verifile-group-chip verifile-group-red">UK Border Force</span>
+                <span className="verifile-group-chip verifile-group-red">Shadow District</span>
               </div>
             </div>
             <div className="verifile-person-section">
