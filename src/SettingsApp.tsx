@@ -222,10 +222,6 @@ export function SettingsApp() {
 
       <div className="section settings-section">
         <h3>Admins</h3>
-        <p className="settings-audit-hint">
-          Admins have full access to admin commands. Only bananapoopooo and pl_aced can add or
-          remove other admins.
-        </p>
         {isRootAdmin && (
           <div className="settings-ban-form">
             <input
@@ -247,7 +243,7 @@ export function SettingsApp() {
           {rootAdmins.map((username) => (
             <div className="settings-ban-row" key={username}>
               <span>
-                <strong>{username}</strong> — permanent admin
+                <strong>{username}</strong> — Permanent Admin
               </span>
             </div>
           ))}
