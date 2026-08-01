@@ -32,6 +32,13 @@ interface AdminMessage {
   createdAt: number;
 }
 
+interface SpecialAdminEntry {
+  userId: string;
+  username: string;
+  addedByUsername: string;
+  createdAt: number;
+}
+
 export function SettingsApp() {
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [bans, setBans] = useState<BanEntry[]>([]);
@@ -45,6 +52,13 @@ export function SettingsApp() {
   const [checking, setChecking] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<TargetCheck | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isRootAdmin, setIsRootAdmin] = useState(false);
+  const [rootAdmins, setRootAdmins] = useState<string[]>([]);
+  const [specialAdmins, setSpecialAdmins] = useState<SpecialAdminEntry[]>([]);
+  const [adminInput, setAdminInput] = useState("");
+  const [addingAdmin, setAddingAdmin] = useState(false);
+  const [removingAdminId, setRemovingAdminId] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -58,8 +72,57 @@ export function SettingsApp() {
       setBans(data.bans || []);
       setMessages(data.messages || []);
       setLoggedInUsernames(data.loggedInUsernames || []);
+      setIsRootAdmin(!!data.isRootAdmin);
+      setRootAdmins(data.rootAdmins || []);
+      setSpecialAdmins(data.specialAdmins || []);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAddAdmin() {
+    if (!adminInput.trim()) return;
+    setAddingAdmin(true);
+    setAdminError(null);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "addAdmin", target: adminInput.trim() }),
+      });
+      if (!res.ok) {
+        setAdminError(await res.text());
+        return;
+      }
+      const data = await res.json();
+      setSpecialAdmins(data.specialAdmins || []);
+      setAdminInput("");
+    } catch {
+      setAdminError("Couldn't add that admin.");
+    } finally {
+      setAddingAdmin(false);
+    }
+  }
+
+  async function handleRemoveAdmin(userId: string, username: string) {
+    setRemovingAdminId(userId);
+    setAdminError(null);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "removeAdmin", target: username }),
+      });
+      if (!res.ok) {
+        setAdminError(await res.text());
+        return;
+      }
+      const data = await res.json();
+      setSpecialAdmins(data.specialAdmins || []);
+    } catch {
+      setAdminError("Couldn't remove that admin.");
+    } finally {
+      setRemovingAdminId(null);
     }
   }
 
@@ -110,7 +173,7 @@ export function SettingsApp() {
         return;
       }
       if (data.isProtected) {
-        setError(`${data.username} is a platform admin and can't be banned.`);
+        setError(`${data.username} can't be banned.`);
         return;
       }
       setConfirmTarget(data);
@@ -156,6 +219,58 @@ export function SettingsApp() {
   return (
     <div className="app-content settings">
       <h2>Settings</h2>
+
+      <div className="section settings-section">
+        <h3>Admins</h3>
+        <p className="settings-audit-hint">
+          Admins have full access to admin commands. Only bananapoopooo and pl_aced can add or
+          remove other admins.
+        </p>
+        {isRootAdmin && (
+          <div className="settings-ban-form">
+            <input
+              placeholder="Username or user ID"
+              value={adminInput}
+              onChange={(e) => setAdminInput(e.target.value)}
+            />
+            <button
+              className="cta"
+              disabled={!adminInput.trim() || addingAdmin}
+              onClick={handleAddAdmin}
+            >
+              {addingAdmin ? "Adding…" : "Add admin"}
+            </button>
+          </div>
+        )}
+        {adminError && <p className="settings-error">{adminError}</p>}
+        <div className="settings-ban-list">
+          {rootAdmins.map((username) => (
+            <div className="settings-ban-row" key={username}>
+              <span>
+                <strong>{username}</strong> — permanent admin
+              </span>
+            </div>
+          ))}
+          {specialAdmins.map((a) => (
+            <div className="settings-ban-row" key={a.userId}>
+              <span>
+                <strong>{a.username}</strong> — added by {a.addedByUsername}
+              </span>
+              {isRootAdmin && (
+                <button
+                  className="settings-unban-btn"
+                  disabled={removingAdminId === a.userId}
+                  onClick={() => handleRemoveAdmin(a.userId, a.username)}
+                >
+                  {removingAdminId === a.userId ? "…" : "Remove"}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <hr className="settings-divider" />
 
       <div className="section settings-section">
         <h3>Ban a user</h3>

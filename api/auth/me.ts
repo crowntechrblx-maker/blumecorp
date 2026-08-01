@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { parseCookies, setCookie } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
-import { isPlatformAdmin } from "../../lib/roblox.js";
 import { isBanned } from "../../lib/bans.js";
+import { isPlatformAdmin } from "../../lib/admins.js";
 import { kv } from "../../lib/kv.js";
 
 interface MessageEntry {
@@ -37,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   res.status(200).json({
     ...session,
-    isAdmin: isPlatformAdmin(session.userId),
+    isAdmin: await isPlatformAdmin(session.userId, session.username),
     latestIncomingMessage: latest
       ? { id: latest.id, fromUsername: latest.fromUsername, createdAt: latest.createdAt }
       : null,

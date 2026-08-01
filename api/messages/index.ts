@@ -3,9 +3,9 @@ import crypto from "node:crypto";
 import { kv } from "../../lib/kv.js";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
-import { isPlatformAdmin } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
+import { isPlatformAdmin } from "../../lib/admins.js";
 
 interface KnownUser {
   userId: string;
@@ -168,7 +168,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     const message = entries[index];
-    if (!isPlatformAdmin(session.userId)) {
+    if (!(await isPlatformAdmin(session.userId, session.username))) {
       res.status(403).send("Only an admin can delete messages.");
       return;
     }

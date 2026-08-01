@@ -3,7 +3,8 @@ import crypto from "node:crypto";
 import { kv } from "../../lib/kv.js";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
-import { isRobloxGroupMember, ROYAL_FAMILY_GROUP_ID, isPlatformAdmin } from "../../lib/roblox.js";
+import { isRobloxGroupMember, ROYAL_FAMILY_GROUP_ID } from "../../lib/roblox.js";
+import { isPlatformAdmin } from "../../lib/admins.js";
 import { appendAuditLog } from "../../lib/audit.js";
 
 interface RoyalTweetEntry {
@@ -24,7 +25,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (a, b) => b.createdAt - a.createdAt
     );
     const canAdd = session
-      ? isPlatformAdmin(session.userId) || (await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID))
+      ? (await isPlatformAdmin(session.userId, session.username)) ||
+        (await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID))
       : false;
     res.status(200).json({
       tweets: entries.map((e) => ({
@@ -44,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     const isMember = await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID);
-    if (!isPlatformAdmin(session.userId) && !isMember) {
+    if (!(await isPlatformAdmin(session.userId, session.username)) && !isMember) {
       res.status(403).send("Only members of the Royal Family group can add posts.");
       return;
     }
@@ -82,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     const isMember = await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID);
-    if (!isPlatformAdmin(session.userId) && !isMember) {
+    if (!(await isPlatformAdmin(session.userId, session.username)) && !isMember) {
       res.status(403).send("Only members of the Royal Family group can delete posts.");
       return;
     }

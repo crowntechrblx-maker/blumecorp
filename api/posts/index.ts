@@ -4,9 +4,10 @@ import { put } from "@vercel/blob";
 import crypto from "node:crypto";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
-import { MIME_EXT, parseDataUrl, isPlatformAdmin } from "../../lib/roblox.js";
+import { MIME_EXT, parseDataUrl } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
+import { isPlatformAdmin } from "../../lib/admins.js";
 
 interface PostEntry {
   id: string;
@@ -33,6 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (search) {
       posts = posts.filter((p) => p.authorUsername.toLowerCase().includes(search));
     }
+    const isAdmin = session ? await isPlatformAdmin(session.userId, session.username) : false;
     const payload = posts.map((p) => {
       const likedBy = p.likedBy || [];
       return {
@@ -43,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         imageUrl: p.imageUrl ?? null,
         createdAt: p.createdAt,
         isMine: session ? p.authorId === session.userId : false,
-        canDelete: session ? p.authorId === session.userId || isPlatformAdmin(session.userId) : false,
+        canDelete: session ? p.authorId === session.userId || isAdmin : false,
         likes: likedBy.length,
         liked: session ? likedBy.includes(session.userId) : false,
       };
@@ -170,7 +172,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const post = entries[index];
-    const isAdminOverride = isPlatformAdmin(session.userId);
+    const isAdminOverride = await isPlatformAdmin(session.userId, session.username);
     if (post.authorId !== session.userId && !isAdminOverride) {
       res.status(403).send("You can only delete your own posts.");
       return;

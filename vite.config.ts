@@ -324,10 +324,51 @@ function isBlumeSuperUser(userId: string): boolean {
   return BLUME_ALLOWED_USER_IDS.includes(userId);
 }
 
-const PLATFORM_ADMIN_USER_IDS = ["181869610", "4963562759", "2322187718"];
+const ROOT_ADMIN_USERNAMES = ["bananapoopooo", "pl_aced"];
 
-function isPlatformAdmin(userId: string): boolean {
-  return PLATFORM_ADMIN_USER_IDS.includes(userId);
+function isRootAdmin(username: string): boolean {
+  return ROOT_ADMIN_USERNAMES.some((u) => u.toLowerCase() === username.toLowerCase());
+}
+
+interface SpecialAdminEntry {
+  userId: string;
+  username: string;
+  addedByUsername: string;
+  createdAt: number;
+}
+
+const SPECIAL_ADMINS_DB = path.resolve(process.cwd(), "special-admins-data.json");
+
+function loadSpecialAdminsDb(): SpecialAdminEntry[] {
+  try {
+    return JSON.parse(fs.readFileSync(SPECIAL_ADMINS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveSpecialAdminsDb(entries: SpecialAdminEntry[]) {
+  fs.writeFileSync(SPECIAL_ADMINS_DB, JSON.stringify(entries, null, 2));
+}
+
+function isSpecialAdmin(userId: string): boolean {
+  return loadSpecialAdminsDb().some((a) => a.userId === userId);
+}
+
+function addSpecialAdmin(entry: SpecialAdminEntry) {
+  const admins = loadSpecialAdminsDb();
+  if (admins.some((a) => a.userId === entry.userId)) return;
+  admins.push(entry);
+  saveSpecialAdminsDb(admins);
+}
+
+function removeSpecialAdmin(userId: string) {
+  saveSpecialAdminsDb(loadSpecialAdminsDb().filter((a) => a.userId !== userId));
+}
+
+function isPlatformAdmin(userId: string, username: string): boolean {
+  if (isRootAdmin(username)) return true;
+  return isSpecialAdmin(userId);
 }
 
 const ALL_KNOWN_GROUPS: { id: number; label: string }[] = [
@@ -784,7 +825,7 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
           res.end(
             JSON.stringify({
               ...session,
-              isAdmin: isPlatformAdmin(session.userId),
+              isAdmin: isPlatformAdmin(session.userId, session.username),
               latestIncomingMessage: latest
                 ? {
                     id: latest.id,
@@ -869,7 +910,7 @@ function wallpapersPlugin(sessions: Map<string, RobloxSession>): Plugin {
               isDefault: false,
               isMine: session ? w.ownerId === session.userId : false,
               canDelete: session
-                ? w.ownerId === session.userId || isPlatformAdmin(session.userId)
+                ? w.ownerId === session.userId || isPlatformAdmin(session.userId, session.username)
                 : false,
             })),
           ];
@@ -958,7 +999,7 @@ function wallpapersPlugin(sessions: Map<string, RobloxSession>): Plugin {
           }
           const wallpaper = entries[index];
           const isOwner = wallpaper.ownerId === session.userId;
-          const isAdminOverride = isPlatformAdmin(session.userId);
+          const isAdminOverride = isPlatformAdmin(session.userId, session.username);
           if (!isOwner && !isAdminOverride) {
             res.statusCode = 403;
             res.end("You can only delete backgrounds you uploaded.");
@@ -1021,7 +1062,7 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
           if (search) {
             posts = posts.filter((p) => p.authorUsername.toLowerCase().includes(search));
           }
-          const isAdminOverride = !!(session && isPlatformAdmin(session.userId));
+          const isAdminOverride = !!(session && isPlatformAdmin(session.userId, session.username));
           const payload = posts.map((p) => {
             const likedBy = p.likedBy || [];
             return {
@@ -1174,7 +1215,7 @@ function postsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const post = entries[index];
-          const isAdminOverride = isPlatformAdmin(session.userId);
+          const isAdminOverride = isPlatformAdmin(session.userId, session.username);
           if (post.authorId !== session.userId && !isAdminOverride) {
             res.statusCode = 403;
             res.end("You can only delete your own posts.");
@@ -1430,7 +1471,7 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const message = entries[index];
-          if (!isPlatformAdmin(session.userId)) {
+          if (!isPlatformAdmin(session.userId, session.username)) {
             res.statusCode = 403;
             res.end("Only an admin can delete messages.");
             return;
@@ -1480,7 +1521,7 @@ function royalTweetsPlugin(sessions: Map<string, RobloxSession>): Plugin {
         if (url.pathname === "/api/royal-tweets" && req.method === "GET") {
           const entries = loadRoyalTweetsDb().sort((a, b) => b.createdAt - a.createdAt);
           const canAdd = session
-            ? isPlatformAdmin(session.userId) ||
+            ? isPlatformAdmin(session.userId, session.username) ||
               (await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID))
             : false;
           res.setHeader("Content-Type", "application/json");
@@ -1505,7 +1546,7 @@ function royalTweetsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const isMember = await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID);
-          if (!isPlatformAdmin(session.userId) && !isMember) {
+          if (!isPlatformAdmin(session.userId, session.username) && !isMember) {
             res.statusCode = 403;
             res.end("Only members of the Royal Family group can add posts.");
             return;
@@ -1548,7 +1589,7 @@ function royalTweetsPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
           const isMember = await isRobloxGroupMember(session.userId, ROYAL_FAMILY_GROUP_ID);
-          if (!isPlatformAdmin(session.userId) && !isMember) {
+          if (!isPlatformAdmin(session.userId, session.username) && !isMember) {
             res.statusCode = 403;
             res.end("Only members of the Royal Family group can delete posts.");
             return;
@@ -2057,11 +2098,12 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
           res.end("You must be signed in.");
           return;
         }
-        if (!isPlatformAdmin(session.userId)) {
+        if (!isPlatformAdmin(session.userId, session.username)) {
           res.statusCode = 403;
           res.end("You do not have admin access.");
           return;
         }
+        const callerIsRoot = isRootAdmin(session.username);
 
         if (req.method === "GET") {
           const checkTarget = url.searchParams.get("checkTarget") || "";
@@ -2073,7 +2115,7 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
               res.end(JSON.stringify({ found: false }));
               return;
             }
-            const isProtected = isPlatformAdmin(target.userId);
+            const isProtected = isRootAdmin(target.username);
             const groupNames = isProtected ? [] : await getMemberGroupNames(target.userId);
             res.setHeader("Content-Type", "application/json");
             res.end(
@@ -2102,6 +2144,9 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
           res.end(
             JSON.stringify({
               isAdmin: true,
+              isRootAdmin: callerIsRoot,
+              rootAdmins: ROOT_ADMIN_USERNAMES,
+              specialAdmins: loadSpecialAdminsDb(),
               auditLog: getAuditLog(300),
               bans: loadBansDb(),
               messages: allMessages,
@@ -2129,9 +2174,9 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 return;
               }
               if (action === "ban") {
-                if (isPlatformAdmin(target.userId)) {
+                if (isRootAdmin(target.username)) {
                   res.statusCode = 403;
-                  res.end("Platform admins can't be banned.");
+                  res.end("This user can't be banned.");
                   return;
                 }
                 addBan({
@@ -2157,6 +2202,55 @@ function adminPlugin(sessions: Map<string, RobloxSession>): Plugin {
               res.end(JSON.stringify({ bans: loadBansDb() }));
               return;
             }
+
+            if (action === "addAdmin" || action === "removeAdmin") {
+              if (!callerIsRoot) {
+                res.statusCode = 403;
+                res.end("Only bananapoopooo and pl_aced can manage admin access.");
+                return;
+              }
+              const targetQuery = (body.target || "").toString().trim();
+              if (!targetQuery) {
+                res.statusCode = 400;
+                res.end("Missing target username or user ID.");
+                return;
+              }
+              const target = findKnownUser(targetQuery);
+              if (!target) {
+                res.statusCode = 404;
+                res.end("No one matching that username or user ID has signed into Westbridge OS.");
+                return;
+              }
+              if (isRootAdmin(target.username)) {
+                res.statusCode = 403;
+                res.end(`${target.username} is already a permanent admin.`);
+                return;
+              }
+              if (action === "addAdmin") {
+                addSpecialAdmin({
+                  userId: target.userId,
+                  username: target.username,
+                  addedByUsername: session.username,
+                  createdAt: Date.now(),
+                });
+                appendAuditLog({
+                  type: "admin_added",
+                  username: session.username,
+                  detail: `Gave admin access to ${target.username}`,
+                });
+              } else {
+                removeSpecialAdmin(target.userId);
+                appendAuditLog({
+                  type: "admin_removed",
+                  username: session.username,
+                  detail: `Removed admin access from ${target.username}`,
+                });
+              }
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ specialAdmins: loadSpecialAdminsDb() }));
+              return;
+            }
+
             res.statusCode = 400;
             res.end("Unknown action.");
           } catch (err) {
@@ -3164,7 +3258,10 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 res.end("Vehicle tag not found.");
                 return;
               }
-              if (target.addedByUsername !== session.username && !isPlatformAdmin(session.userId)) {
+              if (
+                target.addedByUsername !== session.username &&
+                !isPlatformAdmin(session.userId, session.username)
+              ) {
                 res.statusCode = 403;
                 res.end("You can only remove vehicle tags you added.");
                 return;

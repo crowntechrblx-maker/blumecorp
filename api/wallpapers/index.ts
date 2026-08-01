@@ -4,8 +4,9 @@ import { put, del } from "@vercel/blob";
 import crypto from "node:crypto";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
-import { MIME_EXT, parseDataUrl, isPlatformAdmin } from "../../lib/roblox.js";
+import { MIME_EXT, parseDataUrl } from "../../lib/roblox.js";
 import { appendAuditLog } from "../../lib/audit.js";
+import { isPlatformAdmin } from "../../lib/admins.js";
 
 interface WallpaperEntry {
   id: string;
@@ -25,6 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const visible = all.filter(
       (w) => w.visibility === "public" || (session && w.ownerId === session.userId)
     );
+    const isAdmin = session ? await isPlatformAdmin(session.userId, session.username) : false;
     const payload = [
       {
         id: "default",
@@ -40,9 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ownerUsername: w.ownerUsername,
         isDefault: false,
         isMine: session ? w.ownerId === session.userId : false,
-        canDelete: session
-          ? w.ownerId === session.userId || isPlatformAdmin(session.userId)
-          : false,
+        canDelete: session ? w.ownerId === session.userId || isAdmin : false,
       })),
     ];
     res.status(200).json(payload);
@@ -118,7 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const wallpaper = entries[index];
     const isOwner = wallpaper.ownerId === session.userId;
-    const isAdminOverride = isPlatformAdmin(session.userId);
+    const isAdminOverride = await isPlatformAdmin(session.userId, session.username);
     if (!isOwner && !isAdminOverride) {
       res.status(403).send("You can only delete backgrounds you uploaded.");
       return;

@@ -232,12 +232,6 @@ export function isBlumeSuperUser(userId: string): boolean {
   return BLUME_ALLOWED_USER_IDS.includes(userId);
 }
 
-export const PLATFORM_ADMIN_USER_IDS = ["181869610", "4963562759", "2322187718"];
-
-export function isPlatformAdmin(userId: string): boolean {
-  return PLATFORM_ADMIN_USER_IDS.includes(userId);
-}
-
 export const ALL_KNOWN_GROUPS: { id: number; label: string }[] = [
   { id: ROYAL_FAMILY_GROUP_ID, label: "PS Royal Households of the United Kingdom" },
   ...BLUME_GROUP_IDS.map((id) => ({ id, label: `Blume-authorized group ${id}` })),

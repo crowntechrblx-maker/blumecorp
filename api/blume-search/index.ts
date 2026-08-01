@@ -6,7 +6,6 @@ import { decodeSession } from "../../lib/session.js";
 import {
   isBlumeAuthorized,
   isBlumeSuperUser,
-  isPlatformAdmin,
   getRobloxAvatarUrl,
   getUserGroupIds,
   resolveRobloxUserId,
@@ -22,6 +21,7 @@ import {
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
 import { isVerifileAuthorized } from "../../lib/verifile.js";
+import { isPlatformAdmin } from "../../lib/admins.js";
 
 const READONLY_API = "https://polarisreadonly.up.railway.app";
 
@@ -995,7 +995,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(404).send("Vehicle tag not found.");
           return;
         }
-        if (target.addedByUsername !== session.username && !isPlatformAdmin(session.userId)) {
+        if (
+          target.addedByUsername !== session.username &&
+          !(await isPlatformAdmin(session.userId, session.username))
+        ) {
           res.status(403).send("You can only remove vehicle tags you added.");
           return;
         }
