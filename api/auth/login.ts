@@ -1,12 +1,19 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "node:crypto";
-import { setCookie } from "../../lib/cookies.js";
+import { parseCookies, setCookie } from "../../lib/cookies.js";
+import { isGateUnlocked, GATE_COOKIE_NAME } from "../../lib/gate.js";
 
 function b64url(buf: Buffer) {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
+  const cookies = parseCookies(req);
+  if (!isGateUnlocked(cookies[GATE_COOKIE_NAME])) {
+    res.status(403).send("Locked.");
+    return;
+  }
+
   const CLIENT_ID = process.env.ROBLOX_CLIENT_ID;
   const REDIRECT_URI =
     process.env.ROBLOX_REDIRECT_URI || `https://${req.headers.host}/api/auth/callback`;

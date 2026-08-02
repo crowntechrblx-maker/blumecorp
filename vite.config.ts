@@ -677,10 +677,21 @@ function getAuditLog(limit = 300): AuditEntry[] {
   return loadAuditDb().slice(-limit).reverse();
 }
 
+const GATE_COOKIE_NAME = "wb_gate";
+
+function gateToken(password: string): string {
+  return crypto.createHash("sha256").update(password).digest("hex");
+}
+
 function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, RobloxSession>): Plugin {
   const CLIENT_ID = env.ROBLOX_CLIENT_ID;
   const CLIENT_SECRET = env.ROBLOX_CLIENT_SECRET;
   const REDIRECT_URI = env.ROBLOX_REDIRECT_URI || "http://localhost:5173/api/auth/callback";
+  const GATE_PASSWORD = env.WB_GATE_PASSWORD || "longliveblumecorp";
+
+  function isGateUnlocked(token: string | undefined): boolean {
+    return !!token && token === gateToken(GATE_PASSWORD);
+  }
 
   const pendingLogins = new Map<string, { verifier: string }>();
 
@@ -691,6 +702,12 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
         const url = new URL(req.url || "", "http://localhost");
 
         if (url.pathname === "/api/auth/login") {
+          const cookies = parseCookies(req);
+          if (!isGateUnlocked(cookies[GATE_COOKIE_NAME])) {
+            res.statusCode = 403;
+            res.end("Locked.");
+            return;
+          }
           if (!CLIENT_ID) {
             res.statusCode = 500;
             res.end("Missing ROBLOX_CLIENT_ID. Add it to .env.local and restart the dev server.");
@@ -807,8 +824,30 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
 
         if (url.pathname === "/api/auth/me") {
           const cookies = parseCookies(req);
-          const session = sessions.get(cookies.wb_session);
+
+          if (req.method === "POST") {
+            const body = await readJsonBody(req);
+            const password = (body.password || "").toString();
+            if (password !== GATE_PASSWORD) {
+              res.statusCode = 401;
+              res.end("Incorrect password.");
+              return;
+            }
+            res.setHeader(
+              "Set-Cookie",
+              `${GATE_COOKIE_NAME}=${gateToken(GATE_PASSWORD)}; Path=/; HttpOnly; Max-Age=${60 * 60 * 24 * 30}`
+            );
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ ok: true }));
+            return;
+          }
+
           res.setHeader("Content-Type", "application/json");
+          if (!isGateUnlocked(cookies[GATE_COOKIE_NAME])) {
+            res.end(JSON.stringify({ gateRequired: true }));
+            return;
+          }
+          const session = sessions.get(cookies.wb_session);
           if (!session) {
             res.end(JSON.stringify(null));
             return;

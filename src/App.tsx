@@ -6,6 +6,7 @@ import { Window, type WindowState } from "./Window";
 import { useAuth } from "./AuthContext";
 import { useWallpaper } from "./WallpaperContext";
 import { RobloxLogin, LOGIN_SEQUENCE_FLAG } from "./RobloxLogin";
+import { PasswordGate } from "./PasswordGate";
 import { LoginSequence } from "./LoginSequence";
 import { MessageToast } from "./MessageToast";
 import "./App.css";
@@ -15,7 +16,7 @@ type WindowsMap = Partial<Record<AppId, WindowState>>;
 let zCounter = 10;
 
 function App() {
-  const { user, loading, banned } = useAuth();
+  const { user, loading, banned, gateRequired } = useAuth();
   const { wallpaperUrl } = useWallpaper();
   const [windows, setWindows] = useState<WindowsMap>({});
   const [showLoginSequence, setShowLoginSequence] = useState(
@@ -157,6 +158,10 @@ function App() {
 
   if (loading) {
     return <div className="boot-screen" />;
+  }
+
+  if (gateRequired) {
+    return <PasswordGate />;
   }
 
   if (banned) {

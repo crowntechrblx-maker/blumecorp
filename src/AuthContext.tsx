@@ -17,6 +17,8 @@ interface AuthState {
   user: RobloxUser | null;
   loading: boolean;
   banned: boolean;
+  gateRequired: boolean;
+  unlockGate: (password: string) => Promise<string | null>;
   refresh: () => void;
   messageNotification: MessageNotification | null;
   clearMessageNotification: () => void;
@@ -26,6 +28,8 @@ const AuthContext = createContext<AuthState>({
   user: null,
   loading: true,
   banned: false,
+  gateRequired: false,
+  unlockGate: async () => "Not ready.",
   refresh: () => {},
   messageNotification: null,
   clearMessageNotification: () => {},
@@ -37,11 +41,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<RobloxUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [banned, setBanned] = useState(false);
+  const [gateRequired, setGateRequired] = useState(false);
   const [messageNotification, setMessageNotification] = useState<MessageNotification | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastMessageIdRef = useRef<string | null | undefined>(undefined);
 
   function applyMeResponse(data: any) {
+    if (data && data.gateRequired) {
+      setGateRequired(true);
+      setBanned(false);
+      setUser(null);
+      return;
+    }
+    setGateRequired(false);
     if (data && data.banned) {
       setUser(null);
       setBanned(true);
@@ -89,12 +101,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMessageNotification(null);
   }
 
+  async function unlockGate(password: string): Promise<string | null> {
+    const res = await fetch("/api/auth/me", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) {
+      return (await res.text()) || "Incorrect password.";
+    }
+    refresh();
+    return null;
+  }
+
   return (
     <AuthContext.Provider
       value={{
         user,
         loading,
         banned,
+        gateRequired,
+        unlockGate,
         refresh,
         messageNotification,
         clearMessageNotification,

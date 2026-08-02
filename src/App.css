@@ -3259,6 +3259,36 @@
 .login-legal-pill span {
   color: rgba(255, 255, 255, 0.4);
 }
+.gate-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.gate-input {
+  padding: 10px 14px;
+  background: #0e0e0e;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 14px;
+  min-width: 200px;
+}
+.gate-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+.gate-form .login-button {
+  cursor: pointer;
+}
+.gate-form .login-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.gate-error {
+  color: #ff6b6b;
+  font-size: 13px;
+  margin: 0;
+}
 
 .login-sequence {
   position: fixed;
