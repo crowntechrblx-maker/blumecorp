@@ -46,6 +46,8 @@ verifile-whitelist-data.json
 verifile-punishments-data.json
 thames-water-jobs-data.json
 special-admins-data.json
+hmrc-cards-data.json
+hmrc-logs-data.json
 
 # Editor directories and files
 .vscode/*

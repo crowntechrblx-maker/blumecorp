@@ -3641,6 +3641,348 @@ function verifilePlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
+const HMRC_GROUP_ID = 567563234;
+const HMRC_LOG_TYPES = ["Risk Note", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
+
+interface HmrcCard {
+  id: string;
+  targetUserId: string;
+  targetUsername: string;
+  riskLevel: string;
+  riskNotes: string;
+  createdByUserId: string;
+  createdByUsername: string;
+  createdAt: number;
+}
+
+interface HmrcLogEntry {
+  id: string;
+  cardId: string;
+  targetUserId: string;
+  targetUsername: string;
+  type: string;
+  details: string;
+  loggedByUserId: string;
+  loggedByUsername: string;
+  createdAt: number;
+}
+
+const HMRC_CARDS_DB = path.resolve(process.cwd(), "hmrc-cards-data.json");
+const HMRC_LOGS_DB = path.resolve(process.cwd(), "hmrc-logs-data.json");
+
+function loadHmrcCardsDb(): HmrcCard[] {
+  try {
+    return JSON.parse(fs.readFileSync(HMRC_CARDS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveHmrcCardsDb(entries: HmrcCard[]) {
+  fs.writeFileSync(HMRC_CARDS_DB, JSON.stringify(entries, null, 2));
+}
+function loadHmrcLogsDb(): HmrcLogEntry[] {
+  try {
+    return JSON.parse(fs.readFileSync(HMRC_LOGS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveHmrcLogsDb(entries: HmrcLogEntry[]) {
+  fs.writeFileSync(HMRC_LOGS_DB, JSON.stringify(entries, null, 2));
+}
+
+function hmrcPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "hmrc-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "hmrc") {
+          next();
+          return;
+        }
+
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        const canAccess = session
+          ? isPlatformAdmin(session.userId, session.username) ||
+            (await isRobloxGroupMember(session.userId, HMRC_GROUP_ID))
+          : false;
+        const isAdmin = session ? isPlatformAdmin(session.userId, session.username) : false;
+
+        if (req.method === "GET") {
+          if (!canAccess) {
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ canAccess: false, isAdmin: false, cards: [] }));
+            return;
+          }
+          const cardId = url.searchParams.get("cardId") || "";
+          if (cardId) {
+            const logEntries = loadHmrcLogsDb()
+              .filter((l) => l.cardId === cardId)
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .map((l) => ({
+                ...l,
+                canDelete: isAdmin || (!!session && l.loggedByUserId === session.userId),
+              }));
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ logEntries }));
+            return;
+          }
+          const cards = loadHmrcCardsDb()
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .map((c) => ({
+              ...c,
+              canDelete: isAdmin || (!!session && c.createdByUserId === session.userId),
+            }));
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ canAccess: true, isAdmin, cards }));
+          return;
+        }
+
+        if (req.method === "POST") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          if (!canAccess) {
+            res.statusCode = 403;
+            res.end("You do not have HMRC clearance.");
+            return;
+          }
+          try {
+            const body = await readJsonBody(req);
+            const action = body.action || "";
+
+            if (action === "addCard") {
+              const rawUsername = (body.username || "").toString().trim();
+              if (!rawUsername) {
+                res.statusCode = 400;
+                res.end("Missing username.");
+                return;
+              }
+              const resolved = await resolveRobloxUserId(rawUsername);
+              if (!resolved) {
+                res.statusCode = 400;
+                res.end(`Couldn't find a Roblox user matching "${rawUsername}".`);
+                return;
+              }
+              const cards = loadHmrcCardsDb();
+              if (cards.some((c) => c.targetUserId === resolved.userId)) {
+                res.statusCode = 400;
+                res.end(`${resolved.username} already has a case file.`);
+                return;
+              }
+              const entry: HmrcCard = {
+                id: crypto.randomBytes(12).toString("hex"),
+                targetUserId: resolved.userId,
+                targetUsername: resolved.username,
+                riskLevel: "Low",
+                riskNotes: "",
+                createdByUserId: session.userId,
+                createdByUsername: session.username,
+                createdAt: Date.now(),
+              };
+              const next = [...cards, entry];
+              saveHmrcCardsDb(next);
+              appendAuditLog({
+                type: "hmrc_card_added",
+                username: session.username,
+                detail: `Opened an HMRC case for ${resolved.username}`,
+              });
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ cards: next.map((c) => ({ ...c, canDelete: true })) }));
+              return;
+            }
+
+            if (action === "updateRisk") {
+              const cardId = (body.cardId || "").toString().trim();
+              const riskLevel = (body.riskLevel || "").toString().trim();
+              const riskNotes = (body.riskNotes || "").toString().trim();
+              if (!cardId) {
+                res.statusCode = 400;
+                res.end("Missing case id.");
+                return;
+              }
+              if (!["Low", "Medium", "High", "Critical"].includes(riskLevel)) {
+                res.statusCode = 400;
+                res.end("Invalid risk level.");
+                return;
+              }
+              if (riskNotes.length > 2000) {
+                res.statusCode = 400;
+                res.end("Risk notes are too long (max 2000 characters).");
+                return;
+              }
+              if (containsBlockedLanguage(riskNotes)) {
+                res.statusCode = 400;
+                res.end(MODERATION_REJECTION_MESSAGE);
+                return;
+              }
+              const cards = loadHmrcCardsDb();
+              const index = cards.findIndex((c) => c.id === cardId);
+              if (index === -1) {
+                res.statusCode = 404;
+                res.end("Case not found.");
+                return;
+              }
+              cards[index] = { ...cards[index], riskLevel, riskNotes };
+              saveHmrcCardsDb(cards);
+              appendAuditLog({
+                type: "hmrc_risk_updated",
+                username: session.username,
+                detail: `Set risk level ${riskLevel} for ${cards[index].targetUsername}`,
+              });
+              res.setHeader("Content-Type", "application/json");
+              res.end(
+                JSON.stringify({
+                  cards: cards.map((c) => ({
+                    ...c,
+                    canDelete: isAdmin || c.createdByUserId === session.userId,
+                  })),
+                })
+              );
+              return;
+            }
+
+            if (action === "addLog") {
+              const cardId = (body.cardId || "").toString().trim();
+              const targetUserId = (body.targetUserId || "").toString().trim();
+              const targetUsername = (body.targetUsername || "").toString().trim();
+              const logType = (body.type || "").toString().trim();
+              const details = (body.details || "").toString().trim();
+              if (!cardId || !targetUserId || !targetUsername) {
+                res.statusCode = 400;
+                res.end("Missing case.");
+                return;
+              }
+              if (!HMRC_LOG_TYPES.includes(logType)) {
+                res.statusCode = 400;
+                res.end("Invalid log type.");
+                return;
+              }
+              if (!details) {
+                res.statusCode = 400;
+                res.end("Missing details.");
+                return;
+              }
+              if (details.length > 2000) {
+                res.statusCode = 400;
+                res.end("Details are too long (max 2000 characters).");
+                return;
+              }
+              if (containsBlockedLanguage(details)) {
+                res.statusCode = 400;
+                res.end(MODERATION_REJECTION_MESSAGE);
+                return;
+              }
+              const entry: HmrcLogEntry = {
+                id: crypto.randomBytes(12).toString("hex"),
+                cardId,
+                targetUserId,
+                targetUsername,
+                type: logType,
+                details,
+                loggedByUserId: session.userId,
+                loggedByUsername: session.username,
+                createdAt: Date.now(),
+              };
+              const logEntries = loadHmrcLogsDb();
+              logEntries.push(entry);
+              saveHmrcLogsDb(logEntries);
+              appendAuditLog({
+                type: "hmrc_log_added",
+                username: session.username,
+                detail: `Logged ${logType} for ${targetUsername}`,
+              });
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ ...entry, canDelete: true }));
+              return;
+            }
+
+            res.statusCode = 400;
+            res.end("Unknown action.");
+          } catch (err) {
+            res.statusCode = 500;
+            res.end("Failed: " + (err as Error).message);
+          }
+          return;
+        }
+
+        if (req.method === "DELETE") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          if (!canAccess) {
+            res.statusCode = 403;
+            res.end("You do not have HMRC clearance.");
+            return;
+          }
+          const cardId = url.searchParams.get("cardId") || "";
+          if (cardId) {
+            const cards = loadHmrcCardsDb();
+            const target = cards.find((c) => c.id === cardId);
+            if (!target) {
+              res.statusCode = 404;
+              res.end("Case not found.");
+              return;
+            }
+            if (!isAdmin && target.createdByUserId !== session.userId) {
+              res.statusCode = 403;
+              res.end("You can only remove cases you opened.");
+              return;
+            }
+            saveHmrcCardsDb(cards.filter((c) => c.id !== cardId));
+            saveHmrcLogsDb(loadHmrcLogsDb().filter((l) => l.cardId !== cardId));
+            appendAuditLog({
+              type: "hmrc_card_removed",
+              username: session.username,
+              detail: `Closed the HMRC case for ${target.targetUsername}`,
+            });
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ ok: true }));
+            return;
+          }
+
+          const id = url.searchParams.get("id") || "";
+          if (!id) {
+            res.statusCode = 400;
+            res.end("Missing entry id.");
+            return;
+          }
+          const logEntries = loadHmrcLogsDb();
+          const target = logEntries.find((l) => l.id === id);
+          if (!target) {
+            res.statusCode = 404;
+            res.end("Entry not found.");
+            return;
+          }
+          if (!isAdmin && target.loggedByUserId !== session.userId) {
+            res.statusCode = 403;
+            res.end("You can only remove entries you logged.");
+            return;
+          }
+          saveHmrcLogsDb(logEntries.filter((l) => l.id !== id));
+          appendAuditLog({
+            type: "hmrc_log_removed",
+            username: session.username,
+            detail: `Removed ${target.type} for ${target.targetUsername}`,
+          });
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
+
+        res.statusCode = 405;
+        res.end("Method not allowed");
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   if (env.ROBLOX_SCAN_COOKIE) process.env.ROBLOX_SCAN_COOKIE = env.ROBLOX_SCAN_COOKIE;
@@ -3660,6 +4002,7 @@ export default defineConfig(({ mode }) => {
       blumeSearchPlugin(sessions),
       verifilePlugin(sessions),
       thamesWaterPlugin(sessions),
+      hmrcPlugin(sessions),
     ],
   };
 });

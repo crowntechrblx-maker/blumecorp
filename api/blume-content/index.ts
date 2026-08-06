@@ -12,6 +12,10 @@ import {
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
 import { isVerifileAuthorized, getVerifileWhitelist } from "../../lib/verifile.js";
+import { isPlatformAdmin } from "../../lib/admins.js";
+
+const HMRC_GROUP_ID = 567563234;
+const HMRC_LOG_TYPES = ["Risk Note", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
 
 interface VerifilePunishment {
   id: string;
@@ -44,6 +48,29 @@ interface BlumeReport {
   linkedUserId?: string;
   linkedUsername?: string;
   expiresAt?: number;
+}
+
+interface HmrcCard {
+  id: string;
+  targetUserId: string;
+  targetUsername: string;
+  riskLevel: string;
+  riskNotes: string;
+  createdByUserId: string;
+  createdByUsername: string;
+  createdAt: number;
+}
+
+interface HmrcLogEntry {
+  id: string;
+  cardId: string;
+  targetUserId: string;
+  targetUsername: string;
+  type: string;
+  details: string;
+  loggedByUserId: string;
+  loggedByUsername: string;
+  createdAt: number;
 }
 
 interface BlumeBlogPost {
@@ -278,6 +305,269 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         type: "verifile_punishment_removed",
         username: session.username,
         detail: `Removed ${target.type} for ${target.targetUsername} (${target.serviceGroupName})`,
+      });
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    res.status(405).send("Method not allowed");
+    return;
+  }
+
+  if (type === "hmrc") {
+    const canAccess = session
+      ? (await isPlatformAdmin(session.userId, session.username)) ||
+        (await isRobloxGroupMember(session.userId, HMRC_GROUP_ID))
+      : false;
+    const isAdmin = session ? await isPlatformAdmin(session.userId, session.username) : false;
+
+    if (req.method === "GET") {
+      if (!canAccess) {
+        res.status(200).json({ canAccess: false, isAdmin: false, cards: [] });
+        return;
+      }
+      const cardId = (req.query.cardId as string) || "";
+      if (cardId) {
+        const logEntries = ((await kv.get<HmrcLogEntry[]>("hmrcLogEntries")) || [])
+          .filter((l) => l.cardId === cardId)
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .map((l) => ({
+            ...l,
+            canDelete: isAdmin || l.loggedByUserId === session!.userId,
+          }));
+        res.status(200).json({ logEntries });
+        return;
+      }
+      const cards = ((await kv.get<HmrcCard[]>("hmrcCards")) || [])
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map((c) => ({
+          ...c,
+          canDelete: isAdmin || c.createdByUserId === session!.userId,
+        }));
+      res.status(200).json({ canAccess: true, isAdmin, cards });
+      return;
+    }
+
+    if (req.method === "POST") {
+      if (!session) {
+        res.status(401).send("You must be signed in.");
+        return;
+      }
+      if (!canAccess) {
+        res.status(403).send("You do not have HMRC clearance.");
+        return;
+      }
+      try {
+        const body = req.body as {
+          action?: string;
+          username?: string;
+          cardId?: string;
+          riskLevel?: string;
+          riskNotes?: string;
+          targetUserId?: string;
+          targetUsername?: string;
+          type?: string;
+          details?: string;
+        };
+        const action = body.action || "";
+
+        if (action === "addCard") {
+          const rawUsername = (body.username || "").toString().trim();
+          if (!rawUsername) {
+            res.status(400).send("Missing username.");
+            return;
+          }
+          const resolved = await resolveRobloxUserId(rawUsername);
+          if (!resolved) {
+            res.status(400).send(`Couldn't find a Roblox user matching "${rawUsername}".`);
+            return;
+          }
+          const cards = (await kv.get<HmrcCard[]>("hmrcCards")) || [];
+          if (cards.some((c) => c.targetUserId === resolved.userId)) {
+            res.status(400).send(`${resolved.username} already has a case file.`);
+            return;
+          }
+          const entry: HmrcCard = {
+            id: crypto.randomBytes(12).toString("hex"),
+            targetUserId: resolved.userId,
+            targetUsername: resolved.username,
+            riskLevel: "Low",
+            riskNotes: "",
+            createdByUserId: session.userId,
+            createdByUsername: session.username,
+            createdAt: Date.now(),
+          };
+          const next = [...cards, entry];
+          await kv.set("hmrcCards", next);
+          await appendAuditLog({
+            type: "hmrc_card_added",
+            username: session.username,
+            detail: `Opened an HMRC case for ${resolved.username}`,
+          });
+          res.status(200).json({ cards: next.map((c) => ({ ...c, canDelete: true })) });
+          return;
+        }
+
+        if (action === "updateRisk") {
+          const cardId = (body.cardId || "").toString().trim();
+          const riskLevel = (body.riskLevel || "").toString().trim();
+          const riskNotes = (body.riskNotes || "").toString().trim();
+          if (!cardId) {
+            res.status(400).send("Missing case id.");
+            return;
+          }
+          if (!["Low", "Medium", "High", "Critical"].includes(riskLevel)) {
+            res.status(400).send("Invalid risk level.");
+            return;
+          }
+          if (riskNotes.length > 2000) {
+            res.status(400).send("Risk notes are too long (max 2000 characters).");
+            return;
+          }
+          if (containsBlockedLanguage(riskNotes)) {
+            res.status(400).send(MODERATION_REJECTION_MESSAGE);
+            return;
+          }
+          const cards = (await kv.get<HmrcCard[]>("hmrcCards")) || [];
+          const index = cards.findIndex((c) => c.id === cardId);
+          if (index === -1) {
+            res.status(404).send("Case not found.");
+            return;
+          }
+          cards[index] = { ...cards[index], riskLevel, riskNotes };
+          await kv.set("hmrcCards", cards);
+          await appendAuditLog({
+            type: "hmrc_risk_updated",
+            username: session.username,
+            detail: `Set risk level ${riskLevel} for ${cards[index].targetUsername}`,
+          });
+          res.status(200).json({
+            cards: cards.map((c) => ({
+              ...c,
+              canDelete: isAdmin || c.createdByUserId === session.userId,
+            })),
+          });
+          return;
+        }
+
+        if (action === "addLog") {
+          const cardId = (body.cardId || "").toString().trim();
+          const targetUserId = (body.targetUserId || "").toString().trim();
+          const targetUsername = (body.targetUsername || "").toString().trim();
+          const logType = (body.type || "").toString().trim();
+          const details = (body.details || "").toString().trim();
+          if (!cardId || !targetUserId || !targetUsername) {
+            res.status(400).send("Missing case.");
+            return;
+          }
+          if (!HMRC_LOG_TYPES.includes(logType)) {
+            res.status(400).send("Invalid log type.");
+            return;
+          }
+          if (!details) {
+            res.status(400).send("Missing details.");
+            return;
+          }
+          if (details.length > 2000) {
+            res.status(400).send("Details are too long (max 2000 characters).");
+            return;
+          }
+          if (containsBlockedLanguage(details)) {
+            res.status(400).send(MODERATION_REJECTION_MESSAGE);
+            return;
+          }
+          const entry: HmrcLogEntry = {
+            id: crypto.randomBytes(12).toString("hex"),
+            cardId,
+            targetUserId,
+            targetUsername,
+            type: logType,
+            details,
+            loggedByUserId: session.userId,
+            loggedByUsername: session.username,
+            createdAt: Date.now(),
+          };
+          const logEntries = (await kv.get<HmrcLogEntry[]>("hmrcLogEntries")) || [];
+          logEntries.push(entry);
+          await kv.set("hmrcLogEntries", logEntries);
+          await appendAuditLog({
+            type: "hmrc_log_added",
+            username: session.username,
+            detail: `Logged ${logType} for ${targetUsername}`,
+          });
+          res.status(200).json({ ...entry, canDelete: true });
+          return;
+        }
+
+        res.status(400).send("Unknown action.");
+      } catch (err) {
+        res.status(500).send("Failed: " + (err as Error).message);
+      }
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      if (!session) {
+        res.status(401).send("You must be signed in.");
+        return;
+      }
+      if (!canAccess) {
+        res.status(403).send("You do not have HMRC clearance.");
+        return;
+      }
+      const cardId = (req.query.cardId as string) || "";
+      if (cardId) {
+        const cards = (await kv.get<HmrcCard[]>("hmrcCards")) || [];
+        const target = cards.find((c) => c.id === cardId);
+        if (!target) {
+          res.status(404).send("Case not found.");
+          return;
+        }
+        if (!isAdmin && target.createdByUserId !== session.userId) {
+          res.status(403).send("You can only remove cases you opened.");
+          return;
+        }
+        await kv.set(
+          "hmrcCards",
+          cards.filter((c) => c.id !== cardId)
+        );
+        const logEntries = (await kv.get<HmrcLogEntry[]>("hmrcLogEntries")) || [];
+        await kv.set(
+          "hmrcLogEntries",
+          logEntries.filter((l) => l.cardId !== cardId)
+        );
+        await appendAuditLog({
+          type: "hmrc_card_removed",
+          username: session.username,
+          detail: `Closed the HMRC case for ${target.targetUsername}`,
+        });
+        res.status(200).json({ ok: true });
+        return;
+      }
+
+      const id = (req.query.id as string) || "";
+      if (!id) {
+        res.status(400).send("Missing entry id.");
+        return;
+      }
+      const logEntries = (await kv.get<HmrcLogEntry[]>("hmrcLogEntries")) || [];
+      const target = logEntries.find((l) => l.id === id);
+      if (!target) {
+        res.status(404).send("Entry not found.");
+        return;
+      }
+      if (!isAdmin && target.loggedByUserId !== session.userId) {
+        res.status(403).send("You can only remove entries you logged.");
+        return;
+      }
+      await kv.set(
+        "hmrcLogEntries",
+        logEntries.filter((l) => l.id !== id)
+      );
+      await appendAuditLog({
+        type: "hmrc_log_removed",
+        username: session.username,
+        detail: `Removed ${target.type} for ${target.targetUsername}`,
       });
       res.status(200).json({ ok: true });
       return;

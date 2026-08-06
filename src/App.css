@@ -2145,6 +2145,119 @@
   color: #6b7280;
 }
 
+.blume-hmrc-admin-tag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(159, 199, 236, 0.15);
+  color: var(--blume-accent);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  text-transform: none;
+}
+.blume-hmrc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.blume-hmrc-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.blume-hmrc-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.blume-hmrc-card-head .blume-clickable-username {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #f4f6fb;
+}
+.blume-hmrc-card-head .blume-report-delete {
+  margin-left: auto;
+}
+.blume-hmrc-risk-badge {
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.blume-hmrc-risk-low {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+.blume-hmrc-risk-medium {
+  background: rgba(250, 204, 21, 0.15);
+  color: #facc15;
+}
+.blume-hmrc-risk-high {
+  background: rgba(251, 146, 60, 0.18);
+  color: #fb923c;
+}
+.blume-hmrc-risk-critical {
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+}
+.blume-hmrc-card-notes-preview {
+  font-size: 12px;
+  color: #b6bcc7;
+  margin: 4px 0 6px;
+  line-height: 1.5;
+}
+.blume-hmrc-card-detail {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.blume-hmrc-risk-form,
+.blume-hmrc-log-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.blume-hmrc-risk-form textarea,
+.blume-hmrc-log-form textarea {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: #e5e7eb;
+  font-size: 12.5px;
+  font-family: inherit;
+  resize: vertical;
+}
+.blume-hmrc-risk-form textarea::placeholder,
+.blume-hmrc-log-form textarea::placeholder {
+  color: #6b7280;
+}
+.blume-hmrc-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.blume-hmrc-log-entry {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.blume-hmrc-log-entry p {
+  font-size: 12px;
+  color: #b6bcc7;
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+
 .blume-map-panel {
   padding: 0;
 }

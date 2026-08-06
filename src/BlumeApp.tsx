@@ -24,6 +24,34 @@ interface BlumeBlogPost {
   createdAt: number;
 }
 
+const HMRC_RISK_LEVELS = ["Low", "Medium", "High", "Critical"];
+const HMRC_LOG_TYPES = ["Risk Note", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
+
+interface HmrcCard {
+  id: string;
+  targetUserId: string;
+  targetUsername: string;
+  riskLevel: string;
+  riskNotes: string;
+  createdByUserId: string;
+  createdByUsername: string;
+  createdAt: number;
+  canDelete?: boolean;
+}
+
+interface HmrcLogEntry {
+  id: string;
+  cardId: string;
+  targetUserId: string;
+  targetUsername: string;
+  type: string;
+  details: string;
+  loggedByUserId: string;
+  loggedByUsername: string;
+  createdAt: number;
+  canDelete?: boolean;
+}
+
 type GroupCategory = "Emergency Services" | "Intelligence" | "IE" | "OCG" | "Other";
 const GROUP_CATEGORY_ORDER: GroupCategory[] = [
   "Emergency Services",
@@ -596,6 +624,23 @@ export function BlumeApp({
   const [blogSubmitting, setBlogSubmitting] = useState(false);
   const { error: blogError, fading: blogFading, setError: setBlogError } = useFadingError();
 
+  const [hmrcAccess, setHmrcAccess] = useState(false);
+  const [hmrcIsAdmin, setHmrcIsAdmin] = useState(false);
+  const [hmrcCards, setHmrcCards] = useState<HmrcCard[]>([]);
+  const [hmrcLoading, setHmrcLoading] = useState(true);
+  const [hmrcNewUsername, setHmrcNewUsername] = useState("");
+  const [hmrcAddingCard, setHmrcAddingCard] = useState(false);
+  const { error: hmrcError, fading: hmrcFading, setError: setHmrcError } = useFadingError();
+  const [hmrcSelectedCardId, setHmrcSelectedCardId] = useState<string | null>(null);
+  const [hmrcRiskLevel, setHmrcRiskLevel] = useState("Low");
+  const [hmrcRiskNotes, setHmrcRiskNotes] = useState("");
+  const [hmrcSavingRisk, setHmrcSavingRisk] = useState(false);
+  const [hmrcLogEntries, setHmrcLogEntries] = useState<HmrcLogEntry[]>([]);
+  const [hmrcLogLoading, setHmrcLogLoading] = useState(false);
+  const [hmrcLogType, setHmrcLogType] = useState(HMRC_LOG_TYPES[0]);
+  const [hmrcLogDetails, setHmrcLogDetails] = useState("");
+  const [hmrcAddingLog, setHmrcAddingLog] = useState(false);
+
   const [personQuery, setPersonQuery] = useState("");
   const [personResult, setPersonResult] = useState<PersonSearchResult | null>(null);
   const [personLoading, setPersonLoading] = useState(false);
@@ -669,9 +714,22 @@ export function BlumeApp({
     setCanEditBlog(!!data.canEdit);
   }
 
+  async function loadHmrc() {
+    try {
+      const res = await fetch("/api/blume-content?type=hmrc");
+      const data = await res.json();
+      setHmrcAccess(!!data.canAccess);
+      setHmrcIsAdmin(!!data.isAdmin);
+      setHmrcCards(data.cards || []);
+    } finally {
+      setHmrcLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadAccess();
     loadBlog();
+    loadHmrc();
   }, []);
 
   async function loadActiveAgents() {
@@ -809,6 +867,128 @@ export function BlumeApp({
       method: "DELETE",
     });
     await loadBlog();
+  }
+
+  async function handleAddHmrcCard() {
+    if (!hmrcNewUsername.trim()) return;
+    setHmrcAddingCard(true);
+    setHmrcError(null);
+    try {
+      const res = await fetch("/api/blume-content?type=hmrc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "addCard", username: hmrcNewUsername.trim() }),
+      });
+      if (!res.ok) {
+        setHmrcError(await res.text());
+        return;
+      }
+      const data = await res.json();
+      setHmrcCards(data.cards || []);
+      setHmrcNewUsername("");
+    } catch {
+      setHmrcError("Couldn't open that case.");
+    } finally {
+      setHmrcAddingCard(false);
+    }
+  }
+
+  async function loadHmrcLogs(cardId: string) {
+    setHmrcLogLoading(true);
+    try {
+      const res = await fetch(`/api/blume-content?type=hmrc&cardId=${encodeURIComponent(cardId)}`);
+      const data = await res.json();
+      setHmrcLogEntries(data.logEntries || []);
+    } finally {
+      setHmrcLogLoading(false);
+    }
+  }
+
+  function handleSelectHmrcCard(card: HmrcCard) {
+    if (hmrcSelectedCardId === card.id) {
+      setHmrcSelectedCardId(null);
+      return;
+    }
+    setHmrcSelectedCardId(card.id);
+    setHmrcRiskLevel(card.riskLevel);
+    setHmrcRiskNotes(card.riskNotes);
+    setHmrcLogType(HMRC_LOG_TYPES[0]);
+    setHmrcLogDetails("");
+    loadHmrcLogs(card.id);
+  }
+
+  async function handleSaveHmrcRisk() {
+    if (!hmrcSelectedCardId) return;
+    setHmrcSavingRisk(true);
+    setHmrcError(null);
+    try {
+      const res = await fetch("/api/blume-content?type=hmrc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "updateRisk",
+          cardId: hmrcSelectedCardId,
+          riskLevel: hmrcRiskLevel,
+          riskNotes: hmrcRiskNotes,
+        }),
+      });
+      if (!res.ok) {
+        setHmrcError(await res.text());
+        return;
+      }
+      const data = await res.json();
+      setHmrcCards(data.cards || []);
+    } catch {
+      setHmrcError("Couldn't update risk.");
+    } finally {
+      setHmrcSavingRisk(false);
+    }
+  }
+
+  async function handleAddHmrcLog() {
+    const card = hmrcCards.find((c) => c.id === hmrcSelectedCardId);
+    if (!card || !hmrcLogDetails.trim()) return;
+    setHmrcAddingLog(true);
+    setHmrcError(null);
+    try {
+      const res = await fetch("/api/blume-content?type=hmrc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "addLog",
+          cardId: card.id,
+          targetUserId: card.targetUserId,
+          targetUsername: card.targetUsername,
+          type: hmrcLogType,
+          details: hmrcLogDetails.trim(),
+        }),
+      });
+      if (!res.ok) {
+        setHmrcError(await res.text());
+        return;
+      }
+      setHmrcLogDetails("");
+      await loadHmrcLogs(card.id);
+    } catch {
+      setHmrcError("Couldn't log that entry.");
+    } finally {
+      setHmrcAddingLog(false);
+    }
+  }
+
+  async function handleDeleteHmrcLog(id: string) {
+    await fetch(`/api/blume-content?type=hmrc&id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (hmrcSelectedCardId) loadHmrcLogs(hmrcSelectedCardId);
+  }
+
+  async function handleDeleteHmrcCard(cardId: string) {
+    const res = await fetch(`/api/blume-content?type=hmrc&cardId=${encodeURIComponent(cardId)}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      setHmrcCards((prev) => prev.filter((c) => c.id !== cardId));
+      if (hmrcSelectedCardId === cardId) setHmrcSelectedCardId(null);
+    }
   }
 
   const [usernameCopied, setUsernameCopied] = useState(false);
@@ -2083,6 +2263,172 @@ export function BlumeApp({
                 </>
               )}
             </div>
+
+            {hmrcAccess && (
+              <div className={`blume-panel blume-hmrc-panel${collapsedPanels.hmrc ? " blume-panel-collapsed" : ""}`}>
+                <button className="blume-panel-header blume-panel-header-toggle" onClick={() => togglePanel("hmrc")}>
+                  <span>
+                    HMRC{hmrcIsAdmin && <span className="blume-hmrc-admin-tag">Admin access</span>}
+                  </span>
+                  <span className="blume-panel-toggle-icon">{collapsedPanels.hmrc ? "▸" : "▾"}</span>
+                </button>
+                {!collapsedPanels.hmrc && (
+                  <>
+                    <div className="blume-report-form-section">
+                      <button className="blume-report-form-toggle" onClick={() => togglePanel("hmrcForm")}>
+                        <span>Open a case</span>
+                        <span className="blume-panel-toggle-icon">
+                          {collapsedPanels.hmrcForm ? "▸" : "▾"}
+                        </span>
+                      </button>
+                      {!collapsedPanels.hmrcForm && (
+                        <div className="blume-report-form">
+                          <input
+                            placeholder="Roblox username or ID"
+                            value={hmrcNewUsername}
+                            onChange={(e) => setHmrcNewUsername(e.target.value)}
+                          />
+                          <button
+                            className="blume-cta-btn"
+                            disabled={!hmrcNewUsername.trim() || hmrcAddingCard}
+                            onClick={handleAddHmrcCard}
+                          >
+                            {hmrcAddingCard ? "Opening…" : "Open case"}
+                          </button>
+                          {hmrcError && (
+                            <p className={`blume-error${hmrcFading ? " fading-out" : ""}`}>{hmrcError}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="blume-hmrc-list">
+                      {hmrcLoading ? (
+                        <p className="blume-muted">Loading…</p>
+                      ) : hmrcCards.length === 0 ? (
+                        <p className="blume-muted">No cases opened yet.</p>
+                      ) : (
+                        hmrcCards.map((card) => (
+                          <div className="blume-hmrc-card" key={card.id}>
+                            <div className="blume-hmrc-card-head" onClick={() => handleSelectHmrcCard(card)}>
+                              <span
+                                className="blume-clickable-username"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUsernameClick(card.targetUsername);
+                                }}
+                              >
+                                {card.targetUsername}
+                              </span>
+                              <span
+                                className={`blume-hmrc-risk-badge blume-hmrc-risk-${card.riskLevel.toLowerCase()}`}
+                              >
+                                {card.riskLevel}
+                              </span>
+                              {card.canDelete && (
+                                <button
+                                  className="blume-report-delete"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteHmrcCard(card.id);
+                                  }}
+                                  title="Close case"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                            {card.riskNotes && hmrcSelectedCardId !== card.id && (
+                              <p className="blume-hmrc-card-notes-preview">{card.riskNotes}</p>
+                            )}
+                            <span className="blume-report-meta">
+                              Opened by {card.createdByUsername} ·{" "}
+                              {new Date(card.createdAt).toLocaleDateString()}
+                            </span>
+
+                            {hmrcSelectedCardId === card.id && (
+                              <div className="blume-hmrc-card-detail">
+                                <div className="blume-hmrc-risk-form">
+                                  <CustomSelect
+                                    value={hmrcRiskLevel}
+                                    onChange={setHmrcRiskLevel}
+                                    options={HMRC_RISK_LEVELS.map((l) => ({ value: l, label: l }))}
+                                  />
+                                  <textarea
+                                    placeholder="Risk notes…"
+                                    value={hmrcRiskNotes}
+                                    onChange={(e) => setHmrcRiskNotes(e.target.value)}
+                                    rows={2}
+                                  />
+                                  <button
+                                    className="blume-cta-btn"
+                                    disabled={hmrcSavingRisk}
+                                    onClick={handleSaveHmrcRisk}
+                                  >
+                                    {hmrcSavingRisk ? "Saving…" : "Save risk"}
+                                  </button>
+                                </div>
+
+                                <div className="blume-hmrc-log-form">
+                                  <CustomSelect
+                                    value={hmrcLogType}
+                                    onChange={setHmrcLogType}
+                                    options={HMRC_LOG_TYPES.map((t) => ({ value: t, label: t }))}
+                                  />
+                                  <textarea
+                                    placeholder="Log details…"
+                                    value={hmrcLogDetails}
+                                    onChange={(e) => setHmrcLogDetails(e.target.value)}
+                                    rows={2}
+                                  />
+                                  <button
+                                    className="blume-cta-btn"
+                                    disabled={!hmrcLogDetails.trim() || hmrcAddingLog}
+                                    onClick={handleAddHmrcLog}
+                                  >
+                                    {hmrcAddingLog ? "Logging…" : "Add log entry"}
+                                  </button>
+                                </div>
+
+                                <div className="blume-hmrc-log-list">
+                                  {hmrcLogLoading ? (
+                                    <p className="blume-muted">Loading…</p>
+                                  ) : hmrcLogEntries.length === 0 ? (
+                                    <p className="blume-muted">No entries logged yet.</p>
+                                  ) : (
+                                    hmrcLogEntries.map((entry) => (
+                                      <div className="blume-hmrc-log-entry" key={entry.id}>
+                                        <div className="blume-report-card-head">
+                                          <strong>{entry.type}</strong>
+                                          {entry.canDelete && (
+                                            <button
+                                              className="blume-report-delete"
+                                              onClick={() => handleDeleteHmrcLog(entry.id)}
+                                              title="Delete entry"
+                                            >
+                                              ✕
+                                            </button>
+                                          )}
+                                        </div>
+                                        <p>{entry.details}</p>
+                                        <span className="blume-report-meta">
+                                          Logged by {entry.loggedByUsername} ·{" "}
+                                          {new Date(entry.createdAt).toLocaleDateString()}
+                                        </span>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className={`blume-panel blume-map-panel${collapsedPanels.map ? " blume-panel-collapsed" : ""}`}>
               <button className="blume-panel-header blume-panel-header-toggle" onClick={() => togglePanel("map")}>
