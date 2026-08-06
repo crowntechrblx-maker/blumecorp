@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { useFadingError } from "./useFadingError";
 import { getChargeName } from "./pncCharges";
 import { CustomSelect } from "./CustomSelect";
+import { BlumeWorldMap } from "./BlumeWorldMap";
 
 interface BlumeReport {
   id: string;
@@ -1839,6 +1840,14 @@ export function BlumeApp({
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   }
 
+  const allPanelsCollapsed =
+    !!collapsedPanels.reports &&
+    (!hmrcAccess || !!collapsedPanels.hmrc) &&
+    !!collapsedPanels.map &&
+    !!collapsedPanels.search &&
+    !!collapsedPanels.groups &&
+    !!collapsedPanels.monitoring;
+
   return (
     <div className="blume-app">
       {!loggedIn && (
@@ -3262,6 +3271,12 @@ export function BlumeApp({
                   </div>
                 )}
               </div>
+
+            {allPanelsCollapsed && (
+              <div className="blume-worldmap-panel">
+                <BlumeWorldMap />
+              </div>
+            )}
           </div>
         </div>
       )}

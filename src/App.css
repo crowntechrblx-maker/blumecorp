@@ -1933,6 +1933,53 @@
 .blume-search-panel {
   flex: 1;
 }
+.blume-worldmap-panel {
+  flex: 1;
+  min-width: 0;
+  background: var(--blume-navy-deep);
+  animation: blumeFadeIn 460ms ease both;
+}
+.blume-worldmap-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.blume-worldmap-ping-ring {
+  fill: none;
+  stroke-width: 1.5;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: blumeWorldmapPingRing 1.9s ease-out forwards;
+}
+.blume-worldmap-ping-dot {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: blumeWorldmapPingDot 1.9s ease-out forwards;
+}
+@keyframes blumeWorldmapPingRing {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(7);
+    opacity: 0;
+  }
+}
+@keyframes blumeWorldmapPingDot {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 .blume-panel-collapsed {
   flex: 0 0 46px !important;
   overflow: hidden;
