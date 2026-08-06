@@ -3654,7 +3654,7 @@ function verifilePlugin(sessions: Map<string, RobloxSession>): Plugin {
 }
 
 const HMRC_GROUP_ID = 567563234;
-const HMRC_LOG_TYPES = ["Risk Note", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
+const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
 
 interface HmrcCard {
   id: string;
@@ -3741,12 +3741,14 @@ function hmrcPlugin(sessions: Map<string, RobloxSession>): Plugin {
             res.end(JSON.stringify({ logEntries }));
             return;
           }
-          const cards = loadHmrcCardsDb()
-            .sort((a, b) => b.createdAt - a.createdAt)
-            .map((c) => ({
+          const rawCards = loadHmrcCardsDb().sort((a, b) => b.createdAt - a.createdAt);
+          const cards = await Promise.all(
+            rawCards.map(async (c) => ({
               ...c,
+              avatarUrl: await getRobloxAvatarUrl(c.targetUserId),
               canDelete: isAdmin || (!!session && c.createdByUserId === session.userId),
-            }));
+            }))
+          );
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ canAccess: true, isAdmin, cards }));
           return;
@@ -3803,8 +3805,15 @@ function hmrcPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 username: session.username,
                 detail: `Opened an HMRC case for ${resolved.username}`,
               });
+              const withAvatars = await Promise.all(
+                next.map(async (c) => ({
+                  ...c,
+                  avatarUrl: await getRobloxAvatarUrl(c.targetUserId),
+                  canDelete: true,
+                }))
+              );
               res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ cards: next.map((c) => ({ ...c, canDelete: true })) }));
+              res.end(JSON.stringify({ cards: withAvatars }));
               return;
             }
 
@@ -3846,15 +3855,15 @@ function hmrcPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 username: session.username,
                 detail: `Set risk level ${riskLevel} for ${cards[index].targetUsername}`,
               });
-              res.setHeader("Content-Type", "application/json");
-              res.end(
-                JSON.stringify({
-                  cards: cards.map((c) => ({
-                    ...c,
-                    canDelete: isAdmin || c.createdByUserId === session.userId,
-                  })),
-                })
+              const withAvatars = await Promise.all(
+                cards.map(async (c) => ({
+                  ...c,
+                  avatarUrl: await getRobloxAvatarUrl(c.targetUserId),
+                  canDelete: isAdmin || c.createdByUserId === session.userId,
+                }))
               );
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ cards: withAvatars }));
               return;
             }
 

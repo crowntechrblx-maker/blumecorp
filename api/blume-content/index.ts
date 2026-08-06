@@ -8,6 +8,7 @@ import {
   isBlumeSuperUser,
   resolveRobloxUserId,
   isRobloxGroupMember,
+  getRobloxAvatarUrl,
 } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
@@ -15,7 +16,7 @@ import { isVerifileAuthorized, getVerifileWhitelist } from "../../lib/verifile.j
 import { isPlatformAdmin } from "../../lib/admins.js";
 
 const HMRC_GROUP_ID = 567563234;
-const HMRC_LOG_TYPES = ["Risk Note", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
+const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
 
 interface VerifilePunishment {
   id: string;
@@ -338,12 +339,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(200).json({ logEntries });
         return;
       }
-      const cards = ((await kv.get<HmrcCard[]>("hmrcCards")) || [])
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .map((c) => ({
+      const rawCards = ((await kv.get<HmrcCard[]>("hmrcCards")) || []).sort(
+        (a, b) => b.createdAt - a.createdAt
+      );
+      const cards = await Promise.all(
+        rawCards.map(async (c) => ({
           ...c,
+          avatarUrl: await getRobloxAvatarUrl(c.targetUserId),
           canDelete: isAdmin || c.createdByUserId === session!.userId,
-        }));
+        }))
+      );
       res.status(200).json({ canAccess: true, isAdmin, cards });
       return;
     }
@@ -404,7 +409,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             username: session.username,
             detail: `Opened an HMRC case for ${resolved.username}`,
           });
-          res.status(200).json({ cards: next.map((c) => ({ ...c, canDelete: true })) });
+          const withAvatars = await Promise.all(
+            next.map(async (c) => ({
+              ...c,
+              avatarUrl: await getRobloxAvatarUrl(c.targetUserId),
+              canDelete: true,
+            }))
+          );
+          res.status(200).json({ cards: withAvatars });
           return;
         }
 
@@ -441,12 +453,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             username: session.username,
             detail: `Set risk level ${riskLevel} for ${cards[index].targetUsername}`,
           });
-          res.status(200).json({
-            cards: cards.map((c) => ({
+          const withAvatars = await Promise.all(
+            cards.map(async (c) => ({
               ...c,
+              avatarUrl: await getRobloxAvatarUrl(c.targetUserId),
               canDelete: isAdmin || c.createdByUserId === session.userId,
-            })),
-          });
+            }))
+          );
+          res.status(200).json({ cards: withAvatars });
           return;
         }
 

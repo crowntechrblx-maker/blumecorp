@@ -2145,17 +2145,6 @@
   color: #6b7280;
 }
 
-.blume-hmrc-admin-tag {
-  margin-left: 8px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(159, 199, 236, 0.15);
-  color: var(--blume-accent);
-  font-size: 9px;
-  letter-spacing: 0.5px;
-  font-weight: 600;
-  text-transform: none;
-}
 .blume-hmrc-list {
   display: flex;
   flex-direction: column;
@@ -2173,6 +2162,14 @@
   gap: 8px;
   cursor: pointer;
 }
+.blume-hmrc-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
 .blume-hmrc-card-head .blume-clickable-username {
   font-size: 12.5px;
   font-weight: 600;
@@ -2181,27 +2178,43 @@
 .blume-hmrc-card-head .blume-report-delete {
   margin-left: auto;
 }
-.blume-hmrc-risk-badge {
-  padding: 1px 8px;
+.blume-hmrc-risk-select-wrap {
+  display: inline-flex;
+}
+.blume-hmrc-risk-select {
+  width: auto;
+}
+.blume-hmrc-risk-select .blume-custom-select-trigger {
+  padding: 1px 6px 1px 8px;
   border-radius: 10px;
+  border-color: transparent;
+  background: transparent;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  gap: 4px;
 }
-.blume-hmrc-risk-low {
+.blume-hmrc-risk-select .blume-custom-select-value {
+  color: inherit;
+}
+.blume-hmrc-risk-select .blume-custom-select-arrow {
+  color: inherit;
+  font-size: 8px;
+}
+.blume-hmrc-risk-low .blume-custom-select-trigger {
   background: rgba(74, 222, 128, 0.15);
   color: #4ade80;
 }
-.blume-hmrc-risk-medium {
+.blume-hmrc-risk-medium .blume-custom-select-trigger {
   background: rgba(250, 204, 21, 0.15);
   color: #facc15;
 }
-.blume-hmrc-risk-high {
+.blume-hmrc-risk-high .blume-custom-select-trigger {
   background: rgba(251, 146, 60, 0.18);
   color: #fb923c;
 }
-.blume-hmrc-risk-critical {
+.blume-hmrc-risk-critical .blume-custom-select-trigger {
   background: rgba(248, 113, 113, 0.18);
   color: #f87171;
 }

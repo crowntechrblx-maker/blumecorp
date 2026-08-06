@@ -25,7 +25,7 @@ interface BlumeBlogPost {
 }
 
 const HMRC_RISK_LEVELS = ["Low", "Medium", "High", "Critical"];
-const HMRC_LOG_TYPES = ["Risk Note", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
+const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
 
 interface HmrcCard {
   id: string;
@@ -36,6 +36,7 @@ interface HmrcCard {
   createdByUserId: string;
   createdByUsername: string;
   createdAt: number;
+  avatarUrl?: string | null;
   canDelete?: boolean;
 }
 
@@ -625,14 +626,12 @@ export function BlumeApp({
   const { error: blogError, fading: blogFading, setError: setBlogError } = useFadingError();
 
   const [hmrcAccess, setHmrcAccess] = useState(false);
-  const [hmrcIsAdmin, setHmrcIsAdmin] = useState(false);
   const [hmrcCards, setHmrcCards] = useState<HmrcCard[]>([]);
   const [hmrcLoading, setHmrcLoading] = useState(true);
   const [hmrcNewUsername, setHmrcNewUsername] = useState("");
   const [hmrcAddingCard, setHmrcAddingCard] = useState(false);
   const { error: hmrcError, fading: hmrcFading, setError: setHmrcError } = useFadingError();
   const [hmrcSelectedCardId, setHmrcSelectedCardId] = useState<string | null>(null);
-  const [hmrcRiskLevel, setHmrcRiskLevel] = useState("Low");
   const [hmrcRiskNotes, setHmrcRiskNotes] = useState("");
   const [hmrcSavingRisk, setHmrcSavingRisk] = useState(false);
   const [hmrcLogEntries, setHmrcLogEntries] = useState<HmrcLogEntry[]>([]);
@@ -719,7 +718,6 @@ export function BlumeApp({
       const res = await fetch("/api/blume-content?type=hmrc");
       const data = await res.json();
       setHmrcAccess(!!data.canAccess);
-      setHmrcIsAdmin(!!data.isAdmin);
       setHmrcCards(data.cards || []);
     } finally {
       setHmrcLoading(false);
@@ -910,16 +908,14 @@ export function BlumeApp({
       return;
     }
     setHmrcSelectedCardId(card.id);
-    setHmrcRiskLevel(card.riskLevel);
     setHmrcRiskNotes(card.riskNotes);
     setHmrcLogType(HMRC_LOG_TYPES[0]);
     setHmrcLogDetails("");
     loadHmrcLogs(card.id);
   }
 
-  async function handleSaveHmrcRisk() {
-    if (!hmrcSelectedCardId) return;
-    setHmrcSavingRisk(true);
+  async function handleQuickRiskChange(card: HmrcCard, newLevel: string) {
+    if (newLevel === card.riskLevel) return;
     setHmrcError(null);
     try {
       const res = await fetch("/api/blume-content?type=hmrc", {
@@ -927,9 +923,9 @@ export function BlumeApp({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "updateRisk",
-          cardId: hmrcSelectedCardId,
-          riskLevel: hmrcRiskLevel,
-          riskNotes: hmrcRiskNotes,
+          cardId: card.id,
+          riskLevel: newLevel,
+          riskNotes: card.riskNotes,
         }),
       });
       if (!res.ok) {
@@ -940,6 +936,33 @@ export function BlumeApp({
       setHmrcCards(data.cards || []);
     } catch {
       setHmrcError("Couldn't update risk.");
+    }
+  }
+
+  async function handleSaveHmrcRisk() {
+    const card = hmrcCards.find((c) => c.id === hmrcSelectedCardId);
+    if (!card) return;
+    setHmrcSavingRisk(true);
+    setHmrcError(null);
+    try {
+      const res = await fetch("/api/blume-content?type=hmrc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "updateRisk",
+          cardId: card.id,
+          riskLevel: card.riskLevel,
+          riskNotes: hmrcRiskNotes,
+        }),
+      });
+      if (!res.ok) {
+        setHmrcError(await res.text());
+        return;
+      }
+      const data = await res.json();
+      setHmrcCards(data.cards || []);
+    } catch {
+      setHmrcError("Couldn't update notes.");
     } finally {
       setHmrcSavingRisk(false);
     }
@@ -2267,9 +2290,7 @@ export function BlumeApp({
             {hmrcAccess && (
               <div className={`blume-panel blume-hmrc-panel${collapsedPanels.hmrc ? " blume-panel-collapsed" : ""}`}>
                 <button className="blume-panel-header blume-panel-header-toggle" onClick={() => togglePanel("hmrc")}>
-                  <span>
-                    HMRC{hmrcIsAdmin && <span className="blume-hmrc-admin-tag">Admin access</span>}
-                  </span>
+                  <span>Revenue &amp; Customs</span>
                   <span className="blume-panel-toggle-icon">{collapsedPanels.hmrc ? "▸" : "▾"}</span>
                 </button>
                 {!collapsedPanels.hmrc && (
@@ -2311,6 +2332,9 @@ export function BlumeApp({
                         hmrcCards.map((card) => (
                           <div className="blume-hmrc-card" key={card.id}>
                             <div className="blume-hmrc-card-head" onClick={() => handleSelectHmrcCard(card)}>
+                              {card.avatarUrl && (
+                                <img className="blume-hmrc-avatar" src={card.avatarUrl} alt="" />
+                              )}
                               <span
                                 className="blume-clickable-username"
                                 onClick={(e) => {
@@ -2321,9 +2345,15 @@ export function BlumeApp({
                                 {card.targetUsername}
                               </span>
                               <span
-                                className={`blume-hmrc-risk-badge blume-hmrc-risk-${card.riskLevel.toLowerCase()}`}
+                                className="blume-hmrc-risk-select-wrap"
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                {card.riskLevel}
+                                <CustomSelect
+                                  value={card.riskLevel}
+                                  onChange={(v) => handleQuickRiskChange(card, v)}
+                                  options={HMRC_RISK_LEVELS.map((l) => ({ value: l, label: l }))}
+                                  className={`blume-hmrc-risk-select blume-hmrc-risk-${card.riskLevel.toLowerCase()}`}
+                                />
                               </span>
                               {card.canDelete && (
                                 <button
@@ -2349,11 +2379,6 @@ export function BlumeApp({
                             {hmrcSelectedCardId === card.id && (
                               <div className="blume-hmrc-card-detail">
                                 <div className="blume-hmrc-risk-form">
-                                  <CustomSelect
-                                    value={hmrcRiskLevel}
-                                    onChange={setHmrcRiskLevel}
-                                    options={HMRC_RISK_LEVELS.map((l) => ({ value: l, label: l }))}
-                                  />
                                   <textarea
                                     placeholder="Risk notes…"
                                     value={hmrcRiskNotes}
@@ -2365,7 +2390,7 @@ export function BlumeApp({
                                     disabled={hmrcSavingRisk}
                                     onClick={handleSaveHmrcRisk}
                                   >
-                                    {hmrcSavingRisk ? "Saving…" : "Save risk"}
+                                    {hmrcSavingRisk ? "Saving…" : "Save notes"}
                                   </button>
                                 </div>
 
@@ -2376,7 +2401,7 @@ export function BlumeApp({
                                     options={HMRC_LOG_TYPES.map((t) => ({ value: t, label: t }))}
                                   />
                                   <textarea
-                                    placeholder="Log details…"
+                                    placeholder="Add information…"
                                     value={hmrcLogDetails}
                                     onChange={(e) => setHmrcLogDetails(e.target.value)}
                                     rows={2}
@@ -2386,7 +2411,7 @@ export function BlumeApp({
                                     disabled={!hmrcLogDetails.trim() || hmrcAddingLog}
                                     onClick={handleAddHmrcLog}
                                   >
-                                    {hmrcAddingLog ? "Logging…" : "Add log entry"}
+                                    {hmrcAddingLog ? "Logging…" : "Add entry"}
                                   </button>
                                 </div>
 
