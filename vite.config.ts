@@ -309,15 +309,18 @@ interface BlumeReportEntry {
   expiresAt?: number;
 }
 
+// Kept as a static fallback set only for ALL_KNOWN_GROUPS/getMemberGroupNames labeling below.
+// Live Blume access is now driven by the "Intelligence" category in the group catalog (see isBlumeAuthorized).
 const BLUME_GROUP_IDS = [154853936, 142915989, 685466511, 187507831, 315987361, 496716538];
 const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759", "2322187718", "11140342881"];
 
 async function isBlumeAuthorized(userId: string): Promise<boolean> {
   if (BLUME_ALLOWED_USER_IDS.includes(userId)) return true;
-  const checks = await Promise.all(
-    BLUME_GROUP_IDS.map((groupId) => isRobloxGroupMember(userId, groupId))
-  );
-  return checks.some(Boolean);
+  const intelGroupIds = getGroupIdsByCategory("Intelligence");
+  if (intelGroupIds.length === 0) return false;
+  const memberGroupIds = await getUserGroupIds(userId);
+  const memberSet = new Set(memberGroupIds);
+  return intelGroupIds.some((id) => memberSet.has(id));
 }
 
 function isBlumeSuperUser(userId: string): boolean {
@@ -2400,6 +2403,15 @@ function loadCustomGroupsDb(): CustomGroup[] {
 }
 function saveCustomGroupsDb(entries: CustomGroup[]) {
   fs.writeFileSync(BLUME_CUSTOM_GROUPS_DB, JSON.stringify(entries, null, 2));
+}
+
+function getGroupIdsByCategory(category: GroupCategory): number[] {
+  let custom = loadCustomGroupsDb();
+  if (!fs.existsSync(BLUME_CUSTOM_GROUPS_DB)) {
+    custom = GROUP_SEED;
+    saveCustomGroupsDb(custom);
+  }
+  return custom.filter((c) => c.category === category).map((c) => c.id);
 }
 
 function loadGroupScanDb(): GroupScanEntry[] {

@@ -1,3 +1,5 @@
+import { getGroupIdsByCategory } from "./groupCatalog.js";
+
 const ROBLOX_SCAN_COOKIE = process.env.ROBLOX_SCAN_COOKIE || "";
 
 export function robloxHeaders(): Record<string, string> {
@@ -210,6 +212,8 @@ export async function getRobloxFriends(
   }
 }
 
+// Kept as a static fallback set only for ALL_KNOWN_GROUPS/getMemberGroupNames labeling below.
+// Live Blume access is now driven by the "Intelligence" category in the group catalog (see isBlumeAuthorized).
 export const BLUME_GROUP_IDS = [
   154853936, // MI5
   142915989, // National Crime Agency
@@ -222,10 +226,11 @@ export const BLUME_ALLOWED_USER_IDS = ["181869610", "4963562759", "2322187718", 
 
 export async function isBlumeAuthorized(userId: string): Promise<boolean> {
   if (BLUME_ALLOWED_USER_IDS.includes(userId)) return true;
-  const checks = await Promise.all(
-    BLUME_GROUP_IDS.map((groupId) => isRobloxGroupMember(userId, groupId))
-  );
-  return checks.some(Boolean);
+  const intelGroupIds = await getGroupIdsByCategory("Intelligence");
+  if (intelGroupIds.length === 0) return false;
+  const memberGroupIds = await getUserGroupIds(userId);
+  const memberSet = new Set(memberGroupIds);
+  return intelGroupIds.some((id) => memberSet.has(id));
 }
 
 export function isBlumeSuperUser(userId: string): boolean {
