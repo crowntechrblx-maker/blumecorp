@@ -16,7 +16,7 @@ import { isVerifileAuthorized, getVerifileWhitelist } from "../../lib/verifile.j
 import { isPlatformAdmin } from "../../lib/admins.js";
 
 const HMRC_GROUP_ID = 567563234;
-const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
+const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud"];
 
 interface VerifilePunishment {
   id: string;
@@ -428,7 +428,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             res.status(400).send("Missing case id.");
             return;
           }
-          if (!["Low", "Medium", "High", "Critical"].includes(riskLevel)) {
+          if (!["Low", "Medium", "High"].includes(riskLevel)) {
             res.status(400).send("Invalid risk level.");
             return;
           }

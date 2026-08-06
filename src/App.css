@@ -2174,17 +2174,26 @@
   font-size: 12.5px;
   font-weight: 600;
   color: #f4f6fb;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .blume-hmrc-card-head .blume-report-delete {
-  margin-left: auto;
+  margin-left: 0;
+  flex-shrink: 0;
 }
 .blume-hmrc-risk-select-wrap {
   display: inline-flex;
+  flex-shrink: 0;
 }
 .blume-hmrc-risk-select {
-  width: auto;
+  width: 76px;
+  flex-shrink: 0;
 }
 .blume-hmrc-risk-select .blume-custom-select-trigger {
+  width: 100%;
   padding: 1px 6px 1px 8px;
   border-radius: 10px;
   border-color: transparent;
@@ -2213,10 +2222,6 @@
 .blume-hmrc-risk-high .blume-custom-select-trigger {
   background: rgba(251, 146, 60, 0.18);
   color: #fb923c;
-}
-.blume-hmrc-risk-critical .blume-custom-select-trigger {
-  background: rgba(248, 113, 113, 0.18);
-  color: #f87171;
 }
 .blume-hmrc-card-notes-preview {
   font-size: 12px;

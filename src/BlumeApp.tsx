@@ -24,8 +24,8 @@ interface BlumeBlogPost {
   createdAt: number;
 }
 
-const HMRC_RISK_LEVELS = ["Low", "Medium", "High", "Critical"];
-const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
+const HMRC_RISK_LEVELS = ["Low", "Medium", "High"];
+const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud"];
 
 interface HmrcCard {
   id: string;

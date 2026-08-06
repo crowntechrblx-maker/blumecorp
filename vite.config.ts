@@ -3654,7 +3654,7 @@ function verifilePlugin(sessions: Map<string, RobloxSession>): Plugin {
 }
 
 const HMRC_GROUP_ID = 567563234;
-const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud", "Cleared"];
+const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud"];
 
 interface HmrcCard {
   id: string;
@@ -3826,7 +3826,7 @@ function hmrcPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 res.end("Missing case id.");
                 return;
               }
-              if (!["Low", "Medium", "High", "Critical"].includes(riskLevel)) {
+              if (!["Low", "Medium", "High"].includes(riskLevel)) {
                 res.statusCode = 400;
                 res.end("Invalid risk level.");
                 return;
