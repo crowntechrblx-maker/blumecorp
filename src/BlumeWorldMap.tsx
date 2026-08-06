@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CONTINENTS } from "./blumeWorldMapData";
 
 const WIDTH = 1000;
 const HEIGHT = 560;
@@ -20,57 +21,41 @@ function project(lon: number, lat: number): [number, number] {
 
 type LonLat = [number, number];
 
-const CONTINENTS: LonLat[][] = [
-  // North America
-  [
-    [-168, 66], [-140, 70], [-95, 73], [-75, 63], [-60, 50], [-52, 47], [-64, 44],
-    [-75, 35], [-81, 25], [-97, 18], [-90, 14], [-83, 9], [-79, 8], [-105, 20],
-    [-115, 29], [-124, 40], [-124, 49], [-140, 60], [-168, 66],
-  ],
-  // Greenland
-  [[-73, 83], [-20, 83], [-20, 76], [-45, 60], [-56, 60], [-73, 70], [-73, 83]],
-  // South America
-  [
-    [-79, 9], [-77, 1], [-80, -5], [-81, -18], [-70, -30], [-71, -40], [-73, -53],
-    [-68, -55], [-58, -52], [-53, -34], [-48, -25], [-35, -9], [-50, 3], [-60, 8],
-    [-72, 11], [-79, 9],
-  ],
-  // Europe
-  [
-    [-9, 43], [-9, 53], [-5, 58], [5, 60], [10, 58], [18, 58], [24, 65], [30, 70],
-    [40, 68], [60, 68], [60, 55], [48, 47], [38, 45], [27, 40], [19, 40], [12, 38],
-    [3, 43], [-9, 43],
-  ],
-  // Africa
-  [
-    [-17, 21], [-17, 15], [-10, 6], [9, 4], [9, -2], [13, -6], [12, -18], [18, -34],
-    [26, -34], [33, -25], [40, -15], [43, -2], [51, 12], [43, 12], [38, 15], [32, 22],
-    [35, 31], [25, 32], [10, 37], [-6, 35], [-9, 29], [-17, 21],
-  ],
-  // Asia
-  [
-    [27, 70], [60, 70], [75, 73], [105, 73], [140, 73], [170, 66], [170, 55],
-    [160, 50], [143, 43], [130, 35], [122, 25], [110, 18], [100, 6], [95, -8],
-    [105, -9], [115, -8], [120, 15], [130, 30], [140, 40], [145, 45], [135, 53],
-    [105, 54], [80, 50], [65, 55], [47, 42], [35, 40], [27, 50], [27, 70],
-  ],
-  // Australia
-  [
-    [113, -22], [122, -18], [130, -12], [142, -11], [148, -19], [153, -27],
-    [150, -37], [140, -38], [131, -32], [115, -34], [113, -22],
-  ],
-];
-
 const MERIDIANS = Array.from({ length: 13 }, (_, i) => -180 + i * 30);
 const PARALLELS = [-80, -60, -40, -20, 0, 20, 40, 60, 80];
 
+// Rings are ordered by landmass size; the largest are reliable/meaningful
+// targets for random "on continent" ping placement.
+const MAJOR_LANDMASSES = CONTINENTS.slice(0, 16);
+
+const FLIGHT_ROUTES: [LonLat, LonLat][] = [
+  [[-0.1, 51.5], [-74, 40.7]], // London - New York
+  [[-118.2, 34], [139.7, 35.7]], // LA - Tokyo
+  [[28, -26.2], [55.3, 25.2]], // Johannesburg - Dubai
+  [[151.2, -33.9], [103.8, 1.35]], // Sydney - Singapore
+  [[-46.6, -23.5], [-9.1, 38.7]], // Sao Paulo - Lisbon
+  [[37.6, 55.75], [116.4, 39.9]], // Moscow - Beijing
+  [[-87.6, 41.9], [2.3, 48.9]], // Chicago - Paris
+];
+
+// Splits the ring into subpaths wherever it crosses the antimeridian, so a
+// landmass like Russia doesn't draw a stray line across the whole map.
 function polygonToPath(points: LonLat[]): string {
-  return points
-    .map(([lon, lat], i) => {
-      const [x, y] = project(lon, lat);
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ") + " Z";
+  let d = "";
+  let prevLon: number | null = null;
+  let subpathOpen = false;
+  points.forEach(([lon, lat]) => {
+    const [x, y] = project(lon, lat);
+    const wrapped = prevLon !== null && Math.abs(lon - prevLon) > 180;
+    if (!subpathOpen || wrapped) {
+      d += `${subpathOpen ? " Z " : ""}M${x.toFixed(1)},${y.toFixed(1)}`;
+      subpathOpen = true;
+    } else {
+      d += ` L${x.toFixed(1)},${y.toFixed(1)}`;
+    }
+    prevLon = lon;
+  });
+  return d + " Z";
 }
 
 function pointInPolygon(x: number, y: number, poly: [number, number][]): boolean {
@@ -91,27 +76,33 @@ interface Ping {
   y: number;
 }
 
+interface Flight {
+  id: number;
+  d: string;
+  dur: number;
+}
+
 export function BlumeWorldMap() {
-  const projected = useMemo(
-    () => CONTINENTS.map((poly) => poly.map(([lon, lat]) => project(lon, lat) as [number, number])),
+  const paths = useMemo(() => CONTINENTS.map(polygonToPath), []);
+  const majorProjected = useMemo(
+    () => MAJOR_LANDMASSES.map((poly) => poly.map(([lon, lat]) => project(lon, lat) as [number, number])),
     []
   );
-  const paths = useMemo(() => CONTINENTS.map(polygonToPath), []);
   const meridianLines = useMemo(
     () => MERIDIANS.map((lon) => [project(lon, -LAT_LIMIT), project(lon, LAT_LIMIT)]),
     []
   );
-  const parallelLines = useMemo(
-    () => PARALLELS.map((lat) => project(0, lat)[1]),
-    []
-  );
+  const parallelLines = useMemo(() => PARALLELS.map((lat) => project(0, lat)[1]), []);
 
   const [pings, setPings] = useState<Ping[]>([]);
-  const nextId = useRef(0);
+  const nextPingId = useRef(0);
+
+  const [flights, setFlights] = useState<Flight[]>([]);
+  const nextFlightId = useRef(0);
 
   useEffect(() => {
     function spawnPing() {
-      const poly = projected[Math.floor(Math.random() * projected.length)];
+      const poly = majorProjected[Math.floor(Math.random() * majorProjected.length)];
       const xs = poly.map((p) => p[0]);
       const ys = poly.map((p) => p[1]);
       const minX = Math.min(...xs);
@@ -129,17 +120,43 @@ export function BlumeWorldMap() {
           break;
         }
       }
-      const id = nextId.current++;
-      setPings((prev) => [...prev.slice(-5), { id, x, y }]);
+      const id = nextPingId.current++;
+      setPings((prev) => [...prev.slice(-9), { id, x, y }]);
       window.setTimeout(() => {
         setPings((prev) => prev.filter((p) => p.id !== id));
-      }, 1900);
+      }, 2000);
     }
 
     spawnPing();
-    const interval = window.setInterval(spawnPing, 1500);
+    spawnPing();
+    const interval = window.setInterval(spawnPing, 700);
     return () => window.clearInterval(interval);
-  }, [projected]);
+  }, [majorProjected]);
+
+  useEffect(() => {
+    function spawnFlight() {
+      const [a, b] = FLIGHT_ROUTES[Math.floor(Math.random() * FLIGHT_ROUTES.length)];
+      const [x1, y1] = project(a[0], a[1]);
+      const [x2, y2] = project(b[0], b[1]);
+      const dist = Math.hypot(x2 - x1, y2 - y1);
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2 - dist * 0.16;
+      const d = `M${x1.toFixed(1)},${y1.toFixed(1)} Q${midX.toFixed(1)},${midY.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+      const dur = 5 + Math.random() * 2.5;
+      const id = nextFlightId.current++;
+      setFlights((prev) => [...prev.slice(-1), { id, d, dur }]);
+      window.setTimeout(() => {
+        setFlights((prev) => prev.filter((f) => f.id !== id));
+      }, dur * 1000 + 200);
+    }
+
+    const timeout = window.setTimeout(spawnFlight, 1200);
+    const interval = window.setInterval(spawnFlight, 6000);
+    return () => {
+      window.clearTimeout(timeout);
+      window.clearInterval(interval);
+    };
+  }, []);
 
   return (
     <svg
@@ -155,11 +172,20 @@ export function BlumeWorldMap() {
           <line key={`p${i}`} x1={0} y1={y} x2={WIDTH} y2={y} />
         ))}
       </g>
-      <g stroke={MAP_COLOR} strokeWidth={1.1} fill={MAP_COLOR} fillOpacity={0.05}>
+      <g stroke={MAP_COLOR} strokeWidth={0.85} fill={MAP_COLOR} fillOpacity={0.06} strokeLinejoin="round">
         {paths.map((d, i) => (
           <path key={i} d={d} />
         ))}
       </g>
+      {flights.map((f) => (
+        <g key={f.id}>
+          <path d={f.d} stroke={MAP_COLOR} strokeWidth={0.5} strokeDasharray="2 3" fill="none" opacity={0.3} />
+          <circle r={2.2} fill={MAP_COLOR}>
+            <animateMotion dur={`${f.dur}s`} fill="freeze" path={f.d} />
+            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.9;1" dur={`${f.dur}s`} fill="freeze" />
+          </circle>
+        </g>
+      ))}
       {pings.map((p) => (
         <g key={p.id}>
           <circle className="blume-worldmap-ping-ring" cx={p.x} cy={p.y} r={4} stroke={MAP_COLOR} />
