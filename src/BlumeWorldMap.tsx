@@ -22,39 +22,38 @@ function project(lon: number, lat: number): [number, number] {
   return [x, y];
 }
 
-// Adds gentle, deterministic perpendicular wobble between each pair of
-// anchor points so hand-plotted roads/coastline read as real bending lines
-// rather than ruler-straight rays.
-function densify(points: LonLat[], segmentsPerLeg: number, jitter: number): LonLat[] {
-  const out: LonLat[] = [];
-  for (let i = 0; i < points.length - 1; i++) {
-    const [lon1, lat1] = points[i];
-    const [lon2, lat2] = points[i + 1];
-    out.push([lon1, lat1]);
-    const dx = lon2 - lon1;
-    const dy = lat2 - lat1;
-    const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len;
-    const ny = dx / len;
-    for (let s = 1; s < segmentsPerLeg; s++) {
-      const t = s / segmentsPerLeg;
-      const lon = lon1 + dx * t;
-      const lat = lat1 + dy * t;
-      const wobble = Math.sin((i * 3.17 + t) * 6.9) * jitter;
-      out.push([lon + nx * wobble, lat + ny * wobble]);
-    }
+// Builds a smooth Catmull-Rom spline through the anchor points (converted to
+// cubic beziers) instead of connecting them with straight segments, so roads
+// and the coastline read as real bending lines rather than a jagged zigzag.
+function smoothPath(points: LonLat[], close: boolean): string {
+  const pts = points.map(([lon, lat]) => project(lon, lat));
+  const n = pts.length;
+  if (n < 3) {
+    let d = "";
+    pts.forEach(([x, y], i) => {
+      d += `${i === 0 ? "M" : " L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    return close ? `${d} Z` : d;
   }
-  out.push(points[points.length - 1]);
-  return out;
-}
-
-function lineToPath(points: LonLat[], close: boolean): string {
-  let d = "";
-  points.forEach(([lon, lat], i) => {
-    const [x, y] = project(lon, lat);
-    d += `${i === 0 ? "M" : " L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  return close ? `${d} Z` : d;
+  const at = (i: number): [number, number] => {
+    if (close) return pts[((i % n) + n) % n];
+    return pts[Math.max(0, Math.min(n - 1, i))];
+  };
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  const segCount = close ? n : n - 1;
+  for (let i = 0; i < segCount; i++) {
+    const [x0, y0] = at(i - 1);
+    const [x1, y1] = at(i);
+    const [x2, y2] = at(i + 1);
+    const [x3, y3] = at(i + 2);
+    const cp1x = x1 + (x2 - x0) / 6;
+    const cp1y = y1 + (y2 - y0) / 6;
+    const cp2x = x2 - (x3 - x1) / 6;
+    const cp2y = y2 - (y3 - y1) / 6;
+    d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+  }
+  if (close) d += " Z";
+  return d;
 }
 
 function pointInPolygon(x: number, y: number, poly: [number, number][]): boolean {
@@ -84,22 +83,15 @@ interface Patrol {
 }
 
 export function BlumeWorldMap() {
-  const boundaryPath = useMemo(() => lineToPath(densify(LONDON_BOUNDARY, 3, 0.006), true), []);
+  const boundaryPath = useMemo(() => smoothPath(LONDON_BOUNDARY, true), []);
   const boundaryProjected = useMemo(
     () => LONDON_BOUNDARY.map(([lon, lat]) => project(lon, lat) as [number, number]),
     []
   );
-  const thamesPath = useMemo(() => lineToPath(densify(THAMES, 2, 0.003), false), []);
-  const tributaryPaths = useMemo(
-    () => THAMES_TRIBUTARIES.map((t) => lineToPath(densify(t, 2, 0.004), false)),
-    []
-  );
+  const thamesPath = useMemo(() => smoothPath(THAMES, false), []);
+  const tributaryPaths = useMemo(() => THAMES_TRIBUTARIES.map((t) => smoothPath(t, false)), []);
   const roadPaths = useMemo(
-    () =>
-      LONDON_ROADS.map((r) => ({
-        ...r,
-        d: lineToPath(densify(r.points, r.cls === "minor" ? 1 : 2, r.cls === "motorway" ? 0.003 : 0.006), false),
-      })),
+    () => LONDON_ROADS.map((r) => ({ ...r, d: smoothPath(r.points, false) })),
     []
   );
   const landmarkPoints = useMemo(() => {
