@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LONDON_BOUNDARY, THAMES, LONDON_ROADS, LANDMARKS, type LonLat } from "./blumeLondonMapData";
+import {
+  LONDON_BOUNDARY,
+  THAMES,
+  THAMES_TRIBUTARIES,
+  LONDON_ROADS,
+  LANDMARKS,
+  type LonLat,
+} from "./blumeLondonMapData";
 
 const WIDTH = 1000;
 const HEIGHT = 960;
@@ -13,6 +20,32 @@ function project(lon: number, lat: number): [number, number] {
   const x = ((lon - LON_MIN) / (LON_MAX - LON_MIN)) * WIDTH;
   const y = HEIGHT - ((lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * HEIGHT;
   return [x, y];
+}
+
+// Adds gentle, deterministic perpendicular wobble between each pair of
+// anchor points so hand-plotted roads/coastline read as real bending lines
+// rather than ruler-straight rays.
+function densify(points: LonLat[], segmentsPerLeg: number, jitter: number): LonLat[] {
+  const out: LonLat[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const [lon1, lat1] = points[i];
+    const [lon2, lat2] = points[i + 1];
+    out.push([lon1, lat1]);
+    const dx = lon2 - lon1;
+    const dy = lat2 - lat1;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    for (let s = 1; s < segmentsPerLeg; s++) {
+      const t = s / segmentsPerLeg;
+      const lon = lon1 + dx * t;
+      const lat = lat1 + dy * t;
+      const wobble = Math.sin((i * 3.17 + t) * 6.9) * jitter;
+      out.push([lon + nx * wobble, lat + ny * wobble]);
+    }
+  }
+  out.push(points[points.length - 1]);
+  return out;
 }
 
 function lineToPath(points: LonLat[], close: boolean): string {
@@ -35,8 +68,8 @@ function pointInPolygon(x: number, y: number, poly: [number, number][]): boolean
   return inside;
 }
 
-const ROAD_STROKE: Record<string, number> = { motorway: 2.6, ring: 1.7, primary: 1 };
-const ROAD_OPACITY: Record<string, number> = { motorway: 0.8, ring: 0.5, primary: 0.32 };
+const ROAD_STROKE: Record<string, number> = { motorway: 2.6, ring: 1.7, primary: 1, minor: 0.6 };
+const ROAD_OPACITY: Record<string, number> = { motorway: 0.8, ring: 0.5, primary: 0.34, minor: 0.22 };
 
 interface Ping {
   id: number;
@@ -51,14 +84,22 @@ interface Patrol {
 }
 
 export function BlumeWorldMap() {
-  const boundaryPath = useMemo(() => lineToPath(LONDON_BOUNDARY, true), []);
+  const boundaryPath = useMemo(() => lineToPath(densify(LONDON_BOUNDARY, 3, 0.006), true), []);
   const boundaryProjected = useMemo(
     () => LONDON_BOUNDARY.map(([lon, lat]) => project(lon, lat) as [number, number]),
     []
   );
-  const thamesPath = useMemo(() => lineToPath(THAMES, false), []);
+  const thamesPath = useMemo(() => lineToPath(densify(THAMES, 2, 0.003), false), []);
+  const tributaryPaths = useMemo(
+    () => THAMES_TRIBUTARIES.map((t) => lineToPath(densify(t, 2, 0.004), false)),
+    []
+  );
   const roadPaths = useMemo(
-    () => LONDON_ROADS.map((r) => ({ ...r, d: lineToPath(r.points, false) })),
+    () =>
+      LONDON_ROADS.map((r) => ({
+        ...r,
+        d: lineToPath(densify(r.points, r.cls === "minor" ? 1 : 2, r.cls === "motorway" ? 0.003 : 0.006), false),
+      })),
     []
   );
   const landmarkPoints = useMemo(() => {
@@ -70,10 +111,10 @@ export function BlumeWorldMap() {
       let labelY = y + 2.5;
       let tries = 0;
       while (
-        placedLabels.some((p) => Math.abs(p.x - x) < 150 && Math.abs(p.y - labelY) < 13) &&
+        placedLabels.some((p) => Math.abs(p.x - x) < 128 && Math.abs(p.y - labelY) < 12) &&
         tries < 8
       ) {
-        labelY += 13;
+        labelY += 12;
         tries++;
       }
       placedLabels.push({ x, y: labelY });
@@ -176,6 +217,9 @@ export function BlumeWorldMap() {
           strokeLinejoin="round"
         />
       ))}
+      {tributaryPaths.map((d, i) => (
+        <path key={`trib${i}`} d={d} stroke={MAP_COLOR} strokeWidth={1.1} opacity={0.4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      ))}
       <path d={thamesPath} stroke={MAP_COLOR} strokeWidth={2.8} opacity={0.75} fill="none" strokeLinecap="round" strokeLinejoin="round" />
       {patrols.map((p) => (
         <circle key={p.id} r={2.4} fill={MAP_COLOR}>
@@ -194,9 +238,9 @@ export function BlumeWorldMap() {
             y={l.labelY}
             textAnchor={l.anchor}
             fill={MAP_COLOR}
-            opacity={0.75}
-            fontSize={9}
-            letterSpacing={0.4}
+            opacity={0.72}
+            fontSize={8.5}
+            letterSpacing={0.3}
             style={{ textTransform: "uppercase", fontFamily: "inherit" }}
           >
             {l.name}
