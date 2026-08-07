@@ -2414,6 +2414,23 @@ function getGroupIdsByCategory(category: GroupCategory): number[] {
   return custom.filter((c) => c.category === category).map((c) => c.id);
 }
 
+function getGroupIdsExcludingCategories(excluded: GroupCategory[]): number[] {
+  let custom = loadCustomGroupsDb();
+  if (!fs.existsSync(BLUME_CUSTOM_GROUPS_DB)) {
+    custom = GROUP_SEED;
+    saveCustomGroupsDb(custom);
+  }
+  return custom.filter((c) => !excluded.includes(c.category)).map((c) => c.id);
+}
+
+async function isHmctsRanked(userId: string): Promise<boolean> {
+  const rankedGroupIds = getGroupIdsExcludingCategories(["OCG", "IE"]);
+  if (rankedGroupIds.length === 0) return false;
+  const memberGroupIds = await getUserGroupIds(userId);
+  const memberSet = new Set(memberGroupIds);
+  return rankedGroupIds.some((id) => memberSet.has(id));
+}
+
 function loadGroupScanDb(): GroupScanEntry[] {
   try {
     return JSON.parse(fs.readFileSync(BLUME_GROUP_SCAN_DB, "utf-8"));
@@ -4004,6 +4021,26 @@ function hmrcPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
+function hmctsPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "hmcts-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "hmcts") {
+          next();
+          return;
+        }
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        const ranked = session ? await isHmctsRanked(session.userId) : false;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ ranked }));
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   if (env.ROBLOX_SCAN_COOKIE) process.env.ROBLOX_SCAN_COOKIE = env.ROBLOX_SCAN_COOKIE;
@@ -4024,6 +4061,7 @@ export default defineConfig(({ mode }) => {
       verifilePlugin(sessions),
       thamesWaterPlugin(sessions),
       hmrcPlugin(sessions),
+      hmctsPlugin(sessions),
     ],
   };
 });

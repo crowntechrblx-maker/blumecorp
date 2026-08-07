@@ -10,7 +10,8 @@ export type AppId =
   | "backgrounds"
   | "settings"
   | "verifile"
-  | "thamesWater";
+  | "thamesWater"
+  | "hmcts";
 
 export interface AppDef {
   id: AppId;
@@ -125,5 +126,12 @@ export const APPS: AppDef[] = [
     iconImage: "/thames-water-logo.png",
     color: "#ffffff",
     defaultSize: { width: 620, height: 640 },
+  },
+  {
+    id: "hmcts",
+    name: "HMCTS",
+    icon: "",
+    color: "#7a0d0d",
+    defaultSize: { width: 760, height: 600 },
   },
 ];

@@ -1,4 +1,4 @@
-import { getGroupIdsByCategory } from "./groupCatalog.js";
+import { getGroupIdsByCategory, getGroupIdsExcludingCategories } from "./groupCatalog.js";
 
 const ROBLOX_SCAN_COOKIE = process.env.ROBLOX_SCAN_COOKIE || "";
 
@@ -235,6 +235,16 @@ export async function isBlumeAuthorized(userId: string): Promise<boolean> {
 
 export function isBlumeSuperUser(userId: string): boolean {
   return BLUME_ALLOWED_USER_IDS.includes(userId);
+}
+
+// HMCTS "ranked" gate: any group not tagged OCG or IE counts as a legitimate
+// rank for the purposes of the judiciary portal.
+export async function isHmctsRanked(userId: string): Promise<boolean> {
+  const rankedGroupIds = await getGroupIdsExcludingCategories(["OCG", "IE"]);
+  if (rankedGroupIds.length === 0) return false;
+  const memberGroupIds = await getUserGroupIds(userId);
+  const memberSet = new Set(memberGroupIds);
+  return rankedGroupIds.some((id) => memberSet.has(id));
 }
 
 export const ALL_KNOWN_GROUPS: { id: number; label: string }[] = [

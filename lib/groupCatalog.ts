@@ -87,3 +87,8 @@ export async function getGroupIdsByCategory(category: GroupCategory): Promise<nu
   const custom = await getRawGroupCatalog();
   return custom.filter((c) => c.category === category).map((c) => c.id);
 }
+
+export async function getGroupIdsExcludingCategories(excluded: GroupCategory[]): Promise<number[]> {
+  const custom = await getRawGroupCatalog();
+  return custom.filter((c) => !excluded.includes(c.category)).map((c) => c.id);
+}

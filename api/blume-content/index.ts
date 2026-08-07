@@ -9,6 +9,7 @@ import {
   resolveRobloxUserId,
   isRobloxGroupMember,
   getRobloxAvatarUrl,
+  isHmctsRanked,
 } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
@@ -87,6 +88,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const type = (req.query.type as string) || "report";
   const cookies = parseCookies(req);
   const session = decodeSession(cookies.wb_session);
+
+  if (type === "hmcts") {
+    const ranked = session ? await isHmctsRanked(session.userId) : false;
+    res.status(200).json({ ranked });
+    return;
+  }
 
   if (type === "verifile") {
     const canAccess = session ? await isVerifileAuthorized(session.userId) : false;
