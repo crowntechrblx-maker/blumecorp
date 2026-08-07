@@ -40,15 +40,6 @@ interface VerifilePunishment {
   createdAt: number;
 }
 
-interface ThamesWaterJob {
-  id: string;
-  title: string;
-  department: string;
-  description: string;
-  postedByUsername: string;
-  createdAt: number;
-}
-
 interface BlumeReport {
   id: string;
   title: string;
@@ -78,9 +69,23 @@ interface HmrcLogEntry {
   targetUsername: string;
   type: string;
   details: string;
+  charges?: string[];
   loggedByUserId: string;
   loggedByUsername: string;
   createdAt: number;
+}
+
+const HMRC_AUTO_CHARGES = ["Tax Evasion", "Money Laundering"];
+
+function hmrcAutoRiskLevel(chargeCount: number): string {
+  if (chargeCount > 6) return "High";
+  if (chargeCount > 3) return "Medium";
+  return "Low";
+}
+
+function formatHmrcTimestamp(ms: number): string {
+  const d = new Date(ms);
+  return `${d.toLocaleDateString("en-GB")}, ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 interface BlumeBlogPost {
@@ -1136,6 +1141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           targetUsername?: string;
           type?: string;
           details?: string;
+          charges?: string[];
         };
         const action = body.action || "";
 
@@ -1276,6 +1282,81 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return;
         }
 
+        if (action === "quickArrest") {
+          const rawUsername = (body.username || "").toString().trim();
+          const selectedCharges = (Array.isArray(body.charges) ? body.charges : []).filter((c) =>
+            HMRC_AUTO_CHARGES.includes(c)
+          );
+          if (!rawUsername) {
+            res.status(400).send("Missing username.");
+            return;
+          }
+          if (selectedCharges.length === 0) {
+            res.status(400).send("Select at least one charge.");
+            return;
+          }
+          const resolved = await resolveRobloxUserId(rawUsername);
+          if (!resolved) {
+            res.status(400).send(`Couldn't find a Roblox user matching "${rawUsername}".`);
+            return;
+          }
+
+          const cards = (await kv.get<HmrcCard[]>("hmrcCards")) || [];
+          let card = cards.find((c) => c.targetUserId === resolved.userId);
+          if (!card) {
+            card = {
+              id: crypto.randomBytes(12).toString("hex"),
+              targetUserId: resolved.userId,
+              targetUsername: resolved.username,
+              riskLevel: "Low",
+              riskNotes: "",
+              createdByUserId: session.userId,
+              createdByUsername: session.username,
+              createdAt: Date.now(),
+            };
+            cards.push(card);
+          }
+
+          const now = Date.now();
+          const entry: HmrcLogEntry = {
+            id: crypto.randomBytes(12).toString("hex"),
+            cardId: card.id,
+            targetUserId: card.targetUserId,
+            targetUsername: card.targetUsername,
+            type: "Arrest by HMRC",
+            details: `Arrested by ${session.username} for ${selectedCharges.join(", ")} at ${formatHmrcTimestamp(now)}`,
+            charges: selectedCharges,
+            loggedByUserId: session.userId,
+            loggedByUsername: session.username,
+            createdAt: now,
+          };
+          const logEntries = (await kv.get<HmrcLogEntry[]>("hmrcLogEntries")) || [];
+          logEntries.push(entry);
+          await kv.set("hmrcLogEntries", logEntries);
+
+          const chargeCount = logEntries
+            .filter((l) => l.cardId === card!.id)
+            .reduce((sum, l) => sum + (l.charges || []).filter((c) => HMRC_AUTO_CHARGES.includes(c)).length, 0);
+          card.riskLevel = hmrcAutoRiskLevel(chargeCount);
+          await kv.set("hmrcCards", cards);
+
+          await appendAuditLog({
+            type: "hmrc_quick_arrest_logged",
+            username: session.username,
+            detail: `Logged arrest for ${card.targetUsername}: ${selectedCharges.join(", ")}`,
+          });
+
+          const withAvatars = await Promise.all(
+            cards.map(async (c) => ({
+              ...c,
+              avatarUrl: await getRobloxAvatarUrl(c.targetUserId),
+              canDelete: isAdmin || c.createdByUserId === session.userId,
+            }))
+          );
+          res.status(200).json({ cards: withAvatars, cardId: card.id, entry: { ...entry, canDelete: true } });
+          return;
+        }
+
         res.status(400).send("Unknown action.");
       } catch (err) {
         res.status(500).send("Failed: " + (err as Error).message);
@@ -1346,112 +1427,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         username: session.username,
         detail: `Removed ${target.type} for ${target.targetUsername}`,
       });
-      res.status(200).json({ ok: true });
-      return;
-    }
-
-    res.status(405).send("Method not allowed");
-    return;
-  }
-
-  if (type === "thamesWater") {
-    const canManage = session
-      ? isBlumeSuperUser(session.userId) || session.username.toLowerCase() === "camhse"
-      : false;
-
-    if (req.method === "GET") {
-      const jobs = ((await kv.get<ThamesWaterJob[]>("thamesWaterJobs")) || []).sort(
-        (a, b) => b.createdAt - a.createdAt
-      );
-      const payloadJobs = canManage
-        ? jobs
-        : jobs.map(({ postedByUsername, createdAt, ...rest }) => rest);
-      res.status(200).json({ jobs: payloadJobs, canManage });
-      return;
-    }
-
-    if (req.method === "POST") {
-      if (!session) {
-        res.status(401).send("You must be signed in.");
-        return;
-      }
-      if (!canManage) {
-        res.status(403).send("You don't have access to manage Thames Water job openings.");
-        return;
-      }
-      try {
-        const body = req.body as { title?: string; department?: string; description?: string };
-        const title = (body.title || "").toString().trim();
-        const department = (body.department || "").toString().trim();
-        const description = (body.description || "").toString().trim();
-        if (!title) {
-          res.status(400).send("Title is required.");
-          return;
-        }
-        if (title.length > 120) {
-          res.status(400).send("Title is too long (max 120 characters).");
-          return;
-        }
-        if (department.length > 80) {
-          res.status(400).send("Department is too long (max 80 characters).");
-          return;
-        }
-        if (description.length > 2000) {
-          res.status(400).send("Description is too long (max 2000 characters).");
-          return;
-        }
-        if (containsBlockedLanguage(title) || containsBlockedLanguage(description)) {
-          res.status(400).send(MODERATION_REJECTION_MESSAGE);
-          return;
-        }
-        const entry: ThamesWaterJob = {
-          id: crypto.randomBytes(12).toString("hex"),
-          title,
-          department,
-          description,
-          postedByUsername: session.username,
-          createdAt: Date.now(),
-        };
-        const jobs = (await kv.get<ThamesWaterJob[]>("thamesWaterJobs")) || [];
-        jobs.push(entry);
-        await kv.set("thamesWaterJobs", jobs);
-        await appendAuditLog({
-          type: "thames_water_job_added",
-          username: session.username,
-          detail: `Posted job opening "${title}"`,
-        });
-        res.status(200).json(entry);
-      } catch (err) {
-        res.status(500).send("Failed: " + (err as Error).message);
-      }
-      return;
-    }
-
-    if (req.method === "DELETE") {
-      if (!session) {
-        res.status(401).send("You must be signed in.");
-        return;
-      }
-      if (!canManage) {
-        res.status(403).send("You don't have access to manage Thames Water job openings.");
-        return;
-      }
-      const id = (req.query.id as string) || "";
-      if (!id) {
-        res.status(400).send("Missing job id.");
-        return;
-      }
-      const jobs = (await kv.get<ThamesWaterJob[]>("thamesWaterJobs")) || [];
-      const target = jobs.find((j) => j.id === id);
-      const next = jobs.filter((j) => j.id !== id);
-      await kv.set("thamesWaterJobs", next);
-      if (target) {
-        await appendAuditLog({
-          type: "thames_water_job_removed",
-          username: session.username,
-          detail: `Removed job opening "${target.title}"`,
-        });
-      }
       res.status(200).json({ ok: true });
       return;
     }

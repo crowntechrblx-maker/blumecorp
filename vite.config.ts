@@ -861,10 +861,28 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
             res.end(JSON.stringify({ banned: true }));
             return;
           }
-          const myMessages = loadMessagesDb().filter(
-            (m) => m.toUsername.toLowerCase() === session.username.toLowerCase()
+          const myUnreadMessages = loadMessagesDb().filter(
+            (m) =>
+              !m.deleted &&
+              !m.readAt &&
+              m.toUsername.toLowerCase() === session.username.toLowerCase()
           );
-          const latest = myMessages.sort((a, b) => b.createdAt - a.createdAt)[0] || null;
+          const latest = myUnreadMessages.sort((a, b) => b.createdAt - a.createdAt)[0] || null;
+          let latestPendingFoiRequest = null;
+          if (await isHmctsEditor(session.userId)) {
+            const foiRequests = loadHmctsPrRequestsDb();
+            const latestPending = foiRequests
+              .filter((r) => r.status === "pending")
+              .sort((a, b) => b.createdAt - a.createdAt)[0];
+            latestPendingFoiRequest = latestPending
+              ? {
+                  id: latestPending.id,
+                  foiYear: latestPending.foiYear,
+                  foiNumber: latestPending.foiNumber,
+                  subjectUsername: latestPending.subjectUsername,
+                }
+              : null;
+          }
           res.end(
             JSON.stringify({
               ...session,
@@ -876,6 +894,7 @@ function robloxOAuthPlugin(env: Record<string, string>, sessions: Map<string, Ro
                     createdAt: latest.createdAt,
                   }
                 : null,
+              latestPendingFoiRequest,
             })
           );
           return;
@@ -1959,160 +1978,6 @@ function blumeBlogPlugin(sessions: Map<string, RobloxSession>): Plugin {
             username: session.username,
             detail: target?.title || id,
           });
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ ok: true }));
-          return;
-        }
-
-        next();
-      });
-    },
-  };
-}
-
-interface ThamesWaterJob {
-  id: string;
-  title: string;
-  department: string;
-  description: string;
-  postedByUsername: string;
-  createdAt: number;
-}
-
-const THAMES_WATER_JOBS_DB = path.resolve(process.cwd(), "thames-water-jobs-data.json");
-
-function loadThamesWaterJobsDb(): ThamesWaterJob[] {
-  try {
-    return JSON.parse(fs.readFileSync(THAMES_WATER_JOBS_DB, "utf-8"));
-  } catch {
-    return [];
-  }
-}
-
-function saveThamesWaterJobsDb(jobs: ThamesWaterJob[]) {
-  fs.writeFileSync(THAMES_WATER_JOBS_DB, JSON.stringify(jobs, null, 2));
-}
-
-function thamesWaterPlugin(sessions: Map<string, RobloxSession>): Plugin {
-  return {
-    name: "thames-water-api",
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        const url = new URL(req.url || "", "http://localhost");
-        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "thamesWater") {
-          next();
-          return;
-        }
-
-        const cookies = parseCookies(req);
-        const session = sessions.get(cookies.wb_session);
-        const canManage = session
-          ? isBlumeSuperUser(session.userId) || session.username.toLowerCase() === "camhse"
-          : false;
-
-        if (req.method === "GET") {
-          const jobs = loadThamesWaterJobsDb().sort((a, b) => b.createdAt - a.createdAt);
-          const payloadJobs = canManage
-            ? jobs
-            : jobs.map(({ postedByUsername, createdAt, ...rest }) => rest);
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ jobs: payloadJobs, canManage }));
-          return;
-        }
-
-        if (req.method === "POST") {
-          if (!session) {
-            res.statusCode = 401;
-            res.end("You must be signed in.");
-            return;
-          }
-          if (!canManage) {
-            res.statusCode = 403;
-            res.end("You don't have access to manage Thames Water job openings.");
-            return;
-          }
-          try {
-            const body = await readJsonBody(req);
-            const title = (body.title || "").toString().trim();
-            const department = (body.department || "").toString().trim();
-            const description = (body.description || "").toString().trim();
-            if (!title) {
-              res.statusCode = 400;
-              res.end("Title is required.");
-              return;
-            }
-            if (title.length > 120) {
-              res.statusCode = 400;
-              res.end("Title is too long (max 120 characters).");
-              return;
-            }
-            if (department.length > 80) {
-              res.statusCode = 400;
-              res.end("Department is too long (max 80 characters).");
-              return;
-            }
-            if (description.length > 2000) {
-              res.statusCode = 400;
-              res.end("Description is too long (max 2000 characters).");
-              return;
-            }
-            if (containsBlockedLanguage(title) || containsBlockedLanguage(description)) {
-              res.statusCode = 400;
-              res.end(MODERATION_REJECTION_MESSAGE);
-              return;
-            }
-            const entry: ThamesWaterJob = {
-              id: crypto.randomBytes(12).toString("hex"),
-              title,
-              department,
-              description,
-              postedByUsername: session.username,
-              createdAt: Date.now(),
-            };
-            const jobs = loadThamesWaterJobsDb();
-            jobs.push(entry);
-            saveThamesWaterJobsDb(jobs);
-            appendAuditLog({
-              type: "thames_water_job_added",
-              username: session.username,
-              detail: title,
-            });
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify(entry));
-          } catch (err) {
-            res.statusCode = 500;
-            res.end("Failed: " + (err as Error).message);
-          }
-          return;
-        }
-
-        if (req.method === "DELETE") {
-          if (!session) {
-            res.statusCode = 401;
-            res.end("You must be signed in.");
-            return;
-          }
-          if (!canManage) {
-            res.statusCode = 403;
-            res.end("You don't have access to manage Thames Water job openings.");
-            return;
-          }
-          const id = url.searchParams.get("id") || "";
-          if (!id) {
-            res.statusCode = 400;
-            res.end("Missing job id.");
-            return;
-          }
-          const target = loadThamesWaterJobsDb().find((j) => j.id === id);
-          const jobs = loadThamesWaterJobsDb().filter((j) => j.id !== id);
-          saveThamesWaterJobsDb(jobs);
-          if (target) {
-            appendAuditLog({
-              type: "thames_water_job_removed",
-              username: session.username,
-              detail: target.title,
-            });
-          }
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ ok: true }));
           return;
@@ -3826,9 +3691,23 @@ interface HmrcLogEntry {
   targetUsername: string;
   type: string;
   details: string;
+  charges?: string[];
   loggedByUserId: string;
   loggedByUsername: string;
   createdAt: number;
+}
+
+const HMRC_AUTO_CHARGES = ["Tax Evasion", "Money Laundering"];
+
+function hmrcAutoRiskLevel(chargeCount: number): string {
+  if (chargeCount > 6) return "High";
+  if (chargeCount > 3) return "Medium";
+  return "Low";
+}
+
+function formatHmrcTimestamp(ms: number): string {
+  const d = new Date(ms);
+  return `${d.toLocaleDateString("en-GB")}, ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 const HMRC_CARDS_DB = path.resolve(process.cwd(), "hmrc-cards-data.json");
@@ -4071,6 +3950,85 @@ function hmrcPlugin(sessions: Map<string, RobloxSession>): Plugin {
               });
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ ...entry, canDelete: true }));
+              return;
+            }
+
+            if (action === "quickArrest") {
+              const rawUsername = (body.username || "").toString().trim();
+              const selectedCharges: string[] = (Array.isArray(body.charges) ? body.charges : []).filter((c: string) =>
+                HMRC_AUTO_CHARGES.includes(c)
+              );
+              if (!rawUsername) {
+                res.statusCode = 400;
+                res.end("Missing username.");
+                return;
+              }
+              if (selectedCharges.length === 0) {
+                res.statusCode = 400;
+                res.end("Select at least one charge.");
+                return;
+              }
+              const resolved = await resolveRobloxUserId(rawUsername);
+              if (!resolved) {
+                res.statusCode = 400;
+                res.end(`Couldn't find a Roblox user matching "${rawUsername}".`);
+                return;
+              }
+
+              const cards = loadHmrcCardsDb();
+              let card = cards.find((c) => c.targetUserId === resolved.userId);
+              if (!card) {
+                card = {
+                  id: crypto.randomBytes(12).toString("hex"),
+                  targetUserId: resolved.userId,
+                  targetUsername: resolved.username,
+                  riskLevel: "Low",
+                  riskNotes: "",
+                  createdByUserId: session.userId,
+                  createdByUsername: session.username,
+                  createdAt: Date.now(),
+                };
+                cards.push(card);
+              }
+
+              const now = Date.now();
+              const entry: HmrcLogEntry = {
+                id: crypto.randomBytes(12).toString("hex"),
+                cardId: card.id,
+                targetUserId: card.targetUserId,
+                targetUsername: card.targetUsername,
+                type: "Arrest by HMRC",
+                details: `Arrested by ${session.username} for ${selectedCharges.join(", ")} at ${formatHmrcTimestamp(now)}`,
+                charges: selectedCharges,
+                loggedByUserId: session.userId,
+                loggedByUsername: session.username,
+                createdAt: now,
+              };
+              const logEntries = loadHmrcLogsDb();
+              logEntries.push(entry);
+              saveHmrcLogsDb(logEntries);
+
+              const chargeCount = logEntries
+                .filter((l) => l.cardId === card!.id)
+                .reduce((sum, l) => sum + (l.charges || []).filter((c) => HMRC_AUTO_CHARGES.includes(c)).length, 0);
+              card.riskLevel = hmrcAutoRiskLevel(chargeCount);
+              saveHmrcCardsDb(cards);
+
+              appendAuditLog({
+                type: "hmrc_quick_arrest_logged",
+                username: session.username,
+                detail: `Logged arrest for ${card.targetUsername}: ${selectedCharges.join(", ")}`,
+              });
+
+              const withAvatars = await Promise.all(
+                cards.map(async (c) => ({
+                  ...c,
+                  avatarUrl: await getRobloxAvatarUrl(c.targetUserId),
+                  canDelete: isAdmin || c.createdByUserId === session.userId,
+                }))
+              );
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ cards: withAvatars, cardId: card.id, entry: { ...entry, canDelete: true } }));
               return;
             }
 
@@ -5126,7 +5084,6 @@ export default defineConfig(({ mode }) => {
       adminPlugin(sessions),
       blumeSearchPlugin(sessions),
       verifilePlugin(sessions),
-      thamesWaterPlugin(sessions),
       hmrcPlugin(sessions),
       hmctsPlugin(sessions),
       hmctsChatPlugin(sessions),

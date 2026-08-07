@@ -13,6 +13,13 @@ export interface MessageNotification {
   fromUsername: string;
 }
 
+export interface FoiNotification {
+  id: string;
+  foiYear: number;
+  foiNumber: number;
+  subjectUsername: string;
+}
+
 interface AuthState {
   user: RobloxUser | null;
   loading: boolean;
@@ -22,6 +29,8 @@ interface AuthState {
   refresh: () => void;
   messageNotification: MessageNotification | null;
   clearMessageNotification: () => void;
+  foiNotification: FoiNotification | null;
+  clearFoiNotification: () => void;
 }
 
 const AuthContext = createContext<AuthState>({
@@ -33,6 +42,8 @@ const AuthContext = createContext<AuthState>({
   refresh: () => {},
   messageNotification: null,
   clearMessageNotification: () => {},
+  foiNotification: null,
+  clearFoiNotification: () => {},
 });
 
 const POLL_MS = 5000;
@@ -43,8 +54,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [banned, setBanned] = useState(false);
   const [gateRequired, setGateRequired] = useState(false);
   const [messageNotification, setMessageNotification] = useState<MessageNotification | null>(null);
+  const [foiNotification, setFoiNotification] = useState<FoiNotification | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastMessageIdRef = useRef<string | null | undefined>(undefined);
+  const lastFoiIdRef = useRef<string | null | undefined>(undefined);
 
   function applyMeResponse(data: any) {
     if (data && data.gateRequired) {
@@ -63,16 +76,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data);
 
     const latest = data?.latestIncomingMessage as { id: string; fromUsername: string } | null | undefined;
-    if (latest === undefined) return;
-    const latestId = latest ? latest.id : null;
-    if (lastMessageIdRef.current === undefined) {
-      lastMessageIdRef.current = latestId;
-      return;
+    if (latest !== undefined) {
+      const latestId = latest ? latest.id : null;
+      if (lastMessageIdRef.current === undefined) {
+        // First check since load (e.g. just logged on) — if there's an unread
+        // message waiting from while we were offline, surface it right away.
+        lastMessageIdRef.current = latestId;
+        if (latest) {
+          setMessageNotification({ id: latest.id, fromUsername: latest.fromUsername });
+        }
+      } else {
+        if (latestId && latestId !== lastMessageIdRef.current) {
+          setMessageNotification({ id: latest!.id, fromUsername: latest!.fromUsername });
+        }
+        lastMessageIdRef.current = latestId;
+      }
     }
-    if (latestId && latestId !== lastMessageIdRef.current) {
-      setMessageNotification({ id: latest!.id, fromUsername: latest!.fromUsername });
+
+    const latestFoi = data?.latestPendingFoiRequest as FoiNotification | null | undefined;
+    if (latestFoi !== undefined) {
+      const latestFoiId = latestFoi ? latestFoi.id : null;
+      if (lastFoiIdRef.current === undefined) {
+        // Same as messages — surface any pending FOI request that came in
+        // while this editor was offline as soon as they log on.
+        lastFoiIdRef.current = latestFoiId;
+        if (latestFoi) {
+          setFoiNotification(latestFoi);
+        }
+      } else {
+        if (latestFoiId && latestFoiId !== lastFoiIdRef.current) {
+          setFoiNotification(latestFoi!);
+        }
+        lastFoiIdRef.current = latestFoiId;
+      }
     }
-    lastMessageIdRef.current = latestId;
   }
 
   function refresh() {
@@ -101,6 +138,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMessageNotification(null);
   }
 
+  function clearFoiNotification() {
+    setFoiNotification(null);
+  }
+
   async function unlockGate(password: string): Promise<string | null> {
     const res = await fetch("/api/auth/me", {
       method: "POST",
@@ -125,6 +166,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refresh,
         messageNotification,
         clearMessageNotification,
+        foiNotification,
+        clearFoiNotification,
       }}
     >
       {children}

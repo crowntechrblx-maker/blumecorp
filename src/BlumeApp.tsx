@@ -27,6 +27,7 @@ interface BlumeBlogPost {
 
 const HMRC_RISK_LEVELS = ["Low", "Medium", "High"];
 const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud"];
+const HMRC_AUTO_CHARGE_OPTIONS = ["Tax Evasion", "Money Laundering"];
 
 interface HmrcCard {
   id: string;
@@ -631,6 +632,9 @@ export function BlumeApp({
   const [hmrcLoading, setHmrcLoading] = useState(true);
   const [hmrcNewUsername, setHmrcNewUsername] = useState("");
   const [hmrcAddingCard, setHmrcAddingCard] = useState(false);
+  const [hmrcArrestUsername, setHmrcArrestUsername] = useState("");
+  const [hmrcArrestCharges, setHmrcArrestCharges] = useState<string[]>([]);
+  const [hmrcLoggingArrest, setHmrcLoggingArrest] = useState(false);
   const { error: hmrcError, fading: hmrcFading, setError: setHmrcError } = useFadingError();
   const [hmrcSelectedCardId, setHmrcSelectedCardId] = useState<string | null>(null);
   const [hmrcRiskNotes, setHmrcRiskNotes] = useState("");
@@ -889,6 +893,42 @@ export function BlumeApp({
       setHmrcError("Couldn't open that case.");
     } finally {
       setHmrcAddingCard(false);
+    }
+  }
+
+  function toggleHmrcArrestCharge(charge: string) {
+    setHmrcArrestCharges((prev) =>
+      prev.includes(charge) ? prev.filter((c) => c !== charge) : [...prev, charge]
+    );
+  }
+
+  async function handleLogHmrcArrest() {
+    if (!hmrcArrestUsername.trim() || hmrcArrestCharges.length === 0) return;
+    setHmrcLoggingArrest(true);
+    setHmrcError(null);
+    try {
+      const res = await fetch("/api/blume-content?type=hmrc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "quickArrest",
+          username: hmrcArrestUsername.trim(),
+          charges: hmrcArrestCharges,
+        }),
+      });
+      if (!res.ok) {
+        setHmrcError(await res.text());
+        return;
+      }
+      const data = await res.json();
+      setHmrcCards(data.cards || []);
+      setHmrcArrestUsername("");
+      setHmrcArrestCharges([]);
+      if (hmrcSelectedCardId === data.cardId) await loadHmrcLogs(data.cardId);
+    } catch {
+      setHmrcError("Couldn't log that arrest.");
+    } finally {
+      setHmrcLoggingArrest(false);
     }
   }
 
@@ -2324,6 +2364,46 @@ export function BlumeApp({
                             onClick={handleAddHmrcCard}
                           >
                             {hmrcAddingCard ? "Opening…" : "Open case"}
+                          </button>
+                          {hmrcError && (
+                            <p className={`blume-error${hmrcFading ? " fading-out" : ""}`}>{hmrcError}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="blume-report-form-section">
+                      <button className="blume-report-form-toggle" onClick={() => togglePanel("hmrcArrestForm")}>
+                        <span>Log arrest</span>
+                        <span className="blume-panel-toggle-icon">
+                          {collapsedPanels.hmrcArrestForm ? "▸" : "▾"}
+                        </span>
+                      </button>
+                      {!collapsedPanels.hmrcArrestForm && (
+                        <div className="blume-report-form">
+                          <input
+                            placeholder="Roblox username or ID"
+                            value={hmrcArrestUsername}
+                            onChange={(e) => setHmrcArrestUsername(e.target.value)}
+                          />
+                          <div className="blume-hmrc-arrest-charges">
+                            {HMRC_AUTO_CHARGE_OPTIONS.map((charge) => (
+                              <label key={charge} className="blume-hmrc-arrest-charge">
+                                <input
+                                  type="checkbox"
+                                  checked={hmrcArrestCharges.includes(charge)}
+                                  onChange={() => toggleHmrcArrestCharge(charge)}
+                                />
+                                {charge}
+                              </label>
+                            ))}
+                          </div>
+                          <button
+                            className="blume-cta-btn"
+                            disabled={!hmrcArrestUsername.trim() || hmrcArrestCharges.length === 0 || hmrcLoggingArrest}
+                            onClick={handleLogHmrcArrest}
+                          >
+                            {hmrcLoggingArrest ? "Logging…" : "Log arrest"}
                           </button>
                           {hmrcError && (
                             <p className={`blume-error${hmrcFading ? " fading-out" : ""}`}>{hmrcError}</p>

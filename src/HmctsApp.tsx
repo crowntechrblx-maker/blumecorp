@@ -795,6 +795,7 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
   const [editError, setEditError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   function toggleExpanded(id: string) {
     setExpandedIds((prev) => {
@@ -1012,9 +1013,14 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
                       {c.photos.length > 0 && (
                         <div className="hmcts-bgsearch-photo-grid">
                           {c.photos.map((p, i) => (
-                            <a href={p.url} target="_blank" rel="noreferrer" key={i}>
+                            <button
+                              key={i}
+                              type="button"
+                              className="hmcts-case-photo-btn"
+                              onClick={() => setLightboxUrl(p.url)}
+                            >
                               <img src={p.url} alt={p.name} className="hmcts-case-photo" />
-                            </a>
+                            </button>
                           ))}
                         </div>
                       )}
@@ -1095,6 +1101,14 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
           </div>
         )}
       </div>
+      {lightboxUrl && (
+        <div className="hmcts-lightbox-backdrop" onClick={() => setLightboxUrl(null)}>
+          <img src={lightboxUrl} alt="" className="hmcts-lightbox-image" onClick={(e) => e.stopPropagation()} />
+          <button className="hmcts-lightbox-close" onClick={() => setLightboxUrl(null)}>
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }

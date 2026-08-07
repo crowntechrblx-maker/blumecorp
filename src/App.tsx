@@ -9,6 +9,7 @@ import { RobloxLogin, LOGIN_SEQUENCE_FLAG } from "./RobloxLogin";
 import { PasswordGate } from "./PasswordGate";
 import { LoginSequence } from "./LoginSequence";
 import { MessageToast } from "./MessageToast";
+import { FoiToast } from "./FoiToast";
 import "./App.css";
 
 type WindowsMap = Partial<Record<AppId, WindowState>>;
@@ -197,6 +198,7 @@ function App() {
   return (
     <div className="desktop-root" style={{ backgroundImage: `url(${wallpaperUrl})` }}>
       <MessageToast />
+      <FoiToast />
       <MenuBar activeAppName={activeAppName} username={user.username} />
 
       <div className="desktop-icons" style={{ top: topOffset, height: contentHeight }}>

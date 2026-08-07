@@ -3,7 +3,7 @@ import { useAuth } from "./AuthContext";
 
 const VISIBLE_MS = 6500;
 
-function playDing() {
+export function playDing() {
   try {
     const Ctx = window.AudioContext || (window as any).webkitAudioContext;
     const ctx = new Ctx();

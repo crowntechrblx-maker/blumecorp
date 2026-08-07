@@ -5,6 +5,7 @@ import { isBanned } from "../../lib/bans.js";
 import { isPlatformAdmin } from "../../lib/admins.js";
 import { checkGatePassword, isGateUnlocked, getGateToken, GATE_COOKIE_NAME } from "../../lib/gate.js";
 import { kv } from "../../lib/kv.js";
+import { isHmctsEditor } from "../../lib/roblox.js";
 
 interface MessageEntry {
   id: string;
@@ -12,6 +13,17 @@ interface MessageEntry {
   fromUsername: string;
   toUsername: string;
   text: string;
+  createdAt: number;
+  deleted?: boolean;
+  readAt?: number;
+}
+
+interface HmctsPublicRecordsRequest {
+  id: string;
+  foiYear: number;
+  foiNumber: number;
+  subjectUsername: string;
+  status: "pending" | "replied";
   createdAt: number;
 }
 
@@ -49,10 +61,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const messages = (await kv.get<MessageEntry[]>("messages")) || [];
-  const myMessages = messages.filter(
-    (m) => m.toUsername.toLowerCase() === session.username.toLowerCase()
+  const myUnreadMessages = messages.filter(
+    (m) =>
+      !m.deleted &&
+      !m.readAt &&
+      m.toUsername.toLowerCase() === session.username.toLowerCase()
   );
-  const latest = myMessages.sort((a, b) => b.createdAt - a.createdAt)[0] || null;
+  const latest = myUnreadMessages.sort((a, b) => b.createdAt - a.createdAt)[0] || null;
+
+  let latestPendingFoiRequest: { id: string; foiYear: number; foiNumber: number; subjectUsername: string } | null = null;
+  if (await isHmctsEditor(session.userId)) {
+    const foiRequests = (await kv.get<HmctsPublicRecordsRequest[]>("hmctsPublicRecordsRequests")) || [];
+    const latestPending = foiRequests
+      .filter((r) => r.status === "pending")
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+    latestPendingFoiRequest = latestPending
+      ? {
+          id: latestPending.id,
+          foiYear: latestPending.foiYear,
+          foiNumber: latestPending.foiNumber,
+          subjectUsername: latestPending.subjectUsername,
+        }
+      : null;
+  }
 
   res.status(200).json({
     ...session,
@@ -60,5 +91,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     latestIncomingMessage: latest
       ? { id: latest.id, fromUsername: latest.fromUsername, createdAt: latest.createdAt }
       : null,
+    latestPendingFoiRequest,
   });
 }

@@ -7,7 +7,6 @@
   background-position: center;
   background-repeat: no-repeat;
   overflow: hidden;
-  user-select: none;
 }
 
 .message-toast {
@@ -38,6 +37,9 @@
 }
 .message-toast-icon {
   font-size: 16px;
+}
+.foi-toast {
+  top: 96px;
 }
 
 .menubar {
@@ -105,6 +107,7 @@
   padding: 6px;
   border-radius: 8px;
   box-sizing: border-box;
+  user-select: none;
 }
 .desktop-icon:hover,
 .desktop-icon:focus {
@@ -202,6 +205,7 @@
   gap: 8px;
   cursor: grab;
   flex-shrink: 0;
+  user-select: none;
 }
 .traffic-lights {
   display: flex;
@@ -2234,6 +2238,19 @@
 .blume-hmrc-risk-select-wrap {
   display: inline-flex;
   flex-shrink: 0;
+}
+.blume-hmrc-arrest-charges {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.blume-hmrc-arrest-charge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: inherit;
+  cursor: pointer;
 }
 .blume-hmrc-risk-select {
   width: 76px;
@@ -4697,208 +4714,6 @@
   padding: 4px 0;
 }
 
-.thames-app {
-  --thames-blue: #009ede;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 18px;
-  background: #ffffff;
-  color: #14212b;
-  font-size: 13px;
-  overflow-y: auto;
-}
-.thames-hero {
-  display: flex;
-  justify-content: center;
-  padding: 6px 0 2px;
-}
-.thames-logo {
-  width: 96px;
-  height: 96px;
-  object-fit: contain;
-}
-.thames-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.thames-section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.thames-section-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--thames-blue);
-}
-.thames-service-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-}
-.thames-service-card {
-  background: #f4fbff;
-  border: 1px solid #d3edf9;
-  border-radius: 8px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.thames-service-name {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #14212b;
-}
-.thames-service-desc {
-  margin: 0;
-  font-size: 11.5px;
-  color: #526674;
-  line-height: 1.4;
-}
-.thames-btn {
-  background: var(--thames-blue);
-  border: none;
-  border-radius: 6px;
-  padding: 8px 16px;
-  color: #ffffff;
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.thames-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.thames-btn-small {
-  padding: 6px 12px;
-  font-size: 11.5px;
-}
-.thames-add-job-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: #f4fbff;
-  border: 1px solid #d3edf9;
-  border-radius: 8px;
-  padding: 12px;
-}
-.thames-input {
-  background: #ffffff;
-  border: 1px solid #cfd8dd;
-  border-radius: 6px;
-  padding: 8px 10px;
-  color: #14212b;
-  font-size: 12.5px;
-}
-.thames-input:focus,
-.thames-textarea:focus {
-  outline: none;
-  border-color: var(--thames-blue);
-}
-.thames-textarea {
-  background: #ffffff;
-  border: 1px solid #cfd8dd;
-  border-radius: 6px;
-  padding: 8px 10px;
-  color: #14212b;
-  font-size: 12.5px;
-  font-family: inherit;
-  min-height: 70px;
-  resize: vertical;
-}
-.thames-error {
-  color: #d64545;
-  font-size: 11.5px;
-  margin: 0;
-}
-.thames-muted {
-  color: #7a8a94;
-  font-size: 12px;
-  margin: 0;
-}
-.thames-job-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.thames-job-card {
-  background: #f4fbff;
-  border: 1px solid #d3edf9;
-  border-radius: 8px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.thames-job-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.thames-job-title {
-  font-weight: 700;
-  font-size: 12.5px;
-  color: #14212b;
-}
-.thames-job-department {
-  font-size: 10.5px;
-  color: #ffffff;
-  background: var(--thames-blue);
-  border-radius: 20px;
-  padding: 2px 8px;
-}
-.thames-job-desc {
-  margin: 0;
-  font-size: 12px;
-  color: #33454f;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.thames-job-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 10.5px;
-  color: #7a8a94;
-}
-.thames-remove-btn {
-  background: transparent;
-  border: 1px solid #cfd8dd;
-  border-radius: 5px;
-  padding: 3px 8px;
-  color: #7a8a94;
-  font-size: 10.5px;
-  cursor: pointer;
-}
-.thames-remove-btn:hover:not(:disabled) {
-  border-color: var(--thames-blue);
-  color: var(--thames-blue);
-}
-.thames-contact-section {
-  align-items: flex-start;
-}
-.thames-contact-btn {
-  align-self: flex-start;
-}
-.thames-coming-soon {
-  font-style: italic;
-}
-.thames-footer {
-  margin-top: auto;
-  padding-top: 10px;
-  border-top: 1px solid #e4ecf0;
-}
-.thames-footer-note {
-  font-size: 10.5px;
-  color: #7a8a94;
-}
-
 .hmcts-app {
   height: 100%;
   font-family: inherit;
@@ -5780,6 +5595,47 @@
   object-fit: cover;
   border-radius: 3px;
   border: 1px solid #e1dfdd;
+}
+.hmcts-case-photo-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  line-height: 0;
+}
+.hmcts-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.hmcts-lightbox-image {
+  max-width: 88vw;
+  max-height: 88vh;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+.hmcts-lightbox-close {
+  position: fixed;
+  top: 18px;
+  right: 22px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+}
+.hmcts-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.22);
 }
 .hmcts-case-file-list {
   display: flex;

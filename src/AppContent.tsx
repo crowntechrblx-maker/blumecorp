@@ -9,7 +9,6 @@ import { SettingsApp } from "./SettingsApp";
 import { PsRollsApp } from "./PsRollsApp";
 import { SwiftCorporateApp } from "./SwiftCorporateApp";
 import { VerifileApp } from "./VerifileApp";
-import { ThamesWaterApp } from "./ThamesWaterApp";
 import { HmctsApp } from "./HmctsApp";
 
 const TFL_STATIONS = [
@@ -175,8 +174,6 @@ export function AppContent({
       return <SettingsApp />;
     case "verifile":
       return <VerifileApp username={username} />;
-    case "thamesWater":
-      return <ThamesWaterApp username={username} />;
     case "hmcts":
       return <HmctsApp />;
     default:
