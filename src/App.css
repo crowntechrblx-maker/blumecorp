@@ -3279,8 +3279,25 @@
   align-items: flex-end;
   gap: 6px;
 }
+.bubble-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
 .bubble-text {
   white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubble-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.bubble-attachment {
+  font-size: 12px;
+  color: inherit;
+  text-decoration: underline;
   word-break: break-word;
 }
 .bubble-tick {
@@ -5676,6 +5693,43 @@
   font-size: 12px;
   color: #605e5c;
   background: #faf9f8;
+}
+.hmcts-foi-letter {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #c8c6c4;
+  border-radius: 4px;
+  background: #fff;
+  overflow: hidden;
+}
+.hmcts-foi-letter-fixed {
+  margin: 0;
+  padding: 10px 12px;
+  background: #f3f2f1;
+  color: #605e5c;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  user-select: none;
+}
+.hmcts-foi-letter-body {
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 12px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  min-height: 140px;
+  overflow: hidden;
+}
+.hmcts-foi-letter-sent {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
+  background: #faf9f8;
+  border: 1px solid #e1dfdd;
+  border-radius: 4px;
+  padding: 12px;
 }
 .hmcts-case-visibility {
   font-size: 10.5px;

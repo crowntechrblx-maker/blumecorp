@@ -105,6 +105,8 @@ interface HmctsMessage {
 
 interface HmctsPublicRecordsRequest {
   id: string;
+  foiYear: number;
+  foiNumber: number;
   subjectUsername: string;
   subjectUserId: string;
   requestedInfo: string;
@@ -113,6 +115,7 @@ interface HmctsPublicRecordsRequest {
   requesterGroups: { id: number; name: string; category: string }[];
   status: "pending" | "replied";
   reply?: string;
+  replyAttachments?: { name: string; url: string }[];
   repliedByUsername?: string;
   repliedAt?: number;
   createdAt: number;
@@ -645,6 +648,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         requestedInfo?: string;
         id?: string;
         reply?: string;
+        attachments?: { name?: string; dataUrl?: string }[];
       };
       const action = body.action || "create";
 
@@ -653,46 +657,90 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(403).send("Only Ministry of Justice, Crown Prosecution Service, and Home Office can reply.");
           return;
         }
-        const id = (body.id || "").toString().trim();
-        const reply = (body.reply || "").toString().trim();
-        if (!reply) {
-          res.status(400).send("Reply can't be empty.");
+        try {
+          const id = (body.id || "").toString().trim();
+          const reply = (body.reply || "").toString().trim();
+          if (!reply) {
+            res.status(400).send("Reply can't be empty.");
+            return;
+          }
+          if (reply.length > 6000) {
+            res.status(400).send("Reply is too long (max 6000 characters).");
+            return;
+          }
+          if (containsBlockedLanguage(reply)) {
+            res.status(400).send(MODERATION_REJECTION_MESSAGE);
+            return;
+          }
+          const all = (await kv.get<HmctsPublicRecordsRequest[]>("hmctsPublicRecordsRequests")) || [];
+          const idx = all.findIndex((r) => r.id === id);
+          if (idx === -1) {
+            res.status(404).send("Request not found.");
+            return;
+          }
+          const target = all[idx];
+
+          const rawAttachments = Array.isArray(body.attachments) ? body.attachments.slice(0, 5) : [];
+          const replyAttachments: { name: string; url: string }[] = [];
+          for (const f of rawAttachments) {
+            const parsed = parseAnyDataUrl(f.dataUrl || "");
+            if (!parsed) continue;
+            if (parsed.buffer.length > HMCTS_CASE_MAX_ATTACHMENT_BYTES) {
+              res.status(400).send("An attachment is too large (max 4MB each).");
+              return;
+            }
+            const fid = crypto.randomBytes(10).toString("hex");
+            const safeName = (f.name || "file").toString().replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+            const blob = await put(`hmcts-foi/${fid}-${safeName}`, parsed.buffer, {
+              access: "public",
+              contentType: parsed.mime,
+            });
+            replyAttachments.push({ name: safeName, url: blob.url });
+          }
+
+          const updated: HmctsPublicRecordsRequest = {
+            ...target,
+            reply,
+            replyAttachments,
+            status: "replied",
+            repliedByUsername: session.username,
+            repliedAt: Date.now(),
+          };
+          all[idx] = updated;
+          await kv.set("hmctsPublicRecordsRequests", all);
+
+          const reference = `FOI${updated.foiYear}/${updated.foiNumber}`;
+          await sendSystemMessage(
+            updated.requesterUsername,
+            `eJudiciary has replied to your Public Records request regarding ${updated.subjectUsername} (Reference: ${reference}):\n\n${reply}`,
+            replyAttachments
+          );
+
+          const notifyEntry: HmctsMessage = {
+            id: crypto.randomBytes(12).toString("hex"),
+            fromUserId: "system",
+            fromUsername: "eJudiciary",
+            departments: [],
+            text: `${session.username} Replied to ${updated.requesterUsername}'s FOIA Request, ${reference}`,
+            createdAt: Date.now(),
+            kind: "publicRecordsRequest",
+            requestId: updated.id,
+          };
+          const chatAllReply = (await kv.get<HmctsMessage[]>("hmctsMessages")) || [];
+          const chatNextReply = [...chatAllReply, notifyEntry].slice(-500);
+          await kv.set("hmctsMessages", chatNextReply);
+
+          await appendAuditLog({
+            type: "hmcts_public_records_request_replied",
+            username: session.username,
+            detail: `Replied to Public Records request from ${updated.requesterUsername} re. ${updated.subjectUsername} (${reference})`,
+          });
+          res.status(200).json(updated);
+          return;
+        } catch (err) {
+          res.status(500).send("Failed to send reply: " + (err as Error).message);
           return;
         }
-        if (reply.length > 2000) {
-          res.status(400).send("Reply is too long (max 2000 characters).");
-          return;
-        }
-        if (containsBlockedLanguage(reply)) {
-          res.status(400).send(MODERATION_REJECTION_MESSAGE);
-          return;
-        }
-        const all = (await kv.get<HmctsPublicRecordsRequest[]>("hmctsPublicRecordsRequests")) || [];
-        const idx = all.findIndex((r) => r.id === id);
-        if (idx === -1) {
-          res.status(404).send("Request not found.");
-          return;
-        }
-        const updated: HmctsPublicRecordsRequest = {
-          ...all[idx],
-          reply,
-          status: "replied",
-          repliedByUsername: session.username,
-          repliedAt: Date.now(),
-        };
-        all[idx] = updated;
-        await kv.set("hmctsPublicRecordsRequests", all);
-        await sendSystemMessage(
-          updated.requesterUsername,
-          `eJudiciary has replied to your Public Records request regarding ${updated.subjectUsername}: "${reply}"`
-        );
-        await appendAuditLog({
-          type: "hmcts_public_records_request_replied",
-          username: session.username,
-          detail: `Replied to Public Records request from ${updated.requesterUsername} re. ${updated.subjectUsername}`,
-        });
-        res.status(200).json(updated);
-        return;
       }
 
       const usernameQuery = (body.username || "").toString().trim();
@@ -719,8 +767,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .filter((id) => id in catalog)
         .map((id) => ({ id, name: catalog[id].name, category: catalog[id].category }));
 
+      const all = (await kv.get<HmctsPublicRecordsRequest[]>("hmctsPublicRecordsRequests")) || [];
+      const foiYear = new Date().getFullYear();
+      const foiNumber = all.filter((r) => r.foiYear === foiYear).length + 1;
+
       const entry: HmctsPublicRecordsRequest = {
         id: crypto.randomBytes(12).toString("hex"),
+        foiYear,
+        foiNumber,
         subjectUsername: resolved.username,
         subjectUserId: resolved.userId,
         requestedInfo,
@@ -730,7 +784,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         status: "pending",
         createdAt: Date.now(),
       };
-      const all = (await kv.get<HmctsPublicRecordsRequest[]>("hmctsPublicRecordsRequests")) || [];
       all.push(entry);
       await kv.set("hmctsPublicRecordsRequests", all);
 
@@ -739,7 +792,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         fromUserId: "system",
         fromUsername: "eJudiciary",
         departments: [],
-        text: `New Public Records Request from ${session.username} regarding ${resolved.username}.`,
+        text: `New Public Records Request from ${session.username} regarding ${resolved.username} (FOI${foiYear}/${foiNumber}).`,
         createdAt: Date.now(),
         kind: "publicRecordsRequest",
         requestId: entry.id,

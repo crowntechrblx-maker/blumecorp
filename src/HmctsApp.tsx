@@ -1376,8 +1376,15 @@ interface HmctsPrRequesterGroup {
   category: string;
 }
 
+interface HmctsFoiAttachment {
+  name: string;
+  url: string;
+}
+
 interface HmctsPublicRecordsRequest {
   id: string;
+  foiYear: number;
+  foiNumber: number;
   subjectUsername: string;
   subjectUserId: string;
   requestedInfo: string;
@@ -1386,9 +1393,22 @@ interface HmctsPublicRecordsRequest {
   requesterGroups: HmctsPrRequesterGroup[];
   status: "pending" | "replied";
   reply?: string;
+  replyAttachments?: HmctsFoiAttachment[];
   repliedByUsername?: string;
   repliedAt?: number;
   createdAt: number;
+}
+
+function foiReference(r: HmctsPublicRecordsRequest): string {
+  return `FOI${r.foiYear}/${r.foiNumber}`;
+}
+
+function foiLetterHeader(r: HmctsPublicRecordsRequest): string {
+  return `Dear ${r.requesterUsername}\nReference: ${foiReference(r)}\nOur response to your above information request is attached below.`;
+}
+
+function foiLetterFooter(username: string): string {
+  return `Kind Regards, ${username || "…"}`;
 }
 
 function PublicRecordsRequestsPanel({
@@ -1401,7 +1421,9 @@ function PublicRecordsRequestsPanel({
   const [requests, setRequests] = useState<HmctsPublicRecordsRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentUsername, setCurrentUsername] = useState("");
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [replyFiles, setReplyFiles] = useState<Record<string, File[]>>({});
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [replyErrors, setReplyErrors] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -1415,6 +1437,11 @@ function PublicRecordsRequestsPanel({
       .then((data) => setRequests(data.requests || []))
       .catch((e) => setError(e.message || "Couldn't load requests."))
       .finally(() => setLoading(false));
+
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => setCurrentUsername(data?.username || ""))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1423,16 +1450,27 @@ function PublicRecordsRequestsPanel({
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [focusRequestId, loading]);
 
+  function autoGrow(el: HTMLTextAreaElement | null) {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
   async function handleReply(r: HmctsPublicRecordsRequest) {
-    const reply = (replyDrafts[r.id] || "").trim();
-    if (!reply) return;
+    const body = (replyDrafts[r.id] || "").trim();
+    if (!body) return;
     setSubmittingId(r.id);
     setReplyErrors((prev) => ({ ...prev, [r.id]: "" }));
     try {
+      const files = replyFiles[r.id] || [];
+      const attachments = await Promise.all(
+        files.map(async (f) => ({ name: f.name, dataUrl: await fileToDataUrl(f) }))
+      );
+      const fullReply = `${foiLetterHeader(r)}\n\n${body}\n\n${foiLetterFooter(currentUsername)}`;
       const res = await fetch("/api/blume-content?type=hmctsPublicRecordsRequests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reply", id: r.id, reply }),
+        body: JSON.stringify({ action: "reply", id: r.id, reply: fullReply, attachments }),
       });
       if (!res.ok) {
         const message = await res.text();
@@ -1449,7 +1487,9 @@ function PublicRecordsRequestsPanel({
   }
 
   function handleCopy(r: HmctsPublicRecordsRequest) {
-    const text = `eJudiciary has replied to your Public Records request regarding ${r.subjectUsername}. Check your Westbridge OS messages for the response.`;
+    const text = `eJudiciary has replied to your Public Records request regarding ${r.subjectUsername} (Reference: ${foiReference(
+      r
+    )}). Check your Westbridge OS messages for the response.`;
     navigator.clipboard?.writeText(text).catch(() => {});
     setCopiedId(r.id);
     window.setTimeout(() => setCopiedId((c) => (c === r.id ? null : c)), 1500);
@@ -1461,7 +1501,7 @@ function PublicRecordsRequestsPanel({
         ← Back
       </button>
       <div className="hmcts-bgsearch-card">
-        <h4 className="hmcts-bgsearch-title">Public Records Requests</h4>
+        <h4 className="hmcts-bgsearch-title">FOI Requests</h4>
         {loading && <p className="hmcts-bgsearch-muted">Loading…</p>}
         {error && <p className="hmcts-bgsearch-error">{error}</p>}
         {!loading && !error && requests.length === 0 && <p className="hmcts-bgsearch-muted">No requests yet.</p>}
@@ -1475,12 +1515,16 @@ function PublicRecordsRequestsPanel({
               <div className="hmcts-case-card-head" style={{ cursor: "default" }}>
                 <span className="hmcts-case-card-title">
                   <strong>Re: {r.subjectUsername}</strong>
+                  <span className="hmcts-bgsearch-muted"> · {foiReference(r)}</span>
                 </span>
                 <span className={`hmcts-case-visibility${r.status === "replied" ? " hmcts-case-visibility-public" : ""}`}>
                   {r.status === "replied" ? "Replied" : "Pending"}
                 </span>
               </div>
               <div className="hmcts-case-card-body">
+                <span className="hmcts-bgsearch-label" style={{ marginBottom: 0 }}>
+                  Request
+                </span>
                 <p>{r.requestedInfo}</p>
                 <p className="hmcts-bgsearch-muted">
                   Requested by {r.requesterUsername} · {formatDateTimeNoSeconds(r.createdAt)}
@@ -1494,35 +1538,69 @@ function PublicRecordsRequestsPanel({
                     ))}
                   </div>
                 )}
+
+                <div className="hmcts-case-divider" />
+
+                <span className="hmcts-bgsearch-label" style={{ marginBottom: 0 }}>
+                  Response
+                </span>
                 {r.status === "pending" ? (
                   <>
-                    <textarea
-                      placeholder="Write a reply…"
-                      value={replyDrafts[r.id] || ""}
-                      onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
-                      rows={3}
-                    />
+                    <div className="hmcts-foi-letter">
+                      <p className="hmcts-foi-letter-fixed">{foiLetterHeader(r)}</p>
+                      <textarea
+                        className="hmcts-foi-letter-body"
+                        placeholder="Write the response…"
+                        value={replyDrafts[r.id] || ""}
+                        onChange={(e) => {
+                          setReplyDrafts((prev) => ({ ...prev, [r.id]: e.target.value }));
+                          autoGrow(e.target);
+                        }}
+                        ref={autoGrow}
+                        rows={8}
+                      />
+                      <p className="hmcts-foi-letter-fixed">{foiLetterFooter(currentUsername)}</p>
+                    </div>
+                    <label className="hmcts-case-file-label">
+                      Attach files (optional, up to 5)
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) =>
+                          setReplyFiles((prev) => ({ ...prev, [r.id]: Array.from(e.target.files || []).slice(0, 5) }))
+                        }
+                      />
+                    </label>
                     {replyErrors[r.id] && <p className="hmcts-bgsearch-error">{replyErrors[r.id]}</p>}
                     <button
                       className="hmcts-bgsearch-btn"
                       disabled={!(replyDrafts[r.id] || "").trim() || submittingId === r.id}
                       onClick={() => handleReply(r)}
                     >
-                      {submittingId === r.id ? "Sending…" : "Send reply"}
+                      {submittingId === r.id ? "Sending…" : "Send response"}
                     </button>
                   </>
                 ) : (
                   <>
-                    <p>
-                      <strong>Reply:</strong> {r.reply}
-                    </p>
+                    <p className="hmcts-foi-letter-sent">{r.reply}</p>
+                    {r.replyAttachments && r.replyAttachments.length > 0 && (
+                      <div className="hmcts-case-file-list">
+                        {r.replyAttachments.map((a, i) => (
+                          <a href={a.url} target="_blank" rel="noreferrer" key={i}>
+                            {a.name}
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     <p className="hmcts-bgsearch-muted">
                       Replied by {r.repliedByUsername} · {r.repliedAt ? formatDateTimeNoSeconds(r.repliedAt) : ""}
                     </p>
                     <div className="hmcts-pr-copy-box">
                       <input
                         readOnly
-                        value={`eJudiciary has replied to your Public Records request regarding ${r.subjectUsername}. Check your Westbridge OS messages for the response.`}
+                        value={`eJudiciary has replied to your Public Records request regarding ${r.subjectUsername} (Reference: ${foiReference(
+                          r
+                        )}). Check your Westbridge OS messages for the response.`}
                       />
                       <button className="hmcts-bgsearch-link-btn" onClick={() => handleCopy(r)}>
                         {copiedId === r.id ? "Copied" : "Copy"}

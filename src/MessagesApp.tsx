@@ -14,6 +14,7 @@ interface Message {
   text: string;
   createdAt: number;
   isMine: boolean;
+  attachments?: { name: string; url: string }[];
 }
 
 export function MessagesApp({
@@ -173,7 +174,18 @@ export function MessagesApp({
               <div className="message-thread" ref={threadRef}>
                 {messages.map((m) => (
                   <div key={m.id} className={`bubble ${m.isMine ? "outgoing" : "incoming"}`}>
-                    <span className="bubble-text">{m.text}</span>
+                    <div className="bubble-content">
+                      <span className="bubble-text">{m.text}</span>
+                      {m.attachments && m.attachments.length > 0 && (
+                        <div className="bubble-attachments">
+                          {m.attachments.map((a, i) => (
+                            <a href={a.url} target="_blank" rel="noreferrer" key={i} className="bubble-attachment">
+                              📎 {a.name}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     {m.isMine && (
                       <span className="bubble-tick" title="Delivered">
                         ✓

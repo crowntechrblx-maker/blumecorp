@@ -24,6 +24,7 @@ interface MessageEntry {
   deleted?: boolean;
   deletedAt?: number;
   readAt?: number;
+  attachments?: { name: string; url: string }[];
 }
 
 function conversationKey(a: string, b: string): string {
@@ -90,6 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         text: m.text,
         createdAt: m.createdAt,
         isMine: m.fromUsername.toLowerCase() === session.username.toLowerCase(),
+        ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
       }))
     );
     return;

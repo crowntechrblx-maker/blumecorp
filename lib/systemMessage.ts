@@ -19,6 +19,7 @@ interface SystemMessageEntry {
   toUsername: string;
   text: string;
   createdAt: number;
+  attachments?: { name: string; url: string }[];
 }
 
 function conversationKey(a: string, b: string): string {
@@ -28,7 +29,11 @@ function conversationKey(a: string, b: string): string {
 // Pushes a DM into the shared "messages" KV list as if sent by the platform
 // itself, and keeps a synthetic "eJudiciary" entry fresh in the known-users
 // roster so the recipient sees it in their Messages sidebar.
-export async function sendSystemMessage(toUsername: string, text: string): Promise<void> {
+export async function sendSystemMessage(
+  toUsername: string,
+  text: string,
+  attachments?: { name: string; url: string }[]
+): Promise<void> {
   const entry: SystemMessageEntry = {
     id: crypto.randomBytes(12).toString("hex"),
     conversationKey: conversationKey(SYSTEM_SENDER_USERNAME, toUsername),
@@ -36,6 +41,7 @@ export async function sendSystemMessage(toUsername: string, text: string): Promi
     toUsername,
     text,
     createdAt: Date.now(),
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
   };
   const all = (await kv.get<SystemMessageEntry[]>("messages")) || [];
   all.push(entry);

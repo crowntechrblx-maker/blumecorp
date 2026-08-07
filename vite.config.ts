@@ -51,6 +51,7 @@ interface MessageEntry {
   deleted?: boolean;
   deletedAt?: number;
   readAt?: number;
+  attachments?: { name: string; url: string }[];
 }
 
 function conversationKey(a: string, b: string): string {
@@ -1423,6 +1424,7 @@ function messagesPlugin(sessions: Map<string, RobloxSession>): Plugin {
                 text: m.text,
                 createdAt: m.createdAt,
                 isMine: m.fromUsername.toLowerCase() === session.username.toLowerCase(),
+                ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
               }))
             )
           );
@@ -4187,6 +4189,8 @@ interface HmctsMessage {
 }
 interface HmctsPublicRecordsRequest {
   id: string;
+  foiYear: number;
+  foiNumber: number;
   subjectUsername: string;
   subjectUserId: string;
   requestedInfo: string;
@@ -4195,6 +4199,7 @@ interface HmctsPublicRecordsRequest {
   requesterGroups: { id: number; name: string; category: string }[];
   status: "pending" | "replied";
   reply?: string;
+  replyAttachments?: { name: string; url: string }[];
   repliedByUsername?: string;
   repliedAt?: number;
   createdAt: number;
@@ -4229,6 +4234,7 @@ const HMCTS_CASES_DB = path.resolve(process.cwd(), "hmcts-cases-data.json");
 const HMCTS_LRR_DB = path.resolve(process.cwd(), "hmcts-lrr-data.json");
 const HMCTS_PR_REQUESTS_DB = path.resolve(process.cwd(), "hmcts-pr-requests-data.json");
 const HMCTS_CASE_DIR = path.resolve(process.cwd(), "public", "hmcts-cases", "uploads");
+const HMCTS_FOI_DIR = path.resolve(process.cwd(), "public", "hmcts-foi", "uploads");
 const HMCTS_CASE_MAX_PHOTOS = 4;
 const HMCTS_CASE_MAX_FILES = 3;
 const HMCTS_CASE_MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
@@ -4287,7 +4293,11 @@ const SYSTEM_SENDER_USER_ID = "system-ejudiciary";
 // Dev-server mirror of lib/systemMessage.ts's sendSystemMessage — pushes a DM
 // into the shared messages file as sender "eJudiciary" and keeps a synthetic
 // known-user entry fresh so it shows up in the recipient's Messages sidebar.
-function sendSystemMessageDev(toUsername: string, text: string) {
+function sendSystemMessageDev(
+  toUsername: string,
+  text: string,
+  attachments?: { name: string; url: string }[]
+) {
   const entry: MessageEntry = {
     id: crypto.randomBytes(12).toString("hex"),
     conversationKey: conversationKey(SYSTEM_SENDER_USERNAME, toUsername),
@@ -4295,6 +4305,7 @@ function sendSystemMessageDev(toUsername: string, text: string) {
     toUsername,
     text,
     createdAt: Date.now(),
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
   };
   const allMessages = loadMessagesDb();
   allMessages.push(entry);
@@ -4802,6 +4813,7 @@ function hmctsPublicRecordsPlugin(sessions: Map<string, RobloxSession>): Plugin 
 }
 
 function hmctsPublicRecordsRequestsPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  fs.mkdirSync(HMCTS_FOI_DIR, { recursive: true });
   return {
     name: "hmcts-public-records-requests-api",
     configureServer(server) {
@@ -4841,46 +4853,92 @@ function hmctsPublicRecordsRequestsPlugin(sessions: Map<string, RobloxSession>):
               res.end("Only Ministry of Justice, Crown Prosecution Service, and Home Office can reply.");
               return;
             }
-            const id = (body.id || "").toString().trim();
-            const reply = (body.reply || "").toString().trim();
-            if (!reply) {
-              res.statusCode = 400;
-              res.end("Reply can't be empty.");
+            try {
+              const id = (body.id || "").toString().trim();
+              const reply = (body.reply || "").toString().trim();
+              if (!reply) {
+                res.statusCode = 400;
+                res.end("Reply can't be empty.");
+                return;
+              }
+              if (reply.length > 6000) {
+                res.statusCode = 400;
+                res.end("Reply is too long (max 6000 characters).");
+                return;
+              }
+              if (containsBlockedLanguage(reply)) {
+                res.statusCode = 400;
+                res.end(MODERATION_REJECTION_MESSAGE);
+                return;
+              }
+              const all = loadHmctsPrRequestsDb();
+              const idx = all.findIndex((r) => r.id === id);
+              if (idx === -1) {
+                res.statusCode = 404;
+                res.end("Request not found.");
+                return;
+              }
+              const target = all[idx];
+
+              const rawAttachments: { name?: string; dataUrl?: string }[] = Array.isArray(body.attachments)
+                ? body.attachments.slice(0, 5)
+                : [];
+              const replyAttachments: { name: string; url: string }[] = [];
+              for (const f of rawAttachments) {
+                const parsed = parseAnyDataUrlDev(f.dataUrl || "");
+                if (!parsed) continue;
+                if (parsed.buffer.length > HMCTS_CASE_MAX_ATTACHMENT_BYTES) {
+                  res.statusCode = 400;
+                  res.end("An attachment is too large (max 4MB each).");
+                  return;
+                }
+                const fid = crypto.randomBytes(10).toString("hex");
+                const safeName = (f.name || "file").toString().replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+                const filename = `${fid}-${safeName}`;
+                fs.writeFileSync(path.join(HMCTS_FOI_DIR, filename), parsed.buffer);
+                replyAttachments.push({ name: safeName, url: `/hmcts-foi/uploads/${filename}` });
+              }
+
+              const updated: HmctsPublicRecordsRequest = {
+                ...target,
+                reply,
+                replyAttachments,
+                status: "replied",
+                repliedByUsername: session.username,
+                repliedAt: Date.now(),
+              };
+              all[idx] = updated;
+              saveHmctsPrRequestsDb(all);
+
+              const reference = `FOI${updated.foiYear}/${updated.foiNumber}`;
+              sendSystemMessageDev(
+                updated.requesterUsername,
+                `eJudiciary has replied to your Public Records request regarding ${updated.subjectUsername} (Reference: ${reference}):\n\n${reply}`,
+                replyAttachments
+              );
+
+              const notifyEntry: HmctsMessage = {
+                id: crypto.randomBytes(12).toString("hex"),
+                fromUserId: "system",
+                fromUsername: "eJudiciary",
+                departments: [],
+                text: `${session.username} Replied to ${updated.requesterUsername}'s FOIA Request, ${reference}`,
+                createdAt: Date.now(),
+                kind: "publicRecordsRequest",
+                requestId: updated.id,
+              };
+              const chatAllReply = loadHmctsMessagesDb();
+              const chatNextReply = [...chatAllReply, notifyEntry].slice(-500);
+              saveHmctsMessagesDb(chatNextReply);
+
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify(updated));
+              return;
+            } catch (err) {
+              res.statusCode = 500;
+              res.end("Failed to send reply: " + (err as Error).message);
               return;
             }
-            if (reply.length > 2000) {
-              res.statusCode = 400;
-              res.end("Reply is too long (max 2000 characters).");
-              return;
-            }
-            if (containsBlockedLanguage(reply)) {
-              res.statusCode = 400;
-              res.end(MODERATION_REJECTION_MESSAGE);
-              return;
-            }
-            const all = loadHmctsPrRequestsDb();
-            const idx = all.findIndex((r) => r.id === id);
-            if (idx === -1) {
-              res.statusCode = 404;
-              res.end("Request not found.");
-              return;
-            }
-            const updated: HmctsPublicRecordsRequest = {
-              ...all[idx],
-              reply,
-              status: "replied",
-              repliedByUsername: session.username,
-              repliedAt: Date.now(),
-            };
-            all[idx] = updated;
-            saveHmctsPrRequestsDb(all);
-            sendSystemMessageDev(
-              updated.requesterUsername,
-              `eJudiciary has replied to your Public Records request regarding ${updated.subjectUsername}: "${reply}"`
-            );
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify(updated));
-            return;
           }
 
           const usernameQuery = (body.username || "").toString().trim();
@@ -4912,8 +4970,14 @@ function hmctsPublicRecordsRequestsPlugin(sessions: Map<string, RobloxSession>):
             .filter((id) => id in catalog)
             .map((id) => ({ id, name: catalog[id].name, category: catalog[id].category }));
 
+          const all = loadHmctsPrRequestsDb();
+          const foiYear = new Date().getFullYear();
+          const foiNumber = all.filter((r) => r.foiYear === foiYear).length + 1;
+
           const entry: HmctsPublicRecordsRequest = {
             id: crypto.randomBytes(12).toString("hex"),
+            foiYear,
+            foiNumber,
             subjectUsername: resolved.username,
             subjectUserId: resolved.userId,
             requestedInfo,
@@ -4923,7 +4987,6 @@ function hmctsPublicRecordsRequestsPlugin(sessions: Map<string, RobloxSession>):
             status: "pending",
             createdAt: Date.now(),
           };
-          const all = loadHmctsPrRequestsDb();
           all.push(entry);
           saveHmctsPrRequestsDb(all);
 
@@ -4932,7 +4995,7 @@ function hmctsPublicRecordsRequestsPlugin(sessions: Map<string, RobloxSession>):
             fromUserId: "system",
             fromUsername: "eJudiciary",
             departments: [],
-            text: `New Public Records Request from ${session.username} regarding ${resolved.username}.`,
+            text: `New Public Records Request from ${session.username} regarding ${resolved.username} (FOI${foiYear}/${foiNumber}).`,
             createdAt: Date.now(),
             kind: "publicRecordsRequest",
             requestId: entry.id,
