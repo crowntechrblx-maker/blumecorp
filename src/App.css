@@ -5715,29 +5715,26 @@
 }
 .britgas-tabbar {
   display: flex;
-  border: 1px solid #d6e8fb;
-  border-left: none;
-  border-right: none;
   flex-shrink: 0;
 }
 .britgas-tab {
   flex: 1;
-  background: none;
-  border: none;
-  border-left: 1px solid #d6e8fb;
-  padding: 10px 8px;
+  background: #fff !important;
+  border: 1px solid #1697ef !important;
+  border-radius: 0 !important;
+  padding: 10px 8px !important;
   font-size: 13px;
   font-weight: 600;
-  color: #4a5568;
+  color: #1697ef;
   cursor: pointer;
   text-align: center;
+  margin-left: -1px;
 }
 .britgas-tab:first-child {
-  border-left: none;
+  margin-left: 0;
 }
 .britgas-tab-active {
-  color: #1697ef;
-  background: #eaf5ff;
+  background: #eaf5ff !important;
 }
 .britgas-body {
   flex: 1;
@@ -5756,9 +5753,8 @@
 }
 .britgas-hero {
   width: 100%;
-  height: 190px;
+  height: auto;
   display: block;
-  object-fit: cover;
   flex-shrink: 0;
   margin: 0;
   border: none;
@@ -5795,9 +5791,10 @@
 .britgas-home-photo-btn {
   display: block;
   width: 100%;
-  padding: 0;
+  padding: 0 !important;
   border: none;
-  background: none;
+  background: none !important;
+  border-radius: 0 !important;
   cursor: pointer;
 }
 .britgas-home-photo {
@@ -5816,9 +5813,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 9px 16px;
-  border-top: 1px solid #d6e8fb;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   color: #4a5568;
   flex-shrink: 0;
 }
@@ -5872,9 +5868,10 @@
 .britgas-incident-image-btn {
   display: block;
   width: 100%;
-  padding: 0;
+  padding: 0 !important;
   border: none;
-  background: none;
+  background: none !important;
+  border-radius: 0 !important;
   cursor: pointer;
   margin-bottom: 10px;
 }
