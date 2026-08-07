@@ -167,11 +167,11 @@ function normalizeTimestampMs(value: number): number {
 
 function ArrestRecord({ data }: { data: unknown }) {
   if (data === null || data === undefined) {
-    return <p className="blume-muted">None on file.</p>;
+    return <p className="hmcts-bgsearch-muted">None on file.</p>;
   }
   const list = Array.isArray(data) ? data : [data];
   if (list.length === 0) {
-    return <p className="blume-muted">None on file.</p>;
+    return <p className="hmcts-bgsearch-muted">None on file.</p>;
   }
 
   function renderChargeLike(value: unknown): string {
@@ -196,7 +196,7 @@ function ArrestRecord({ data }: { data: unknown }) {
   function renderItem(item: unknown, key: number) {
     if (typeof item === "number" || typeof item === "string") {
       return (
-        <div className="blume-arrest-row" key={key}>
+        <div className="hmcts-bgsearch-arrest-row" key={key}>
           {renderChargeLike(item)}
         </div>
       );
@@ -216,14 +216,14 @@ function ArrestRecord({ data }: { data: unknown }) {
       );
       const rest = Object.entries(obj).filter(([k]) => !knownKeysLower.has(k.toLowerCase()));
       return (
-        <div className="blume-arrest-row" key={key}>
-          {charges.length > 0 && <div className="blume-arrest-charges">{charges.join(", ")}</div>}
-          <div className="blume-arrest-meta">
+        <div className="hmcts-bgsearch-arrest-row" key={key}>
+          {charges.length > 0 && <div className="hmcts-bgsearch-arrest-charges">{charges.join(", ")}</div>}
+          <div className="hmcts-bgsearch-arrest-meta">
             {officer !== undefined && <span>Arrested by {String(officer)}</span>}
             {whenMs !== null && <span>{new Date(whenMs).toLocaleString()}</span>}
           </div>
           {rest.length > 0 && charges.length === 0 && (
-            <div className="blume-arrest-raw">
+            <div className="hmcts-bgsearch-arrest-raw">
               {rest.map(([k, v]) => (
                 <span key={k}>
                   {k}: {String(v)}
@@ -235,7 +235,7 @@ function ArrestRecord({ data }: { data: unknown }) {
       );
     }
     return (
-      <div className="blume-arrest-row" key={key}>
+      <div className="hmcts-bgsearch-arrest-row" key={key}>
         {String(item)}
       </div>
     );
@@ -249,10 +249,10 @@ function ArrestRecord({ data }: { data: unknown }) {
   const recentCount = indexed.filter((e) => e.whenMs !== null && e.whenMs >= recentCutoff).length;
 
   return (
-    <div className="blume-arrest-list">
+    <div>
       {shown.map((e) => renderItem(e.item, e.i))}
       {recentCount > 0 && (
-        <div className="blume-arrest-row blume-arrest-overflow">
+        <div className="hmcts-bgsearch-arrest-row hmcts-bgsearch-arrest-overflow">
           {recentCount} arrest{recentCount === 1 ? "" : "s"} in the last 10 days
         </div>
       )}
@@ -366,9 +366,9 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
       <button className="hmcts-back" onClick={onBack}>
         ← Back
       </button>
-      <div className="blume-panel blume-search-panel hmcts-bgsearch-panel">
-        <div className="blume-panel-header">Background Searches</div>
-        <div className="blume-search-form">
+      <div className="hmcts-bgsearch-card">
+        <h4 className="hmcts-bgsearch-title">Background Searches</h4>
+        <div className="hmcts-bgsearch-form">
           <input
             placeholder="Search by name or ID…"
             value={query}
@@ -377,60 +377,60 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
               if (e.key === "Enter" && !loading) handleSearch();
             }}
           />
-          <button className="blume-cta-btn" disabled={!query.trim() || loading} onClick={() => handleSearch()}>
+          <button className="hmcts-bgsearch-btn" disabled={!query.trim() || loading} onClick={() => handleSearch()}>
             {loading ? "Searching…" : "Search"}
           </button>
         </div>
-        {error && <p className="blume-error">{error}</p>}
+        {error && <p className="hmcts-bgsearch-error">{error}</p>}
         {result && (
-          <div className="blume-person-result">
-            <div className="blume-person-head">
-              {result.avatarUrl && <img className="blume-person-photo" src={result.avatarUrl} alt="" />}
+          <div className="hmcts-bgsearch-result">
+            <div className="hmcts-bgsearch-head">
+              {result.avatarUrl && <img className="hmcts-bgsearch-avatar" src={result.avatarUrl} alt="" />}
               <div>
-                <strong
-                  className="blume-person-name blume-clickable-username"
+                <div
+                  className="hmcts-bgsearch-name"
                   title="Click to copy username"
                   onClick={() => handleCopyUsername(result.username)}
                 >
                   {result.username}
-                  {usernameCopied && <span className="blume-copied-tag">Copied</span>}
-                </strong>
-                <span className="blume-person-id">ID {result.userId}</span>
-                {result.lastSeenOnlineAt && (
-                  <span className="blume-person-last-online">
-                    Last online {formatLastOnline(result.lastSeenOnlineAt)}
-                  </span>
-                )}
+                  {usernameCopied && <span className="hmcts-bgsearch-copied">Copied</span>}
+                </div>
+                <div className="hmcts-bgsearch-meta-row">
+                  <span>ID {result.userId}</span>
+                  {result.lastSeenOnlineAt && <span>Last online {formatLastOnline(result.lastSeenOnlineAt)}</span>}
+                </div>
               </div>
             </div>
 
-            {result.apiError && <p className="blume-error">{result.apiError}</p>}
+            {result.apiError && <p className="hmcts-bgsearch-error">{result.apiError}</p>}
 
-            <div className="blume-person-row">
-              <span className="blume-person-label">Equipped plate</span>
-              <span className="blume-person-value">{result.customPlate || "None on file"}</span>
+            <div className="hmcts-bgsearch-row">
+              <span className="hmcts-bgsearch-label" style={{ marginBottom: 0 }}>
+                Equipped plate
+              </span>
+              <span className="hmcts-bgsearch-row-value">{result.customPlate || "None on file"}</span>
             </div>
 
-            <div className="blume-person-history-actions">
-              <button className="blume-view-previous-btn" onClick={togglePreviousPhotos}>
-                {showPreviousPhotos ? "Hide previous photos" : "View Previous Photos"}
+            <div className="hmcts-bgsearch-actions">
+              <button className="hmcts-bgsearch-link-btn" onClick={togglePreviousPhotos}>
+                {showPreviousPhotos ? "Hide previous photos" : "View previous photos"}
               </button>
-              <button className="blume-view-previous-btn" onClick={togglePreviousPlates}>
-                {showPreviousPlates ? "Hide previous plates" : "View Previous Plates"}
+              <button className="hmcts-bgsearch-link-btn" onClick={togglePreviousPlates}>
+                {showPreviousPlates ? "Hide previous plates" : "View previous plates"}
               </button>
             </div>
 
             {showPreviousPhotos && (
-              <div className="blume-history-panel">
+              <div className="hmcts-bgsearch-history-panel">
                 {historyLoading ? (
-                  <p className="blume-muted">Loading…</p>
+                  <p className="hmcts-bgsearch-muted">Loading…</p>
                 ) : history.length === 0 ? (
-                  <p className="blume-muted">No previous photos cached.</p>
+                  <p className="hmcts-bgsearch-muted">No previous photos cached.</p>
                 ) : (
-                  <div className="blume-history-photo-grid">
+                  <div className="hmcts-bgsearch-photo-grid">
                     {history.map((h) => (
-                      <div className="blume-history-photo-item" key={h.id}>
-                        {h.avatarUrl ? <img src={h.avatarUrl} alt="" /> : <div className="blume-history-photo-empty" />}
+                      <div className="hmcts-bgsearch-photo-item" key={h.id}>
+                        {h.avatarUrl ? <img src={h.avatarUrl} alt="" /> : <div className="hmcts-bgsearch-photo-empty" />}
                         <span>{new Date(h.createdAt).toLocaleDateString()}</span>
                       </div>
                     ))}
@@ -440,17 +440,17 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
             )}
 
             {showPreviousPlates && (
-              <div className="blume-history-panel">
+              <div className="hmcts-bgsearch-history-panel">
                 {historyLoading ? (
-                  <p className="blume-muted">Loading…</p>
+                  <p className="hmcts-bgsearch-muted">Loading…</p>
                 ) : history.length === 0 ? (
-                  <p className="blume-muted">No previous plates cached.</p>
+                  <p className="hmcts-bgsearch-muted">No previous plates cached.</p>
                 ) : (
-                  <div className="blume-history-list">
+                  <div>
                     {history.map((h) => (
-                      <div className="blume-history-row" key={h.id}>
+                      <div className="hmcts-bgsearch-history-row" key={h.id}>
                         <span>{h.customPlate || "—"}</span>
-                        <span className="blume-history-meta">
+                        <span className="hmcts-bgsearch-history-meta">
                           {new Date(h.createdAt).toLocaleString()} · searched by {h.searchedByUsername}
                         </span>
                       </div>
@@ -460,12 +460,12 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
               </div>
             )}
 
-            <div className="blume-person-section">
-              <span className="blume-person-label">Known vehicles</span>
-              <div className="blume-vehicle-list">
-                {result.vehicleTags.length === 0 && <p className="blume-muted">None tagged yet.</p>}
+            <div className="hmcts-bgsearch-section">
+              <span className="hmcts-bgsearch-label">Known vehicles</span>
+              <div className="hmcts-bgsearch-chip-list">
+                {result.vehicleTags.length === 0 && <p className="hmcts-bgsearch-muted">None tagged yet.</p>}
                 {result.vehicleTags.map((v) => (
-                  <div className="blume-vehicle-chip" key={v.id}>
+                  <div className="hmcts-bgsearch-chip" key={v.id}>
                     <span>{v.vehicleType}</span>
                     <button onClick={() => handleRemoveVehicle(v.id)} title="Remove">
                       ✕
@@ -473,7 +473,7 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
                   </div>
                 ))}
               </div>
-              <div className="blume-vehicle-form">
+              <div className="hmcts-bgsearch-vehicle-form">
                 <input
                   placeholder="Add a known vehicle type…"
                   value={newVehicleType}
@@ -483,7 +483,7 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
                   }}
                 />
                 <button
-                  className="blume-cta-btn"
+                  className="hmcts-bgsearch-btn"
                   disabled={!newVehicleType.trim() || addingVehicle}
                   onClick={handleAddVehicle}
                 >
@@ -492,27 +492,30 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
               </div>
             </div>
 
-            <div className="blume-person-section">
-              <span className="blume-person-label">Groups</span>
+            <div className="hmcts-bgsearch-section">
+              <span className="hmcts-bgsearch-label">Groups</span>
               {result.groups.length === 0 ? (
-                <p className="blume-muted">No relevant group memberships found.</p>
+                <p className="hmcts-bgsearch-muted">No relevant group memberships found.</p>
               ) : (
-                <div className="blume-group-settings-list">
+                <div>
                   {GROUP_CATEGORY_ORDER.map((cat) => {
                     const items = result.groups.filter(
                       (g) => (g.category || (g.tier === "red" ? "OCG" : "Emergency Services")) === cat
                     );
                     if (items.length === 0) return null;
                     return (
-                      <div key={cat} className="blume-group-category-section">
+                      <div key={cat} className="hmcts-bgsearch-group-category">
                         <span
-                          className={`blume-person-label${cat === "IE" || cat === "OCG" ? " blume-group-red-text" : ""}`}
+                          className={`hmcts-bgsearch-label${cat === "IE" || cat === "OCG" ? " hmcts-bgsearch-label-red" : ""}`}
                         >
                           {categoryLabel(cat)}
                         </span>
-                        <div className="blume-group-list">
+                        <div className="hmcts-bgsearch-chip-list">
                           {items.map((g) => (
-                            <span key={g.id} className={`blume-group-chip ${g.tier === "red" ? "blume-group-red" : ""}`}>
+                            <span
+                              key={g.id}
+                              className={`hmcts-bgsearch-chip${g.tier === "red" ? " hmcts-bgsearch-chip-red" : ""}`}
+                            >
                               {g.name}
                             </span>
                           ))}
@@ -525,11 +528,11 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
             </div>
 
             {result.formerGroups && result.formerGroups.length > 0 && (
-              <div className="blume-person-section">
-                <span className="blume-person-label blume-group-red-text">Former membership (last 6 months)</span>
-                <div className="blume-group-list">
+              <div className="hmcts-bgsearch-section">
+                <span className="hmcts-bgsearch-label hmcts-bgsearch-label-red">Former membership (last 6 months)</span>
+                <div className="hmcts-bgsearch-chip-list">
                   {result.formerGroups.map((g) => (
-                    <span key={g.id} className="blume-group-chip blume-group-red">
+                    <span key={g.id} className="hmcts-bgsearch-chip hmcts-bgsearch-chip-red">
                       {g.name} — last seen {formatDateTimeNoSeconds(g.lastSeenAt)}
                     </span>
                   ))}
@@ -538,27 +541,27 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
             )}
 
             {result.knownFriends.length > 0 && (
-              <div className="blume-person-section">
-                <span className="blume-person-label">Known friends</span>
-                <div className="blume-friend-list">
+              <div className="hmcts-bgsearch-section">
+                <span className="hmcts-bgsearch-label">Known friends</span>
+                <div className="hmcts-bgsearch-chip-list">
                   {result.knownFriends.map((f) => (
                     <button
                       key={f.userId}
-                      className={`blume-friend-chip${f.redGroupNames.length > 0 ? " blume-friend-chip-red" : ""}`}
+                      className={`hmcts-bgsearch-friend-chip${f.redGroupNames.length > 0 ? " hmcts-bgsearch-friend-chip-red" : ""}`}
                       onClick={() => handleSearch(f.username)}
                       title={f.redGroupNames.length > 0 ? `${f.username} — in ${f.redGroupNames.join(", ")}` : `Search ${f.username}`}
                     >
                       {f.avatarUrl && <img src={f.avatarUrl} alt="" />}
                       <span>{f.username}</span>
-                      {f.redGroupNames.length > 0 && <span className="blume-ingame-red-group">{f.redGroupNames[0]}</span>}
+                      {f.redGroupNames.length > 0 && <span className="hmcts-bgsearch-friend-tag">{f.redGroupNames[0]}</span>}
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            <div className="blume-person-section">
-              <span className="blume-person-label">Arrest history</span>
+            <div className="hmcts-bgsearch-section">
+              <span className="hmcts-bgsearch-label">Arrest history</span>
               <ArrestRecord data={result.arrestHistory} />
             </div>
           </div>
