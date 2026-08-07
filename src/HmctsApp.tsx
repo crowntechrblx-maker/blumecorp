@@ -12,15 +12,6 @@ interface HmctsTile {
 }
 
 const TILES: HmctsTile[] = [
-  { id: "outlook", label: "Outlook Web App", color: "#0072c6", glyph: "OWA" },
-  { id: "onedrive", label: "One Drive for Business (My Docs)", color: "#0364b8", glyph: "OD" },
-  { id: "teamsites", label: "Team Sites – Conferencing and Shared Docs", color: "#038387", glyph: "TS", locked: true },
-  { id: "judicialIntranet", label: "Judicial Intranet", color: "#7a0d0d", glyph: "JI", locked: true },
-  { id: "judicialCollege", label: "Judicial College", color: "#5c2d91", glyph: "JC", locked: true },
-  { id: "help", label: "Welcome and Help", color: "#498205", glyph: "?" },
-  { id: "security", label: "Security", color: "#3b3a39", glyph: "SEC" },
-  { id: "eirs", label: "eIRS", color: "#7a0d0d", glyph: "eIRS", locked: true },
-  { id: "chatnow", label: "Chat Now for Magistrate Peer Mentoring, Guidance, Coaching and Advice", color: "#b4009e", glyph: "CHAT" },
   {
     id: "caseDocket",
     label: "Case and Docket Management",
@@ -48,9 +39,6 @@ const TILES: HmctsTile[] = [
     editable: true,
     detail: "Contact lists, role descriptions, and organizational charts for judges, clerks, and administrative staff.",
   },
-  { id: "bbc", label: "BBC", color: "#000000", glyph: "BBC", external: "https://www.bbc.co.uk" },
-  { id: "bing", label: "Bing", color: "#008373", glyph: "b", external: "https://www.bing.com" },
-  { id: "passwordReset", label: "Self Service Password Reset", color: "#004e8c", glyph: "PW" },
 ];
 
 const QUOTE =
@@ -116,18 +104,18 @@ export function HmctsApp() {
       <div className="hmcts-app hmcts-signin">
         <div className="hmcts-signin-left">
           <div className="hmcts-brand hmcts-brand-light">
-            <img src="/icons/royal-seal.svg" alt="" />
+            <img src="/icons/royal-coat-of-arms.png" alt="" />
             <span>eJudiciary</span>
           </div>
           <div className="hmcts-signin-crest">
-            <img src="/icons/royal-seal.svg" alt="" />
+            <img src="/icons/royal-coat-of-arms.png" alt="" />
           </div>
           <blockquote className="hmcts-quote">{QUOTE}</blockquote>
           <p className="hmcts-quote-author">Lady Chief Justice of England and Wales</p>
         </div>
         <div className="hmcts-signin-right">
           <div className="hmcts-brand">
-            <img src="/icons/royal-seal.svg" alt="" />
+            <img src="/icons/royal-coat-of-arms.png" alt="" />
             <span>eJudiciary</span>
           </div>
           {stage === "signin" ? (
