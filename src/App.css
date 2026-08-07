@@ -2153,6 +2153,41 @@
   background: rgba(248, 113, 113, 0.1);
   border-color: rgba(248, 113, 113, 0.4);
 }
+.blume-report-card-nst {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.55);
+}
+.blume-report-card-nst .blume-report-card-head strong {
+  color: #f87171;
+}
+.blume-reports-category {
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+.blume-reports-category-toggle {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--blume-accent);
+  margin-bottom: 8px;
+}
+.blume-reports-category-toggle:hover {
+  color: var(--blume-mist);
+}
+.blume-reports-category-nst .blume-reports-category-toggle {
+  color: #f87171;
+}
+.blume-reports-category-collapsed .blume-reports-list {
+  display: none;
+}
 .blume-report-ingame-tag {
   margin-left: 6px;
   padding: 1px 6px;
@@ -2190,6 +2225,7 @@
   color: #b6bcc7;
   margin: 0 0 6px;
   line-height: 1.5;
+  white-space: pre-wrap;
 }
 .blume-report-meta {
   font-size: 10.5px;

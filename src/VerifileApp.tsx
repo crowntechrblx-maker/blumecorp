@@ -47,7 +47,6 @@ interface VerifileWhitelistEntry {
   addedAt: number;
 }
 
-const PUNISHMENT_TYPES = ["Warning", "Suspension", "Demotion", "Termination", "Ban", "Note"];
 const REQUEST_ACCESS_URL = "https://discord.gg/DHs9HnQ3JE";
 
 function formatDateTime(value: number): string {
@@ -177,11 +176,9 @@ export function VerifileApp({ username }: { username: string }) {
 
   const [punishments, setPunishments] = useState<VerifilePunishment[]>([]);
   const [punishmentsLoading, setPunishmentsLoading] = useState(false);
-  const [removingPunishmentId, setRemovingPunishmentId] = useState<string | null>(null);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [confirmingReport, setConfirmingReport] = useState(false);
 
-  const [punishmentType, setPunishmentType] = useState(PUNISHMENT_TYPES[0]);
   const [punishmentDetails, setPunishmentDetails] = useState("");
   const [punishmentServiceId, setPunishmentServiceId] = useState("");
   const [submittingPunishment, setSubmittingPunishment] = useState(false);
@@ -276,7 +273,7 @@ export function VerifileApp({ username }: { username: string }) {
           action: "addPunishment",
           targetUserId: person.userId,
           targetUsername: person.username,
-          type: punishmentType,
+          type: "Note",
           details: punishmentDetails.trim(),
           serviceGroupId: punishmentServiceId,
         }),
@@ -291,18 +288,6 @@ export function VerifileApp({ username }: { username: string }) {
       setPunishmentError("Couldn't reach Verifile.");
     } finally {
       setSubmittingPunishment(false);
-    }
-  }
-
-  async function handleRemovePunishment(id: string) {
-    setRemovingPunishmentId(id);
-    try {
-      await fetch(`/api/blume-content?type=verifile&id=${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
-      if (person) await loadPunishments(person.userId);
-    } finally {
-      setRemovingPunishmentId(null);
     }
   }
 
@@ -517,9 +502,9 @@ export function VerifileApp({ username }: { username: string }) {
           <span className="verifile-landing-eyebrow">Blume</span>
           <h2 className="verifile-landing-title">Verifile</h2>
           <p className="verifile-landing-lede">
-            Verifile lets whitelisted services confirm who someone is and log conduct against
-            their name. Search a Roblox username to see their verified group standing, then
-            record warnings, suspensions, or terminations tied to your service and your name.
+            Verifile lets whitelisted services confirm who someone is. Search a Roblox username
+            to see their verified group standing and official record, then add notes tied to
+            your service and your name.
           </p>
         </div>
 
@@ -665,19 +650,13 @@ export function VerifileApp({ username }: { username: string }) {
           )}
 
           <div className="verifile-person-section">
-            <span className="verifile-person-label">Log an entry</span>
+            <span className="verifile-person-label">Add a note</span>
             {services.length === 0 ? (
               <p className="verifile-muted">
-                You aren't confirmed as a member of any recognized service, so you can't log entries.
+                You aren't confirmed as a member of any recognized service, so you can't add notes.
               </p>
             ) : (
               <div className="verifile-add-punishment-form">
-                <CustomSelect
-                  className="verifile-type-select"
-                  value={punishmentType}
-                  onChange={setPunishmentType}
-                  options={PUNISHMENT_TYPES.map((t) => ({ value: t, label: t }))}
-                />
                 <CustomSelect
                   className="verifile-service-select"
                   value={punishmentServiceId}
@@ -690,7 +669,7 @@ export function VerifileApp({ username }: { username: string }) {
                 />
                 <textarea
                   className="verifile-details-input"
-                  placeholder="Details…"
+                  placeholder="Note…"
                   value={punishmentDetails}
                   onChange={(e) => setPunishmentDetails(e.target.value)}
                 />
@@ -699,7 +678,7 @@ export function VerifileApp({ username }: { username: string }) {
                   disabled={!punishmentDetails.trim() || submittingPunishment}
                   onClick={handleAddPunishment}
                 >
-                  {submittingPunishment ? "Logging…" : "Log entry"}
+                  {submittingPunishment ? "Saving…" : "Add note"}
                 </button>
               </div>
             )}
@@ -725,15 +704,6 @@ export function VerifileApp({ username }: { username: string }) {
                       <span className="verifile-punishment-meta">
                         Logged by {p.addedByUsername} on {formatDateTime(p.createdAt)}
                       </span>
-                      {p.canDelete && (
-                        <button
-                          className="verifile-remove-access-btn"
-                          disabled={removingPunishmentId === p.id}
-                          onClick={() => handleRemovePunishment(p.id)}
-                        >
-                          {removingPunishmentId === p.id ? "…" : "Remove"}
-                        </button>
-                      )}
                     </div>
                   </div>
                 ))}

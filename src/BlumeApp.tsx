@@ -14,6 +14,8 @@ interface BlumeReport {
   linkedUserId?: string;
   linkedUsername?: string;
   expiresAt?: number;
+  sheetSource?: "nst" | "aosKos";
+  sheetCategory?: "NST" | "AOS" | "KOS" | "KOS/AOS";
 }
 
 interface BlumeBlogPost {
@@ -837,6 +839,96 @@ export function BlumeApp({
   function jumpToPersonReports(username: string) {
     setCollapsedPanels((prev) => ({ ...prev, reports: false }));
     setReportSearchQuery(username);
+  }
+
+  function isReportLinkedInGame(r: BlumeReport): boolean {
+    return (
+      !!r.linkedUsername &&
+      inGameUsers.some((u) => u.username.toLowerCase() === r.linkedUsername!.toLowerCase())
+    );
+  }
+
+  function renderReportCard(r: BlumeReport) {
+    const inGame = isReportLinkedInGame(r);
+    const isNst = r.sheetCategory === "NST";
+    return (
+      <div
+        className={`blume-report-card${inGame ? " blume-report-card-ingame" : ""}${
+          isNst ? " blume-report-card-nst" : ""
+        }`}
+        key={r.id}
+      >
+        <div className="blume-report-card-head">
+          <strong>{r.title}</strong>
+          <button
+            className="blume-report-delete"
+            onClick={() => handleDeleteReport(r.id)}
+            title="Delete report"
+          >
+            ✕
+          </button>
+        </div>
+        <p>{r.body}</p>
+        <span className="blume-report-meta">
+          Filed by {r.authorUsername} · {new Date(r.createdAt).toLocaleDateString()}
+          {r.linkedUsername && (
+            <>
+              {" "}
+              · linked to{" "}
+              <strong
+                className="blume-clickable-username"
+                onClick={() => handleUsernameClick(r.linkedUsername!)}
+              >
+                {r.linkedUsername}
+              </strong>
+              {inGame && <span className="blume-report-ingame-tag">IN GAME</span>}
+            </>
+          )}
+          {r.expiresAt && <> · expires {new Date(r.expiresAt).toLocaleDateString()}</>}
+        </span>
+      </div>
+    );
+  }
+
+  function renderReportsCategorySection(
+    panelKey: string,
+    label: string,
+    category: "NST" | "AOS" | "KOS" | "KOS/AOS",
+    variant?: "nst"
+  ) {
+    const catReports = reports
+      .filter((r) => r.sheetCategory === category)
+      .sort((a, b) => {
+        const aIn = isReportLinkedInGame(a);
+        const bIn = isReportLinkedInGame(b);
+        if (aIn !== bIn) return aIn ? -1 : 1;
+        return b.createdAt - a.createdAt;
+      });
+    const collapsed = !!collapsedPanels[panelKey];
+    return (
+      <div
+        className={`blume-reports-category${variant === "nst" ? " blume-reports-category-nst" : ""}${
+          collapsed ? " blume-reports-category-collapsed" : ""
+        }`}
+      >
+        <button className="blume-reports-category-toggle" onClick={() => togglePanel(panelKey)}>
+          <span>
+            {label}
+            {catReports.length ? ` (${catReports.length})` : ""}
+          </span>
+          <span className="blume-panel-toggle-icon">{collapsed ? "▸" : "▾"}</span>
+        </button>
+        {!collapsed && (
+          <div className="blume-reports-list">
+            {catReports.length === 0 ? (
+              <p className="blume-muted">None on record.</p>
+            ) : (
+              catReports.map((r) => renderReportCard(r))
+            )}
+          </div>
+        )}
+      </div>
+    );
   }
 
   async function handleAddBlogPost() {
@@ -2214,6 +2306,10 @@ export function BlumeApp({
                       </div>
                     )}
                   </div>
+                  {renderReportsCategorySection("nstReports", "National Security Threats", "NST", "nst")}
+                  {renderReportsCategorySection("aosReports", "Arrest on Sight", "AOS")}
+                  {renderReportsCategorySection("kosReports", "Kill on Sight", "KOS")}
+                  {renderReportsCategorySection("kosAosReports", "KOS/AOS", "KOS/AOS")}
                   <div className="blume-reports-search">
                     <input
                       placeholder="Search reports…"
@@ -2224,70 +2320,30 @@ export function BlumeApp({
                   <div className="blume-reports-list">
                     {loadingReports ? (
                       <p className="blume-muted">Loading…</p>
-                    ) : reports.length === 0 ? (
+                    ) : reports.filter((r) => !r.sheetCategory).length === 0 ? (
                       <p className="blume-muted">No reports filed yet.</p>
                     ) : (
                       (() => {
                         const q = reportSearchQuery.trim().toLowerCase();
+                        const generalReports = reports.filter((r) => !r.sheetCategory);
                         const filtered = q
-                          ? reports.filter(
+                          ? generalReports.filter(
                               (r) =>
                                 r.title.toLowerCase().includes(q) ||
                                 r.body.toLowerCase().includes(q) ||
                                 r.authorUsername.toLowerCase().includes(q) ||
                                 (r.linkedUsername || "").toLowerCase().includes(q)
                             )
-                          : reports;
-                        const inGameLower = new Set(inGameUsers.map((u) => u.username.toLowerCase()));
-                        const isLinkedInGame = (r: BlumeReport) =>
-                          !!r.linkedUsername && inGameLower.has(r.linkedUsername.toLowerCase());
+                          : generalReports;
                         const sorted = [...filtered].sort((a, b) => {
-                          const aIn = isLinkedInGame(a);
-                          const bIn = isLinkedInGame(b);
+                          const aIn = isReportLinkedInGame(a);
+                          const bIn = isReportLinkedInGame(b);
                           return aIn === bIn ? 0 : aIn ? -1 : 1;
                         });
                         return sorted.length === 0 ? (
                           <p className="blume-muted">No reports match "{reportSearchQuery}".</p>
                         ) : (
-                          sorted.map((r) => (
-                            <div
-                              className={`blume-report-card${isLinkedInGame(r) ? " blume-report-card-ingame" : ""}`}
-                              key={r.id}
-                            >
-                              <div className="blume-report-card-head">
-                                <strong>{r.title}</strong>
-                                <button
-                                  className="blume-report-delete"
-                                  onClick={() => handleDeleteReport(r.id)}
-                                  title="Delete report"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                              <p>{r.body}</p>
-                              <span className="blume-report-meta">
-                                Filed by {r.authorUsername} · {new Date(r.createdAt).toLocaleDateString()}
-                                {r.linkedUsername && (
-                                  <>
-                                    {" "}
-                                    · linked to{" "}
-                                    <strong
-                                      className="blume-clickable-username"
-                                      onClick={() => handleUsernameClick(r.linkedUsername!)}
-                                    >
-                                      {r.linkedUsername}
-                                    </strong>
-                                    {isLinkedInGame(r) && (
-                                      <span className="blume-report-ingame-tag">IN GAME</span>
-                                    )}
-                                  </>
-                                )}
-                                {r.expiresAt && (
-                                  <> · expires {new Date(r.expiresAt).toLocaleDateString()}</>
-                                )}
-                              </span>
-                            </div>
-                          ))
+                          sorted.map((r) => renderReportCard(r))
                         );
                       })()
                     )}
@@ -2806,13 +2862,17 @@ export function BlumeApp({
                     ) : (
                       <div className="blume-reports-list">
                         {personLinkedReports.map((r) => (
-                          <div className="blume-report-card" key={r.id}>
+                          <div
+                            className={`blume-report-card${r.sheetCategory === "NST" ? " blume-report-card-nst" : ""}`}
+                            key={r.id}
+                          >
                             <div className="blume-report-card-head">
                               <strong>{r.title}</strong>
                             </div>
                             <p>{r.body}</p>
                             <span className="blume-report-meta">
                               Filed by {r.authorUsername} · {new Date(r.createdAt).toLocaleDateString()}
+                              {r.sheetCategory && <> · {r.sheetCategory}</>}
                               {r.expiresAt && <> · expires {new Date(r.expiresAt).toLocaleDateString()}</>}
                             </span>
                           </div>
