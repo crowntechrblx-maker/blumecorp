@@ -20,6 +20,7 @@ import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib
 import { appendAuditLog } from "../../lib/audit.js";
 import { isVerifileAuthorized, getVerifileWhitelist } from "../../lib/verifile.js";
 import { isPlatformAdmin } from "../../lib/admins.js";
+import { getGroupIdsExcludingCategories, getGroupIdsByNameMatch } from "../../lib/groupCatalog.js";
 
 const HMRC_GROUP_ID = 567563234;
 const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud"];
@@ -455,6 +456,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .sort((a, b) => b.createdAt - a.createdAt)
       .map((c) => ({ id: c.id, title: c.title, createdAt: c.createdAt }));
     res.status(200).json({ userId: resolved.userId, username: resolved.username, records });
+    return;
+  }
+
+  // Personnel Directory — public within the app (no rank gate). Lists everyone
+  // the platform has already scanned into a group tagged HMCTS-ranked, with
+  // department tags where they also sit in MOJ / CPS / Home Office.
+  if (type === "hmctsPersonnel") {
+    if (!session) {
+      res.status(401).send("You must be signed in.");
+      return;
+    }
+    if (req.method !== "GET") {
+      res.status(405).send("Method not allowed");
+      return;
+    }
+    const scanCache = (await kv.get<{ userId: string; username: string; avatarUrl: string | null; groupIds: number[] }[]>("blumeGroupScanCache")) || [];
+    const [rankedGroupIds, mojGroupIds, cpsGroupIds, hoGroupIds] = await Promise.all([
+      getGroupIdsExcludingCategories(["OCG", "IE"]),
+      getGroupIdsByNameMatch(["ministry of justice"]),
+      getGroupIdsByNameMatch(["crown prosecution"]),
+      getGroupIdsByNameMatch(["home office"]),
+    ]);
+    const rankedSet = new Set(rankedGroupIds);
+    const deptSets: { label: string; set: Set<number> }[] = [
+      { label: "Ministry of Justice", set: new Set(mojGroupIds) },
+      { label: "Crown Prosecution Service", set: new Set(cpsGroupIds) },
+      { label: "Home Office", set: new Set(hoGroupIds) },
+    ];
+    const personnel = scanCache
+      .filter((m) => m.groupIds.some((id) => rankedSet.has(id)))
+      .map((m) => ({
+        userId: m.userId,
+        username: m.username,
+        avatarUrl: m.avatarUrl,
+        departments: deptSets.filter((d) => m.groupIds.some((id) => d.set.has(id))).map((d) => d.label),
+      }))
+      .sort((a, b) => a.username.localeCompare(b.username));
+    res.status(200).json({ personnel });
     return;
   }
 

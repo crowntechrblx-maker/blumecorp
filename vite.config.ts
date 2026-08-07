@@ -4641,6 +4641,55 @@ function hmctsPublicRecordsPlugin(sessions: Map<string, RobloxSession>): Plugin 
   };
 }
 
+function hmctsPersonnelPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "hmcts-personnel-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "hmctsPersonnel") {
+          next();
+          return;
+        }
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        if (!session) {
+          res.statusCode = 401;
+          res.end("You must be signed in.");
+          return;
+        }
+        if (req.method !== "GET") {
+          res.statusCode = 405;
+          res.end("Method not allowed");
+          return;
+        }
+        const scanCache = loadGroupScanDb();
+        const rankedGroupIds = getGroupIdsExcludingCategories(["OCG", "IE"]);
+        const mojGroupIds = getGroupIdsByNameMatch(["ministry of justice"]);
+        const cpsGroupIds = getGroupIdsByNameMatch(["crown prosecution"]);
+        const hoGroupIds = getGroupIdsByNameMatch(["home office"]);
+        const rankedSet = new Set(rankedGroupIds);
+        const deptSets: { label: string; set: Set<number> }[] = [
+          { label: "Ministry of Justice", set: new Set(mojGroupIds) },
+          { label: "Crown Prosecution Service", set: new Set(cpsGroupIds) },
+          { label: "Home Office", set: new Set(hoGroupIds) },
+        ];
+        const personnel = scanCache
+          .filter((m) => m.groupIds.some((id) => rankedSet.has(id)))
+          .map((m) => ({
+            userId: m.userId,
+            username: m.username,
+            avatarUrl: m.avatarUrl,
+            departments: deptSets.filter((d) => m.groupIds.some((id) => d.set.has(id))).map((d) => d.label),
+          }))
+          .sort((a, b) => a.username.localeCompare(b.username));
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ personnel }));
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   if (env.ROBLOX_SCAN_COOKIE) process.env.ROBLOX_SCAN_COOKIE = env.ROBLOX_SCAN_COOKIE;
@@ -4666,6 +4715,7 @@ export default defineConfig(({ mode }) => {
       hmctsCasesPlugin(sessions),
       hmctsLrrPlugin(sessions),
       hmctsPublicRecordsPlugin(sessions),
+      hmctsPersonnelPlugin(sessions),
     ],
   };
 });

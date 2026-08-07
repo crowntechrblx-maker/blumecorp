@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getChargeName } from "./pncCharges";
 
-type HmctsPanel = "search" | "chat" | "cases" | "lrr" | "publicRecords";
+type HmctsPanel = "search" | "chat" | "cases" | "lrr" | "publicRecords" | "personnel";
 
 interface HmctsTile {
   id: string;
@@ -54,9 +54,7 @@ const TILES: HmctsTile[] = [
     label: "Personnel Directory",
     color: "#038387",
     glyph: "PD",
-    locked: true,
-    editable: true,
-    detail: "Contact lists, role descriptions, and organizational charts for judges, clerks, and administrative staff.",
+    panel: "personnel",
   },
   {
     id: "publicRecords",
@@ -687,9 +685,6 @@ function InternalMessagingPanel({ onBack }: { onBack: () => void }) {
       </button>
       <div className="hmcts-bgsearch-card hmcts-chat-card">
         <h4 className="hmcts-bgsearch-title">Internal Messaging</h4>
-        <p className="hmcts-bgsearch-muted" style={{ marginBottom: 12 }}>
-          Shared channel for Ministry of Justice, Crown Prosecution Service, and Home Office.
-        </p>
         <div className="hmcts-chat-messages" ref={listRef}>
           {messages.length === 0 && <p className="hmcts-bgsearch-muted">No messages yet.</p>}
           {messages.map((m) => (
@@ -764,6 +759,16 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
   const [docFiles, setDocFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function loadCases() {
     setLoading(true);
@@ -834,11 +839,6 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
             +
           </button>
         </div>
-        <p className="hmcts-bgsearch-muted" style={{ marginBottom: 12 }}>
-          Active court schedules, electronic filing, and case tracking. Visible only to Ministry of Justice, Crown
-          Prosecution Service, and Home Office.
-        </p>
-
         {showForm && (
           <div className="hmcts-case-form">
             <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -877,40 +877,56 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
         ) : cases.length === 0 ? (
           <p className="hmcts-bgsearch-muted">No cases filed yet.</p>
         ) : (
-          <div>
-            {cases.map((c) => (
-              <div className="hmcts-case-card" key={c.id}>
-                <div className="hmcts-case-card-head">
-                  <strong>{c.title}</strong>
-                  <span className={`hmcts-case-visibility${c.isPublic ? " hmcts-case-visibility-public" : ""}`}>
-                    {c.isPublic ? "Public" : "Private"}
-                  </span>
+          <div className="hmcts-case-list">
+            {cases.map((c) => {
+              const expanded = expandedIds.has(c.id);
+              return (
+                <div className={`hmcts-case-card${expanded ? " hmcts-case-card-expanded" : ""}`} key={c.id}>
+                  <button className="hmcts-case-card-head" onClick={() => toggleExpanded(c.id)}>
+                    <span className="hmcts-case-card-title">
+                      <span className={`hmcts-case-caret${expanded ? " hmcts-case-caret-open" : ""}`}>▸</span>
+                      <strong>{c.title}</strong>
+                    </span>
+                    <span className={`hmcts-case-visibility${c.isPublic ? " hmcts-case-visibility-public" : ""}`}>
+                      {c.isPublic ? "Public" : "Private"}
+                    </span>
+                  </button>
+                  {!expanded && (
+                    <span className="hmcts-bgsearch-history-meta hmcts-case-collapsed-meta">
+                      {c.subjectUsername ? `Subject: ${c.subjectUsername} · ` : ""}Filed by {c.createdByUsername} ·{" "}
+                      {formatDateTimeNoSeconds(c.createdAt)}
+                    </span>
+                  )}
+                  {expanded && (
+                    <div className="hmcts-case-card-body">
+                      {c.subjectUsername && <p className="hmcts-bgsearch-muted">Subject: {c.subjectUsername}</p>}
+                      {c.info && <p>{c.info}</p>}
+                      {c.photos.length > 0 && (
+                        <div className="hmcts-bgsearch-photo-grid">
+                          {c.photos.map((p, i) => (
+                            <a href={p.url} target="_blank" rel="noreferrer" key={i}>
+                              <img src={p.url} alt={p.name} className="hmcts-case-photo" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {c.files.length > 0 && (
+                        <div className="hmcts-case-file-list">
+                          {c.files.map((f, i) => (
+                            <a href={f.url} target="_blank" rel="noreferrer" key={i}>
+                              {f.name}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      <span className="hmcts-bgsearch-history-meta">
+                        Filed by {c.createdByUsername} · {formatDateTimeNoSeconds(c.createdAt)}
+                      </span>
+                    </div>
+                  )}
                 </div>
-                {c.subjectUsername && <p className="hmcts-bgsearch-muted">Subject: {c.subjectUsername}</p>}
-                {c.info && <p>{c.info}</p>}
-                {c.photos.length > 0 && (
-                  <div className="hmcts-bgsearch-photo-grid">
-                    {c.photos.map((p, i) => (
-                      <a href={p.url} target="_blank" rel="noreferrer" key={i}>
-                        <img src={p.url} alt={p.name} className="hmcts-case-photo" />
-                      </a>
-                    ))}
-                  </div>
-                )}
-                {c.files.length > 0 && (
-                  <div className="hmcts-case-file-list">
-                    {c.files.map((f, i) => (
-                      <a href={f.url} target="_blank" rel="noreferrer" key={i}>
-                        {f.name}
-                      </a>
-                    ))}
-                  </div>
-                )}
-                <span className="hmcts-bgsearch-history-meta">
-                  Filed by {c.createdByUsername} · {formatDateTimeNoSeconds(c.createdAt)}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -996,10 +1012,6 @@ function LrrPanel({ onBack, canEdit }: { onBack: () => void; canEdit: boolean })
             </button>
           )}
         </div>
-        <p className="hmcts-bgsearch-muted" style={{ marginBottom: 12 }}>
-          Local court rules, bench books, precedent decisions, and statutory updates.
-        </p>
-
         {showForm && canEdit && (
           <div className="hmcts-case-form">
             <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -1069,9 +1081,6 @@ function PublicRecordsPanel({ onBack }: { onBack: () => void }) {
       </button>
       <div className="hmcts-bgsearch-card">
         <h4 className="hmcts-bgsearch-title">Public Records</h4>
-        <p className="hmcts-bgsearch-muted" style={{ marginBottom: 12 }}>
-          Search a person to see the titles of any case entries marked public.
-        </p>
         <div className="hmcts-bgsearch-form">
           <input
             placeholder="Search by name or ID…"
@@ -1109,6 +1118,77 @@ function PublicRecordsPanel({ onBack }: { onBack: () => void }) {
   );
 }
 
+interface HmctsPersonnelEntry {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  departments: string[];
+}
+
+function PersonnelDirectoryPanel({ onBack }: { onBack: () => void }) {
+  const [people, setPeople] = useState<HmctsPersonnelEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    fetch("/api/blume-content?type=hmctsPersonnel")
+      .then(async (res) => {
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+      })
+      .then((data) => setPeople(data.personnel || []))
+      .catch((e) => setError(e.message || "Couldn't load the directory."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = people.filter((p) => p.username.toLowerCase().includes(query.trim().toLowerCase()));
+
+  return (
+    <div className="hmcts-bgsearch-view">
+      <button className="hmcts-back" onClick={onBack}>
+        ← Back
+      </button>
+      <div className="hmcts-bgsearch-card">
+        <h4 className="hmcts-bgsearch-title">Personnel Directory</h4>
+        <div className="hmcts-bgsearch-form">
+          <input placeholder="Filter by name…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </div>
+        {loading && <p className="hmcts-bgsearch-muted">Loading…</p>}
+        {error && <p className="hmcts-bgsearch-error">{error}</p>}
+        {!loading && !error && filtered.length === 0 && <p className="hmcts-bgsearch-muted">No personnel found.</p>}
+        {!loading && filtered.length > 0 && (
+          <div className="hmcts-personnel-grid">
+            {filtered.map((p) => (
+              <div className="hmcts-personnel-card" key={p.userId}>
+                {p.avatarUrl ? (
+                  <img className="hmcts-personnel-avatar" src={p.avatarUrl} alt={p.username} />
+                ) : (
+                  <div className="hmcts-personnel-avatar hmcts-personnel-avatar-blank" />
+                )}
+                <div className="hmcts-personnel-info">
+                  <p className="hmcts-personnel-name">{p.username}</p>
+                  <div className="hmcts-personnel-depts">
+                    {p.departments.length === 0 ? (
+                      <span className="hmcts-personnel-dept-tag hmcts-personnel-dept-none">No department on file</span>
+                    ) : (
+                      p.departments.map((d) => (
+                        <span className="hmcts-personnel-dept-tag" key={d}>
+                          {d}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function HmctsApp() {
   const [stage, setStage] = useState<"signin" | "authenticating" | "dashboard">("signin");
   const [typedName] = useState(randomMaskedName);
@@ -1116,8 +1196,15 @@ export function HmctsApp() {
   const [ranked, setRanked] = useState<boolean | null>(null);
   const [canEdit, setCanEdit] = useState(false);
   const [activeTile, setActiveTile] = useState<HmctsTile | null>(null);
-  const [restricted, setRestricted] = useState(false);
-  const restrictedTimer = useRef<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState<{
+    tiles: HmctsTile[];
+    lrr: HmctsLrrPost[];
+    cases: HmctsCase[];
+    personnel: HmctsPersonnelEntry[];
+  }>({ tiles: [], lrr: [], cases: [], personnel: [] });
 
   useEffect(() => {
     fetch("/api/blume-content?type=hmcts")
@@ -1128,6 +1215,58 @@ export function HmctsApp() {
       })
       .catch(() => setRanked(false));
   }, []);
+
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) {
+      setSearchResults({ tiles: [], lrr: [], cases: [], personnel: [] });
+      setSearchLoading(false);
+      return;
+    }
+    setSearchLoading(true);
+    const id = window.setTimeout(async () => {
+      const tileMatches = TILES.filter((tile) => !isTileLocked(tile) && tile.label.toLowerCase().includes(q));
+      let lrr: HmctsLrrPost[] = [];
+      let cases: HmctsCase[] = [];
+      let personnel: HmctsPersonnelEntry[] = [];
+      const jobs: Promise<void>[] = [];
+      if (ranked) {
+        jobs.push(
+          fetch("/api/blume-content?type=hmctsLrr")
+            .then((r) => (r.ok ? r.json() : { posts: [] }))
+            .then((data) => {
+              lrr = ((data.posts || []) as HmctsLrrPost[]).filter((p) => p.title.toLowerCase().includes(q)).slice(0, 5);
+            })
+            .catch(() => {})
+        );
+      }
+      if (canEdit) {
+        jobs.push(
+          fetch("/api/blume-content?type=hmctsCases")
+            .then((r) => (r.ok ? r.json() : { cases: [] }))
+            .then((data) => {
+              cases = ((data.cases || []) as HmctsCase[]).filter((c) => c.title.toLowerCase().includes(q)).slice(0, 5);
+            })
+            .catch(() => {})
+        );
+      }
+      jobs.push(
+        fetch("/api/blume-content?type=hmctsPersonnel")
+          .then((r) => (r.ok ? r.json() : { personnel: [] }))
+          .then((data) => {
+            personnel = ((data.personnel || []) as HmctsPersonnelEntry[])
+              .filter((p) => p.username.toLowerCase().includes(q))
+              .slice(0, 5);
+          })
+          .catch(() => {})
+      );
+      await Promise.all(jobs);
+      setSearchResults({ tiles: tileMatches, lrr, cases, personnel });
+      setSearchLoading(false);
+    }, 300);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, ranked, canEdit]);
 
   useEffect(() => {
     if (stage !== "signin") return;
@@ -1152,16 +1291,24 @@ export function HmctsApp() {
   }
 
   function handleTileClick(tile: HmctsTile) {
-    if (isTileLocked(tile)) {
-      setRestricted(true);
-      if (restrictedTimer.current) window.clearTimeout(restrictedTimer.current);
-      restrictedTimer.current = window.setTimeout(() => setRestricted(false), 2400);
-      return;
-    }
     if (tile.external) {
       window.open(tile.external, "_blank", "noreferrer");
       return;
     }
+    setActiveTile(tile);
+  }
+
+  function goToTile(tile: HmctsTile) {
+    setSearchQuery("");
+    setSearchOpen(false);
+    handleTileClick(tile);
+  }
+
+  function goToPanel(panel: HmctsPanel) {
+    const tile = TILES.find((t) => t.panel === panel);
+    if (!tile) return;
+    setSearchQuery("");
+    setSearchOpen(false);
     setActiveTile(tile);
   }
 
@@ -1212,7 +1359,69 @@ export function HmctsApp() {
     <div className="hmcts-app hmcts-dashboard">
       <div className="hmcts-topbar">
         <span className="hmcts-topbar-brand">eJUDICIARY</span>
-        <input className="hmcts-topbar-search" placeholder="Search this site" readOnly />
+        <div className="hmcts-topbar-search-wrap">
+          <input
+            className="hmcts-topbar-search"
+            placeholder="Search this site"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setSearchOpen(true);
+            }}
+            onFocus={() => setSearchOpen(true)}
+            onBlur={() => window.setTimeout(() => setSearchOpen(false), 150)}
+          />
+          {searchOpen && searchQuery.trim() && (
+            <div className="hmcts-search-dropdown">
+              {searchLoading && <p className="hmcts-search-empty">Searching…</p>}
+              {!searchLoading &&
+                searchResults.tiles.length === 0 &&
+                searchResults.personnel.length === 0 &&
+                searchResults.lrr.length === 0 &&
+                searchResults.cases.length === 0 && <p className="hmcts-search-empty">No matches.</p>}
+              {searchResults.tiles.length > 0 && (
+                <div className="hmcts-search-group">
+                  <p className="hmcts-search-group-label">Services</p>
+                  {searchResults.tiles.map((tile) => (
+                    <button key={tile.id} className="hmcts-search-result" onMouseDown={() => goToTile(tile)}>
+                      {tile.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {searchResults.personnel.length > 0 && (
+                <div className="hmcts-search-group">
+                  <p className="hmcts-search-group-label">Personnel</p>
+                  {searchResults.personnel.map((p) => (
+                    <button key={p.userId} className="hmcts-search-result" onMouseDown={() => goToPanel("personnel")}>
+                      {p.username}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {searchResults.lrr.length > 0 && (
+                <div className="hmcts-search-group">
+                  <p className="hmcts-search-group-label">Legal Research</p>
+                  {searchResults.lrr.map((post) => (
+                    <button key={post.id} className="hmcts-search-result" onMouseDown={() => goToPanel("lrr")}>
+                      {post.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {searchResults.cases.length > 0 && (
+                <div className="hmcts-search-group">
+                  <p className="hmcts-search-group-label">Case and Docket Management</p>
+                  {searchResults.cases.map((c) => (
+                    <button key={c.id} className="hmcts-search-result" onMouseDown={() => goToPanel("cases")}>
+                      {c.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {activeTile ? (
@@ -1226,6 +1435,8 @@ export function HmctsApp() {
           <LrrPanel onBack={() => setActiveTile(null)} canEdit={canEdit} />
         ) : activeTile.panel === "publicRecords" ? (
           <PublicRecordsPanel onBack={() => setActiveTile(null)} />
+        ) : activeTile.panel === "personnel" ? (
+          <PersonnelDirectoryPanel onBack={() => setActiveTile(null)} />
         ) : (
           <div className="hmcts-tile-detail">
             <button className="hmcts-back" onClick={() => setActiveTile(null)}>
@@ -1243,31 +1454,19 @@ export function HmctsApp() {
           </div>
         )
       ) : (
-        <>
-          <div className="hmcts-tile-grid">
-            {TILES.map((tile) => {
-              const locked = isTileLocked(tile);
-              return (
-                <button
-                  key={tile.id}
-                  className={`hmcts-tile${locked ? " hmcts-tile-locked" : ""}`}
-                  style={{ background: tile.color }}
-                  onClick={() => handleTileClick(tile)}
-                >
-                  {locked && <span className="hmcts-tile-lock">🔒</span>}
-                  <span className="hmcts-tile-glyph">{tile.glyph}</span>
-                  <span className="hmcts-tile-label">{tile.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          {restricted && (
-            <p className="hmcts-restricted-note">
-              Restricted — this service requires either a recognised judiciary rank or membership in Ministry of
-              Justice, Crown Prosecution Service, or Home Office.
-            </p>
-          )}
-        </>
+        <div className="hmcts-tile-grid">
+          {TILES.filter((tile) => !isTileLocked(tile)).map((tile) => (
+            <button
+              key={tile.id}
+              className="hmcts-tile"
+              style={{ background: tile.color }}
+              onClick={() => handleTileClick(tile)}
+            >
+              <span className="hmcts-tile-glyph">{tile.glyph}</span>
+              <span className="hmcts-tile-label">{tile.label}</span>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
