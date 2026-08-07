@@ -65,6 +65,70 @@ const TILES: HmctsTile[] = [
   },
 ];
 
+function HmctsTileIcon({ id }: { id: string }) {
+  const common = {
+    className: "hmcts-tile-icon",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "#fff",
+    strokeWidth: 1.6,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+
+  switch (id) {
+    case "backgroundSearches":
+      return (
+        <svg {...common}>
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <line x1="15.3" y1="15.3" x2="20.5" y2="20.5" />
+        </svg>
+      );
+    case "internalMessaging":
+      return (
+        <svg {...common}>
+          <path d="M4 5.5h16v10H9l-4 3.5v-3.5H4z" />
+          <line x1="7.5" y1="9" x2="16.5" y2="9" />
+          <line x1="7.5" y1="12" x2="13.5" y2="12" />
+        </svg>
+      );
+    case "caseDocket":
+      return (
+        <svg {...common}>
+          <path d="M3.5 8.5A1.5 1.5 0 0 1 5 7h4l1.8 2H19a1.5 1.5 0 0 1 1.5 1.5V17A1.5 1.5 0 0 1 19 18.5H5A1.5 1.5 0 0 1 3.5 17z" />
+        </svg>
+      );
+    case "legalResearch":
+      return (
+        <svg {...common}>
+          <path d="M12 5.5c-1.8-1-4-1.5-6-1.5v13.5c2 0 4.2.5 6 1.5" />
+          <path d="M12 5.5c1.8-1 4-1.5 6-1.5v13.5c-2 0-4.2.5-6 1.5" />
+          <line x1="12" y1="5.5" x2="12" y2="19" />
+        </svg>
+      );
+    case "personnelDirectory":
+      return (
+        <svg {...common}>
+          <circle cx="9" cy="8.5" r="3" />
+          <path d="M3.5 19c0-3 2.5-5.2 5.5-5.2s5.5 2.2 5.5 5.2" />
+          <circle cx="17" cy="8" r="2.2" />
+          <path d="M15.2 13.8c2.2.3 3.8 2.2 3.8 4.6" />
+        </svg>
+      );
+    case "publicRecords":
+      return (
+        <svg {...common}>
+          <path d="M7 3.5h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z" />
+          <path d="M14 3.5V8h4" />
+          <line x1="8.5" y1="12.5" x2="15.5" y2="12.5" />
+          <line x1="8.5" y1="15.8" x2="15.5" y2="15.8" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 const QUOTE =
   '"The rule of law is a fundamental constitutional principle which underpins an open, fair and peaceful society, where citizens and businesses can prosper. Our judges and magistrates are its cornerstone"';
 
@@ -1462,7 +1526,7 @@ export function HmctsApp() {
               style={{ background: tile.color }}
               onClick={() => handleTileClick(tile)}
             >
-              <span className="hmcts-tile-glyph">{tile.glyph}</span>
+              <HmctsTileIcon id={tile.id} />
               <span className="hmcts-tile-label">{tile.label}</span>
             </button>
           ))}

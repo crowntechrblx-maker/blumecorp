@@ -5114,10 +5114,10 @@
   cursor: pointer;
   text-align: center;
 }
-.hmcts-tile-glyph {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
+.hmcts-tile-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
 }
 .hmcts-tile-label {
   font-size: 10.5px;
