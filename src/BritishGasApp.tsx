@@ -196,7 +196,7 @@ export function BritishGasApp() {
         )}
       </div>
 
-      <div className="britgas-body">
+      <div className={`britgas-body${tab === "incidents" ? " britgas-body-scroll" : ""}`}>
         {tab === "home" && (
           <div className="britgas-home">
             <div className="britgas-home-welcome">
@@ -213,6 +213,22 @@ export function BritishGasApp() {
                 installation.
               </p>
             </div>
+            <div className="britgas-home-photos">
+              <button
+                type="button"
+                className="britgas-home-photo-btn"
+                onClick={() => setLightboxUrl("/british-gas-photo-1.jpg")}
+              >
+                <img className="britgas-home-photo" src="/british-gas-photo-1.jpg" alt="" />
+              </button>
+              <button
+                type="button"
+                className="britgas-home-photo-btn"
+                onClick={() => setLightboxUrl("/british-gas-photo-2.jpg")}
+              >
+                <img className="britgas-home-photo" src="/british-gas-photo-2.jpg" alt="" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -226,10 +242,11 @@ export function BritishGasApp() {
               incidents.map((incident) => (
                 <div className="britgas-incident-card" key={incident.id}>
                   <div className="britgas-incident-header">
-                    <img className="britgas-hazard-icon" src="/icons/britgas-hazard.svg" alt="" aria-hidden="true" />
+                    <img className="britgas-hazard-icon" src="/icons/britgas-hazard.png" alt="" aria-hidden="true" />
                     <h3>{incident.title}</h3>
-                    <img className="britgas-hazard-icon" src="/icons/britgas-hazard.svg" alt="" aria-hidden="true" />
+                    <img className="britgas-hazard-icon" src="/icons/britgas-hazard.png" alt="" aria-hidden="true" />
                   </div>
+                  <p className="britgas-incident-date">{formatDateTime(incident.createdAt)}</p>
                   {incident.description && <p className="britgas-incident-description">{incident.description}</p>}
                   {incident.imageUrl && (
                     <button
@@ -375,6 +392,13 @@ export function BritishGasApp() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="britgas-footer">
+        <span>British Gas Westbridge</span>
+        <a href={DISCORD_URL} target="_blank" rel="noreferrer">
+          Discord
+        </a>
       </div>
 
       <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
