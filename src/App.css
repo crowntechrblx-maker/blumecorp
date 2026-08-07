@@ -5163,6 +5163,7 @@
   border-bottom: none;
 }
 .hmcts-bgsearch-history-meta {
+  font-size: 12.5px;
   color: #605e5c;
 }
 .hmcts-bgsearch-section {
@@ -5817,7 +5818,7 @@
   width: 100%;
   height: 110px;
   object-fit: contain;
-  background: #f4f8fc;
+  background: #fff;
   border-radius: 8px;
   display: block;
 }

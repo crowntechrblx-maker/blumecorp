@@ -1010,7 +1010,7 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
                   {expanded && !isEditing && (
                     <div className="hmcts-case-card-body">
                       {c.subjectUsername && <p className="hmcts-bgsearch-muted">Subject: {c.subjectUsername}</p>}
-                      {c.info && <p>{c.info}</p>}
+                      {c.info && <p className="hmcts-body-text">{c.info}</p>}
                       {c.photos.length > 0 && (
                         <div className="hmcts-bgsearch-photo-grid">
                           {c.photos.map((p, i) => (
@@ -1296,6 +1296,10 @@ function PublicRecordsPanel({ onBack }: { onBack: () => void }) {
       </button>
       <div className="hmcts-bgsearch-card">
         <h4 className="hmcts-bgsearch-title">Public Records</h4>
+        <p className="hmcts-pr-hint">
+          Records are made public at the discretion of the Crown Prosecution Service and His Majesty's Courts and
+          Tribunal Service. Feel free to request further information by filing a public records request.
+        </p>
 
         <div className="hmcts-case-header">
           <span className="hmcts-bgsearch-label" style={{ marginBottom: 0 }}>
@@ -1622,7 +1626,7 @@ function PublicRecordsRequestsPanel({
                 <span className="hmcts-bgsearch-label" style={{ marginBottom: 0 }}>
                   Request
                 </span>
-                <p>{r.requestedInfo}</p>
+                <p className="hmcts-body-text">{r.requestedInfo}</p>
                 <p className="hmcts-bgsearch-muted">
                   Requested by {r.requesterUsername} · {formatDateTimeNoSeconds(r.createdAt)}
                 </p>
@@ -1695,8 +1699,10 @@ function PublicRecordsRequestsPanel({
                       Replied by {r.repliedByUsername} · {r.repliedAt ? formatDateTimeNoSeconds(r.repliedAt) : ""}
                     </p>
                     <div className="hmcts-pr-copy-box">
-                      <input
+                      <textarea
                         readOnly
+                        rows={1}
+                        ref={autoGrow}
                         value={`eJudiciary has replied to your Public Records request regarding ${r.subjectUsername} (Reference: ${foiReference(
                           r
                         )}). Check your Westbridge OS messages for the response.`}
@@ -1863,10 +1869,6 @@ export function HmctsApp() {
           <p className="hmcts-quote-author">Lady Chief Justice of England and Wales</p>
         </div>
         <div className="hmcts-signin-right">
-          <div className="hmcts-brand">
-            <img src="/icons/royal-coat-of-arms.png" alt="" />
-            <span>eJudiciary</span>
-          </div>
           {stage === "signin" ? (
             <>
               <h2>Sign in</h2>
@@ -1984,7 +1986,7 @@ export function HmctsApp() {
               ← Back
             </button>
             <h3>{activeTile.label}</h3>
-            <p>{activeTile.detail || "This service isn't available in the current build. Check back soon."}</p>
+            <p className="hmcts-body-text">{activeTile.detail || "This service isn't available in the current build. Check back soon."}</p>
             {activeTile.editable && (
               <p className={`hmcts-edit-access${canEdit ? " hmcts-edit-access-granted" : ""}`}>
                 {canEdit
