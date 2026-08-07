@@ -10,7 +10,8 @@ export type AppId =
   | "backgrounds"
   | "settings"
   | "verifile"
-  | "hmcts";
+  | "hmcts"
+  | "britishGas";
 
 export interface AppDef {
   id: AppId;
@@ -124,5 +125,13 @@ export const APPS: AppDef[] = [
     icon: "",
     color: "#7a0d0d",
     defaultSize: { width: 760, height: 600 },
+  },
+  {
+    id: "britishGas",
+    name: "British Gas",
+    icon: "",
+    iconImage: "/british-gas-logo.png",
+    color: "#1697ef",
+    defaultSize: { width: 640, height: 600 },
   },
 ];

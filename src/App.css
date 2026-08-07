@@ -5706,3 +5706,219 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.app-content.britgas {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.britgas-tabbar {
+  display: flex;
+  gap: 4px;
+  padding: 10px 16px 0;
+  border-bottom: 1px solid #d6e8fb;
+  flex-shrink: 0;
+}
+.britgas-tab {
+  background: none;
+  border: none;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a5568;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+}
+.britgas-tab-active {
+  color: #1697ef;
+  background: #eaf5ff;
+}
+.britgas-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+  font-size: 14px;
+  color: #1c1c1e;
+}
+.britgas-home {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.britgas-hero {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+  object-fit: cover;
+}
+.britgas-home-welcome h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: #0b3d68;
+}
+.britgas-home-welcome p {
+  margin: 0;
+  font-size: 13px;
+  color: #4a5568;
+  line-height: 1.5;
+}
+.britgas-muted {
+  color: #8a8886;
+  font-size: 13px;
+}
+.britgas-incidents {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.britgas-incident-card {
+  border: 1px solid #d6e8fb;
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: #fbfdff;
+}
+.britgas-incident-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.britgas-incident-header h3 {
+  margin: 0;
+  font-size: 15px;
+  color: #0b3d68;
+  flex: 1;
+  text-align: center;
+}
+.britgas-hazard {
+  color: #d21f1f;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.britgas-incident-description {
+  font-size: 13px;
+  color: #333;
+  line-height: 1.5;
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}
+.britgas-incident-image-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.britgas-incident-image {
+  width: 100%;
+  max-height: 260px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+.britgas-incident-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #4a5568;
+  border-top: 1px solid #eaf1f8;
+  padding-top: 10px;
+}
+.britgas-mascot-emoji {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.britgas-incident-delete {
+  margin-top: 10px;
+  background: #fff0f0 !important;
+  color: #c0261f !important;
+  border: 1px solid #f3c9c9 !important;
+}
+.britgas-contact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.britgas-discord-btn {
+  display: inline-block;
+  background: #5865f2;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+.britgas-contact-email {
+  font-size: 13px;
+  color: #4a5568;
+}
+.britgas-contact-email a {
+  color: #1697ef;
+}
+.britgas-settings-section input,
+.britgas-settings-section textarea {
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid #d1d1d6;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.britgas-file-label {
+  display: block;
+  font-size: 12.5px;
+  color: #4a5568;
+  margin-bottom: 8px;
+}
+.britgas-cta {
+  background: #1697ef !important;
+  color: #fff;
+  width: 100%;
+}
+.britgas-error {
+  color: #c0261f;
+  font-size: 12.5px;
+  margin: 4px 0;
+}
+.britgas-divider {
+  border: none;
+  border-top: 1px solid #eee;
+  margin: 18px 0;
+}
+.britgas-admin-form {
+  display: flex;
+  gap: 8px;
+}
+.britgas-admin-form input {
+  flex: 1;
+  margin-bottom: 0;
+}
+.britgas-admin-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.britgas-admin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 6px 0;
+  border-bottom: 1px solid #eee;
+}
+.britgas-admin-remove {
+  background: #fff0f0 !important;
+  color: #c0261f !important;
+  border: 1px solid #f3c9c9 !important;
+  flex-shrink: 0;
+}

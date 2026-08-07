@@ -21,6 +21,13 @@ import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib
 import { appendAuditLog } from "../../lib/audit.js";
 import { isVerifileAuthorized, getVerifileWhitelist } from "../../lib/verifile.js";
 import { isPlatformAdmin } from "../../lib/admins.js";
+import {
+  BRITISH_GAS_ROOT_USERNAMES,
+  isBritishGasAdmin,
+  getBritishGasAdmins,
+  addBritishGasAdmin,
+  removeBritishGasAdmin,
+} from "../../lib/britishGas.js";
 import { getGroupIdsByNameMatch, getGroupCatalog } from "../../lib/groupCatalog.js";
 import { sendSystemMessage } from "../../lib/systemMessage.js";
 
@@ -73,6 +80,16 @@ interface HmrcLogEntry {
   sourceKey?: string;
   loggedByUserId: string;
   loggedByUsername: string;
+  createdAt: number;
+}
+
+interface BritishGasIncident {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  postedByUserId: string;
+  postedByUsername: string;
   createdAt: number;
 }
 
@@ -1338,6 +1355,193 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         type: "hmrc_log_removed",
         username: session.username,
         detail: `Removed ${target.type} for ${target.targetUsername}`,
+      });
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    res.status(405).send("Method not allowed");
+    return;
+  }
+
+  if (type === "britishGas") {
+    const canManage = session
+      ? (await isPlatformAdmin(session.userId, session.username)) ||
+        (await isBritishGasAdmin(session.userId, session.username))
+      : false;
+
+    if (req.method === "GET") {
+      const incidents = ((await kv.get<BritishGasIncident[]>("britishGasIncidents")) || []).sort(
+        (a, b) => b.createdAt - a.createdAt
+      );
+      const admins = canManage ? await getBritishGasAdmins() : [];
+      res.status(200).json({ canManage, incidents, admins, rootAdmins: BRITISH_GAS_ROOT_USERNAMES });
+      return;
+    }
+
+    if (req.method === "POST") {
+      if (!session) {
+        res.status(401).send("You must be signed in.");
+        return;
+      }
+      if (!canManage) {
+        res.status(403).send("You do not have British Gas admin access.");
+        return;
+      }
+      try {
+        const body = req.body as {
+          action?: string;
+          title?: string;
+          description?: string;
+          imageDataUrl?: string;
+          username?: string;
+          userId?: string;
+        };
+        const action = body.action || "";
+
+        if (action === "addIncident") {
+          const title = (body.title || "").toString().trim();
+          const description = (body.description || "").toString().trim();
+          if (!title) {
+            res.status(400).send("Missing title.");
+            return;
+          }
+          if (title.length > 140) {
+            res.status(400).send("Title is too long (max 140 characters).");
+            return;
+          }
+          if (description.length > 2000) {
+            res.status(400).send("Description is too long (max 2000 characters).");
+            return;
+          }
+          if (containsBlockedLanguage(title) || containsBlockedLanguage(description)) {
+            res.status(400).send(MODERATION_REJECTION_MESSAGE);
+            return;
+          }
+
+          let imageUrl: string | null = null;
+          const rawImage = (body.imageDataUrl || "").toString();
+          if (rawImage) {
+            const parsed = parseDataUrl(rawImage);
+            if (!parsed) {
+              res.status(400).send("Unsupported image format.");
+              return;
+            }
+            const ext = MIME_EXT[parsed.mime];
+            if (!ext) {
+              res.status(400).send("Unsupported image format.");
+              return;
+            }
+            if (parsed.buffer.length > 4 * 1024 * 1024) {
+              res.status(400).send("Image is too large (max 4MB).");
+              return;
+            }
+            const id = crypto.randomBytes(10).toString("hex");
+            const blob = await put(`british-gas/${id}.${ext}`, parsed.buffer, {
+              access: "public",
+              contentType: parsed.mime,
+            });
+            imageUrl = blob.url;
+          }
+
+          const entry: BritishGasIncident = {
+            id: crypto.randomBytes(12).toString("hex"),
+            title,
+            description,
+            imageUrl,
+            postedByUserId: session.userId,
+            postedByUsername: session.username,
+            createdAt: Date.now(),
+          };
+          const incidents = (await kv.get<BritishGasIncident[]>("britishGasIncidents")) || [];
+          incidents.push(entry);
+          await kv.set("britishGasIncidents", incidents);
+          await appendAuditLog({
+            type: "british_gas_incident_added",
+            username: session.username,
+            detail: `Posted a British Gas incident: "${title}"`,
+          });
+          res.status(200).json({ incidents: [...incidents].sort((a, b) => b.createdAt - a.createdAt) });
+          return;
+        }
+
+        if (action === "addAdmin") {
+          const rawUsername = (body.username || "").toString().trim();
+          if (!rawUsername) {
+            res.status(400).send("Missing username.");
+            return;
+          }
+          const resolved = await resolveRobloxUserId(rawUsername);
+          if (!resolved) {
+            res.status(400).send(`Couldn't find a Roblox user matching "${rawUsername}".`);
+            return;
+          }
+          await addBritishGasAdmin({
+            userId: resolved.userId,
+            username: resolved.username,
+            addedByUsername: session.username,
+            createdAt: Date.now(),
+          });
+          await appendAuditLog({
+            type: "british_gas_admin_added",
+            username: session.username,
+            detail: `Added ${resolved.username} as a British Gas admin`,
+          });
+          res.status(200).json({ admins: await getBritishGasAdmins() });
+          return;
+        }
+
+        if (action === "removeAdmin") {
+          const userId = (body.userId || "").toString().trim();
+          if (!userId) {
+            res.status(400).send("Missing admin.");
+            return;
+          }
+          await removeBritishGasAdmin(userId);
+          await appendAuditLog({
+            type: "british_gas_admin_removed",
+            username: session.username,
+            detail: "Removed a British Gas admin",
+          });
+          res.status(200).json({ admins: await getBritishGasAdmins() });
+          return;
+        }
+
+        res.status(400).send("Unknown action.");
+      } catch (err) {
+        res.status(500).send("Failed: " + (err as Error).message);
+      }
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      if (!session) {
+        res.status(401).send("You must be signed in.");
+        return;
+      }
+      if (!canManage) {
+        res.status(403).send("You do not have British Gas admin access.");
+        return;
+      }
+      const id = (req.query.id as string) || "";
+      if (!id) {
+        res.status(400).send("Missing incident id.");
+        return;
+      }
+      const incidents = (await kv.get<BritishGasIncident[]>("britishGasIncidents")) || [];
+      const target = incidents.find((i) => i.id === id);
+      if (!target) {
+        res.status(404).send("Incident not found.");
+        return;
+      }
+      await kv.set(
+        "britishGasIncidents",
+        incidents.filter((i) => i.id !== id)
+      );
+      await appendAuditLog({
+        type: "british_gas_incident_removed",
+        username: session.username,
+        detail: `Removed a British Gas incident: "${target.title}"`,
       });
       res.status(200).json({ ok: true });
       return;

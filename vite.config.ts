@@ -4189,6 +4189,276 @@ function hmrcPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
+interface BritishGasIncident {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  postedByUserId: string;
+  postedByUsername: string;
+  createdAt: number;
+}
+
+interface BritishGasAdminEntry {
+  userId: string;
+  username: string;
+  addedByUsername: string;
+  createdAt: number;
+}
+
+const BRITISH_GAS_ROOT_USERNAMES_DEV = ["zackmendad"];
+const BRITISH_GAS_INCIDENTS_DB = path.resolve(process.cwd(), "british-gas-incidents-data.json");
+const BRITISH_GAS_ADMINS_DB = path.resolve(process.cwd(), "british-gas-admins-data.json");
+const BRITISH_GAS_DIR = path.resolve(process.cwd(), "public", "british-gas", "uploads");
+
+function loadBritishGasIncidentsDb(): BritishGasIncident[] {
+  try {
+    return JSON.parse(fs.readFileSync(BRITISH_GAS_INCIDENTS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveBritishGasIncidentsDb(entries: BritishGasIncident[]) {
+  fs.writeFileSync(BRITISH_GAS_INCIDENTS_DB, JSON.stringify(entries, null, 2));
+}
+
+function loadBritishGasAdminsDb(): BritishGasAdminEntry[] {
+  try {
+    return JSON.parse(fs.readFileSync(BRITISH_GAS_ADMINS_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveBritishGasAdminsDb(entries: BritishGasAdminEntry[]) {
+  fs.writeFileSync(BRITISH_GAS_ADMINS_DB, JSON.stringify(entries, null, 2));
+}
+
+function isBritishGasRootAdminDev(username: string): boolean {
+  return BRITISH_GAS_ROOT_USERNAMES_DEV.some((u) => u.toLowerCase() === username.toLowerCase());
+}
+
+function isBritishGasAdminDev(userId: string, username: string): boolean {
+  if (isBritishGasRootAdminDev(username)) return true;
+  return loadBritishGasAdminsDb().some((a) => a.userId === userId);
+}
+
+function britishGasPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "british-gas-api",
+    configureServer(server) {
+      fs.mkdirSync(BRITISH_GAS_DIR, { recursive: true });
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "britishGas") {
+          next();
+          return;
+        }
+
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        const canManage = session
+          ? isPlatformAdmin(session.userId, session.username) || isBritishGasAdminDev(session.userId, session.username)
+          : false;
+
+        if (req.method === "GET") {
+          const incidents = loadBritishGasIncidentsDb().sort((a, b) => b.createdAt - a.createdAt);
+          const admins = canManage ? loadBritishGasAdminsDb() : [];
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ canManage, incidents, admins, rootAdmins: BRITISH_GAS_ROOT_USERNAMES_DEV }));
+          return;
+        }
+
+        if (req.method === "POST") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          if (!canManage) {
+            res.statusCode = 403;
+            res.end("You do not have British Gas admin access.");
+            return;
+          }
+          try {
+            const body = await readJsonBody(req);
+            const action = body.action || "";
+
+            if (action === "addIncident") {
+              const title = (body.title || "").toString().trim();
+              const description = (body.description || "").toString().trim();
+              if (!title) {
+                res.statusCode = 400;
+                res.end("Missing title.");
+                return;
+              }
+              if (title.length > 140) {
+                res.statusCode = 400;
+                res.end("Title is too long (max 140 characters).");
+                return;
+              }
+              if (description.length > 2000) {
+                res.statusCode = 400;
+                res.end("Description is too long (max 2000 characters).");
+                return;
+              }
+              if (containsBlockedLanguage(title) || containsBlockedLanguage(description)) {
+                res.statusCode = 400;
+                res.end(MODERATION_REJECTION_MESSAGE);
+                return;
+              }
+
+              let imageUrl: string | null = null;
+              const rawImage = (body.imageDataUrl || "").toString();
+              if (rawImage) {
+                const parsed = parseAnyDataUrlDev(rawImage);
+                if (!parsed) {
+                  res.statusCode = 400;
+                  res.end("Unsupported image format.");
+                  return;
+                }
+                const ext = MIME_EXT[parsed.mime];
+                if (!ext) {
+                  res.statusCode = 400;
+                  res.end("Unsupported image format.");
+                  return;
+                }
+                if (parsed.buffer.length > 4 * 1024 * 1024) {
+                  res.statusCode = 400;
+                  res.end("Image is too large (max 4MB).");
+                  return;
+                }
+                const id = crypto.randomBytes(10).toString("hex");
+                const filename = `${id}.${ext}`;
+                fs.writeFileSync(path.join(BRITISH_GAS_DIR, filename), parsed.buffer);
+                imageUrl = `/british-gas/uploads/${filename}`;
+              }
+
+              const entry: BritishGasIncident = {
+                id: crypto.randomBytes(12).toString("hex"),
+                title,
+                description,
+                imageUrl,
+                postedByUserId: session.userId,
+                postedByUsername: session.username,
+                createdAt: Date.now(),
+              };
+              const incidents = loadBritishGasIncidentsDb();
+              incidents.push(entry);
+              saveBritishGasIncidentsDb(incidents);
+              appendAuditLog({
+                type: "british_gas_incident_added",
+                username: session.username,
+                detail: `Posted a British Gas incident: "${title}"`,
+              });
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ incidents: [...incidents].sort((a, b) => b.createdAt - a.createdAt) }));
+              return;
+            }
+
+            if (action === "addAdmin") {
+              const rawUsername = (body.username || "").toString().trim();
+              if (!rawUsername) {
+                res.statusCode = 400;
+                res.end("Missing username.");
+                return;
+              }
+              const resolved = await resolveRobloxUserId(rawUsername);
+              if (!resolved) {
+                res.statusCode = 400;
+                res.end(`Couldn't find a Roblox user matching "${rawUsername}".`);
+                return;
+              }
+              const admins = loadBritishGasAdminsDb();
+              if (!admins.some((a) => a.userId === resolved.userId)) {
+                admins.push({
+                  userId: resolved.userId,
+                  username: resolved.username,
+                  addedByUsername: session.username,
+                  createdAt: Date.now(),
+                });
+                saveBritishGasAdminsDb(admins);
+              }
+              appendAuditLog({
+                type: "british_gas_admin_added",
+                username: session.username,
+                detail: `Added ${resolved.username} as a British Gas admin`,
+              });
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ admins: loadBritishGasAdminsDb() }));
+              return;
+            }
+
+            if (action === "removeAdmin") {
+              const userId = (body.userId || "").toString().trim();
+              if (!userId) {
+                res.statusCode = 400;
+                res.end("Missing admin.");
+                return;
+              }
+              saveBritishGasAdminsDb(loadBritishGasAdminsDb().filter((a) => a.userId !== userId));
+              appendAuditLog({
+                type: "british_gas_admin_removed",
+                username: session.username,
+                detail: "Removed a British Gas admin",
+              });
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ admins: loadBritishGasAdminsDb() }));
+              return;
+            }
+
+            res.statusCode = 400;
+            res.end("Unknown action.");
+          } catch (err) {
+            res.statusCode = 500;
+            res.end("Failed: " + (err as Error).message);
+          }
+          return;
+        }
+
+        if (req.method === "DELETE") {
+          if (!session) {
+            res.statusCode = 401;
+            res.end("You must be signed in.");
+            return;
+          }
+          if (!canManage) {
+            res.statusCode = 403;
+            res.end("You do not have British Gas admin access.");
+            return;
+          }
+          const id = url.searchParams.get("id") || "";
+          if (!id) {
+            res.statusCode = 400;
+            res.end("Missing incident id.");
+            return;
+          }
+          const incidents = loadBritishGasIncidentsDb();
+          const target = incidents.find((i) => i.id === id);
+          if (!target) {
+            res.statusCode = 404;
+            res.end("Incident not found.");
+            return;
+          }
+          saveBritishGasIncidentsDb(incidents.filter((i) => i.id !== id));
+          appendAuditLog({
+            type: "british_gas_incident_removed",
+            username: session.username,
+            detail: `Removed a British Gas incident: "${target.title}"`,
+          });
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
+
+        res.statusCode = 405;
+        res.end("Method not allowed");
+      });
+    },
+  };
+}
+
 function hmctsPlugin(sessions: Map<string, RobloxSession>): Plugin {
   return {
     name: "hmcts-api",
@@ -5160,6 +5430,7 @@ export default defineConfig(({ mode }) => {
       blumeSearchPlugin(sessions),
       verifilePlugin(sessions),
       hmrcPlugin(sessions),
+      britishGasPlugin(sessions),
       hmctsPlugin(sessions),
       hmctsChatPlugin(sessions),
       hmctsCasesPlugin(sessions),
