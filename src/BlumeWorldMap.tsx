@@ -103,22 +103,55 @@ export function BlumeWorldMap() {
     []
   );
   const landmarkPoints = useMemo(() => {
-    const placedLabels: { x: number; y: number }[] = [];
-    return LANDMARKS.map((l) => {
-      const [x, y] = project(l.lon, l.lat);
+    const FONT_SIZE = 8.5;
+    const CHAR_W = FONT_SIZE * 0.62;
+    const LABEL_H = 10.5;
+    const PAD = 1.5;
+    type Box = { x0: number; x1: number; y0: number; y1: number };
+
+    function intersects(a: Box, b: Box): boolean {
+      return a.x0 - PAD < b.x1 && a.x1 + PAD > b.x0 && a.y0 - PAD < b.y1 && a.y1 + PAD > b.y0;
+    }
+
+    const projected = LANDMARKS.map((l) => ({ l, xy: project(l.lon, l.lat) }));
+    // Every marker dot is itself an obstacle labels must dodge, not just
+    // other labels, so a stacked label never lands on top of a neighbouring
+    // landmark's marker. A label is never blocked by its own marker.
+    const MARKER_R = 4;
+    const markerBoxes: Box[] = projected.map(({ xy }) => ({
+      x0: xy[0] - MARKER_R,
+      x1: xy[0] + MARKER_R,
+      y0: xy[1] - MARKER_R,
+      y1: xy[1] + MARKER_R,
+    }));
+    const labelBoxes: Box[] = [];
+
+    function overlapsAnything(box: Box, skipMarkerIndex: number): boolean {
+      if (labelBoxes.some((p) => intersects(box, p))) return true;
+      return markerBoxes.some((p, i) => i !== skipMarkerIndex && intersects(box, p));
+    }
+
+    return projected.map(({ l, xy }, idx) => {
+      const [x, y] = xy;
       const leftHalf = x < WIDTH / 2;
       const anchor: "end" | "start" = leftHalf ? "end" : "start";
+      const labelX = x + (leftHalf ? -6 : 6);
+      const textWidth = l.name.length * CHAR_W;
+      const x0 = anchor === "end" ? labelX - textWidth : labelX;
+      const x1 = anchor === "end" ? labelX : labelX + textWidth;
+
       let labelY = y + 2.5;
-      let tries = 0;
-      while (
-        placedLabels.some((p) => Math.abs(p.x - x) < 128 && Math.abs(p.y - labelY) < 12) &&
-        tries < 8
-      ) {
-        labelY += 12;
-        tries++;
+      let box: Box = { x0, x1, y0: labelY - LABEL_H * 0.8, y1: labelY + LABEL_H * 0.3 };
+      let step = 0;
+      while (overlapsAnything(box, idx) && step < 80) {
+        step++;
+        const dir = step % 2 === 1 ? 1 : -1;
+        const magnitude = Math.ceil(step / 2) * LABEL_H;
+        labelY = y + 2.5 + dir * magnitude;
+        box = { x0, x1, y0: labelY - LABEL_H * 0.8, y1: labelY + LABEL_H * 0.3 };
       }
-      placedLabels.push({ x, y: labelY });
-      return { ...l, x, y, anchor, labelX: x + (leftHalf ? -6 : 6), labelY };
+      labelBoxes.push(box);
+      return { ...l, x, y, anchor, labelX, labelY };
     });
   }, []);
   const gridLines = useMemo(() => {
