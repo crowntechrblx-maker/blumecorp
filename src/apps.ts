@@ -131,7 +131,7 @@ export const APPS: AppDef[] = [
     name: "British Gas",
     icon: "",
     iconImage: "/british-gas-logo.png",
-    color: "#1697ef",
+    color: "#ffffff",
     defaultSize: { width: 640, height: 600 },
   },
 ];
