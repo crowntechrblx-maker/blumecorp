@@ -5463,6 +5463,10 @@
   flex-direction: column;
   gap: 6px;
 }
+.hmcts-body-text {
+  font-size: 13px;
+  margin: 0;
+}
 .hmcts-case-divider {
   height: 1px;
   background: #e1dfdd;
@@ -5477,6 +5481,16 @@
 .hmcts-case-delete-btn {
   color: #b91c1c;
 }
+.hmcts-pr-hint {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #605e5c;
+  background: #faf9f8;
+  border: 1px solid #e1dfdd;
+  border-radius: 4px;
+}
 .hmcts-pr-request-focused {
   background: #fef9e7;
   outline: 2px solid #f2c744;
@@ -5485,16 +5499,21 @@
 .hmcts-pr-copy-box {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: flex-start;
 }
-.hmcts-pr-copy-box input {
+.hmcts-pr-copy-box textarea {
   flex: 1;
   border: 1px solid #c8c6c4;
   border-radius: 3px;
   padding: 6px 8px;
   font-size: 12px;
+  font-family: inherit;
   color: #605e5c;
   background: #faf9f8;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  line-height: 1.4;
 }
 .hmcts-foi-letter {
   display: flex;
