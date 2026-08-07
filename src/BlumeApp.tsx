@@ -616,7 +616,14 @@ export function BlumeApp({
   const [personLinkedReports, setPersonLinkedReports] = useState<BlumeReport[]>([]);
   const [personLinkedReportsLoading, setPersonLinkedReportsLoading] = useState(false);
 
-  const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
+  const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({
+    reports: true,
+    hmrc: true,
+    map: true,
+    search: true,
+    groups: true,
+    monitoring: true,
+  });
   function togglePanel(key: string) {
     setCollapsedPanels((prev) => ({ ...prev, [key]: !prev[key] }));
   }
