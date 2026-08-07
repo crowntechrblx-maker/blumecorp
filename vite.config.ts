@@ -346,6 +346,7 @@ interface BlumeReportEntry {
   expiresAt?: number;
   sheetSource?: "nst" | "aosKos";
   sheetRowKey?: string;
+  sheetCategory?: "NST" | "AOS" | "KOS" | "KOS/AOS";
 }
 
 // Kept as a static fallback set only for ALL_KNOWN_GROUPS/getMemberGroupNames labeling below.
@@ -3733,6 +3734,14 @@ function parseGovUkDate(raw: string): number | undefined {
   return Number.isNaN(ms) ? undefined : ms;
 }
 
+function govAosKosDesignationLabel(raw: string): "AOS" | "KOS" | "KOS/AOS" {
+  const v = raw.trim().toLowerCase();
+  if (v === "both") return "KOS/AOS";
+  if (v.includes("kill")) return "KOS";
+  if (v.includes("arrest")) return "AOS";
+  return "KOS/AOS";
+}
+
 function govSlugKey(...parts: string[]): string {
   return parts.map((p) => p.trim().toLowerCase().replace(/\s+/g, " ")).join("|");
 }
@@ -3967,12 +3976,14 @@ async function runGovSheetSyncDev() {
       ...(linked ? { linkedUserId: linked.userId, linkedUsername: linked.username } : {}),
       sheetSource: "nst" as const,
       sheetRowKey: row.rowKey,
+      sheetCategory: "NST" as const,
     };
   });
 
   const nextAosKos: BlumeReportEntry[] = aosKosRows.map((row) => {
     const existing = existingAosKos.get(row.rowKey);
     const linked = resolved.get(row.username.toLowerCase());
+    const designationLabel = govAosKosDesignationLabel(row.designation);
     const bodyLines: string[] = [];
     if (row.issuer) bodyLines.push(`Authorised by: ${row.issuer}`);
     if (row.reason) bodyLines.push(`Reason: ${row.reason}`);
@@ -3980,13 +3991,14 @@ async function runGovSheetSyncDev() {
     if (row.notes) bodyLines.push(row.notes);
     return {
       id: existing?.id || crypto.randomBytes(12).toString("hex"),
-      title: `${row.designation || "AOS/KOS"}: ${row.username}`,
+      title: `${designationLabel}: ${row.username}`,
       body: bodyLines.join("\n"),
       authorUsername: "HM Government Sheet Sync",
       createdAt: existing?.createdAt || Date.now(),
       ...(linked ? { linkedUserId: linked.userId, linkedUsername: linked.username } : {}),
       sheetSource: "aosKos" as const,
       sheetRowKey: row.rowKey,
+      sheetCategory: designationLabel,
     };
   });
 

@@ -37,6 +37,7 @@ import {
   parseAosKosRows,
   parseDismissalRows,
   parseBlacklistRows,
+  aosKosDesignationLabel,
 } from "../../lib/govSheetParse.js";
 
 const HMRC_GROUP_ID = 567563234;
@@ -68,6 +69,7 @@ interface BlumeReport {
   expiresAt?: number;
   sheetSource?: "nst" | "aosKos";
   sheetRowKey?: string;
+  sheetCategory?: "NST" | "AOS" | "KOS" | "KOS/AOS";
 }
 
 interface HmrcCard {
@@ -246,12 +248,14 @@ async function runGovSheetSync() {
       ...(linked ? { linkedUserId: linked.userId, linkedUsername: linked.username } : {}),
       sheetSource: "nst" as const,
       sheetRowKey: row.rowKey,
+      sheetCategory: "NST" as const,
     };
   });
 
   const nextAosKos: BlumeReport[] = aosKosRows.map((row) => {
     const existing = existingAosKos.get(row.rowKey);
     const linked = resolved.get(row.username.toLowerCase());
+    const designationLabel = aosKosDesignationLabel(row.designation);
     const bodyLines: string[] = [];
     if (row.issuer) bodyLines.push(`Authorised by: ${row.issuer}`);
     if (row.reason) bodyLines.push(`Reason: ${row.reason}`);
@@ -259,13 +263,14 @@ async function runGovSheetSync() {
     if (row.notes) bodyLines.push(row.notes);
     return {
       id: existing?.id || crypto.randomBytes(12).toString("hex"),
-      title: `${row.designation || "AOS/KOS"}: ${row.username}`,
+      title: `${designationLabel}: ${row.username}`,
       body: bodyLines.join("\n"),
       authorUsername: "HM Government Sheet Sync",
       createdAt: existing?.createdAt || Date.now(),
       ...(linked ? { linkedUserId: linked.userId, linkedUsername: linked.username } : {}),
       sheetSource: "aosKos" as const,
       sheetRowKey: row.rowKey,
+      sheetCategory: designationLabel,
     };
   });
 

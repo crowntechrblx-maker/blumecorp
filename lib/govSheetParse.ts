@@ -135,6 +135,17 @@ export function parseUkDate(raw: string): number | undefined {
   return Number.isNaN(ms) ? undefined : ms;
 }
 
+// Normalizes the AOS/KOS Orders sheet's "KILL/ARREST ON SIGHT" column into a
+// short category label. The sheet's raw value for a combined order is just
+// "Both", which reads badly as a report title — display it as "KOS/AOS".
+export function aosKosDesignationLabel(raw: string): "AOS" | "KOS" | "KOS/AOS" {
+  const v = raw.trim().toLowerCase();
+  if (v === "both") return "KOS/AOS";
+  if (v.includes("kill")) return "KOS";
+  if (v.includes("arrest")) return "AOS";
+  return "KOS/AOS";
+}
+
 function slugKey(...parts: string[]): string {
   return parts
     .map((p) => p.trim().toLowerCase().replace(/\s+/g, " "))
