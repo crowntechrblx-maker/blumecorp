@@ -13,6 +13,7 @@ import {
   isHmctsRanked,
   isHmctsEditor,
   getHmctsUserDepartments,
+  getUserGroupIds,
   MIME_EXT,
   parseDataUrl,
 } from "../../lib/roblox.js";
@@ -20,7 +21,8 @@ import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib
 import { appendAuditLog } from "../../lib/audit.js";
 import { isVerifileAuthorized, getVerifileWhitelist } from "../../lib/verifile.js";
 import { isPlatformAdmin } from "../../lib/admins.js";
-import { getGroupIdsExcludingCategories, getGroupIdsByNameMatch } from "../../lib/groupCatalog.js";
+import { getGroupIdsByNameMatch, getGroupCatalog } from "../../lib/groupCatalog.js";
+import { sendSystemMessage } from "../../lib/systemMessage.js";
 
 const HMRC_GROUP_ID = 567563234;
 const HMRC_LOG_TYPES = ["Information", "Arrest by HMRC", "Money Laundering", "Tax Evasion", "Fraud"];
@@ -96,6 +98,23 @@ interface HmctsMessage {
   fromUsername: string;
   departments: string[];
   text: string;
+  createdAt: number;
+  kind?: "publicRecordsRequest";
+  requestId?: string;
+}
+
+interface HmctsPublicRecordsRequest {
+  id: string;
+  subjectUsername: string;
+  subjectUserId: string;
+  requestedInfo: string;
+  requesterUserId: string;
+  requesterUsername: string;
+  requesterGroups: { id: number; name: string; category: string }[];
+  status: "pending" | "replied";
+  reply?: string;
+  repliedByUsername?: string;
+  repliedAt?: number;
   createdAt: number;
 }
 
@@ -202,14 +221,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  // Case and Docket Management — viewing AND editing restricted to MOJ / CPS / Home Office.
+  // Cases & Citations — viewing AND editing restricted to MOJ / CPS / Home Office.
   if (type === "hmctsCases") {
     if (!session) {
       res.status(401).send("You must be signed in.");
       return;
     }
     if (!(await isHmctsEditor(session.userId))) {
-      res.status(403).send("Case and Docket Management is restricted to Ministry of Justice, Crown Prosecution Service, and Home Office.");
+      res.status(403).send("Cases & Citations is restricted to Ministry of Justice, Crown Prosecution Service, and Home Office.");
       return;
     }
 
@@ -324,6 +343,111 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       } catch (err) {
         res.status(500).send("Failed to save case: " + (err as Error).message);
+      }
+      return;
+    }
+
+    if (req.method === "PATCH") {
+      try {
+        const id = (req.query.id as string) || "";
+        const all = (await kv.get<HmctsCase[]>("hmctsCases")) || [];
+        const idx = all.findIndex((c) => c.id === id);
+        if (idx === -1) {
+          res.status(404).send("Case not found.");
+          return;
+        }
+        const target = all[idx];
+        if (target.createdByUserId !== session.userId && !(await isPlatformAdmin(session.userId, session.username))) {
+          res.status(403).send("You can only edit cases you filed.");
+          return;
+        }
+        const body = req.body as {
+          title?: string;
+          info?: string;
+          isPublic?: boolean;
+          addPhotos?: { name?: string; dataUrl?: string }[];
+          addFiles?: { name?: string; dataUrl?: string }[];
+        };
+        const title = body.title !== undefined ? body.title.toString().trim() : target.title;
+        const info = body.info !== undefined ? body.info.toString().trim() : target.info;
+        if (!title) {
+          res.status(400).send("Missing title.");
+          return;
+        }
+        if (title.length > 140) {
+          res.status(400).send("Title is too long (max 140 characters).");
+          return;
+        }
+        if (info.length > 4000) {
+          res.status(400).send("Information is too long (max 4000 characters).");
+          return;
+        }
+        if (containsBlockedLanguage(title) || containsBlockedLanguage(info)) {
+          res.status(400).send(MODERATION_REJECTION_MESSAGE);
+          return;
+        }
+
+        const photos = [...target.photos];
+        const files = [...target.files];
+
+        const rawPhotos = Array.isArray(body.addPhotos)
+          ? body.addPhotos.slice(0, Math.max(0, HMCTS_CASE_MAX_PHOTOS - photos.length))
+          : [];
+        for (const p of rawPhotos) {
+          const parsed = parseDataUrl(p.dataUrl || "");
+          if (!parsed) continue;
+          const ext = MIME_EXT[parsed.mime];
+          if (!ext) continue;
+          if (parsed.buffer.length > HMCTS_CASE_MAX_ATTACHMENT_BYTES) {
+            res.status(400).send("A photo is too large (max 4MB each).");
+            return;
+          }
+          const pid = crypto.randomBytes(10).toString("hex");
+          const blob = await put(`hmcts-cases/${pid}.${ext}`, parsed.buffer, {
+            access: "public",
+            contentType: parsed.mime,
+          });
+          photos.push({ name: (p.name || "photo").toString().slice(0, 80), url: blob.url });
+        }
+
+        const rawFiles = Array.isArray(body.addFiles)
+          ? body.addFiles.slice(0, Math.max(0, HMCTS_CASE_MAX_FILES - files.length))
+          : [];
+        for (const f of rawFiles) {
+          const parsed = parseAnyDataUrl(f.dataUrl || "");
+          if (!parsed) continue;
+          if (parsed.buffer.length > HMCTS_CASE_MAX_ATTACHMENT_BYTES) {
+            res.status(400).send("A file is too large (max 4MB each).");
+            return;
+          }
+          const fid = crypto.randomBytes(10).toString("hex");
+          const safeName = (f.name || "file").toString().replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+          const blob = await put(`hmcts-cases/${fid}-${safeName}`, parsed.buffer, {
+            access: "public",
+            contentType: parsed.mime,
+          });
+          files.push({ name: safeName, url: blob.url });
+        }
+
+        const updated: HmctsCase = {
+          ...target,
+          title,
+          info,
+          isPublic: body.isPublic !== undefined ? !!body.isPublic : target.isPublic,
+          photos,
+          files,
+        };
+        all[idx] = updated;
+        await kv.set("hmctsCases", all);
+        await appendAuditLog({
+          type: "hmcts_case_edited",
+          username: session.username,
+          detail: `Edited case "${updated.title}"`,
+        });
+        res.status(200).json(updated);
+        return;
+      } catch (err) {
+        res.status(500).send("Failed to update case: " + (err as Error).message);
       }
       return;
     }
@@ -459,9 +583,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  // Personnel Directory — public within the app (no rank gate). Lists everyone
-  // the platform has already scanned into a group tagged HMCTS-ranked, with
-  // department tags where they also sit in MOJ / CPS / Home Office.
+  // Personnel Directory — public within the app (no rank gate). Lists only the
+  // people the platform has scanned who sit in MOJ / CPS / Home Office.
   if (type === "hmctsPersonnel") {
     if (!session) {
       res.status(401).send("You must be signed in.");
@@ -472,20 +595,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     const scanCache = (await kv.get<{ userId: string; username: string; avatarUrl: string | null; groupIds: number[] }[]>("blumeGroupScanCache")) || [];
-    const [rankedGroupIds, mojGroupIds, cpsGroupIds, hoGroupIds] = await Promise.all([
-      getGroupIdsExcludingCategories(["OCG", "IE"]),
+    const [mojGroupIds, cpsGroupIds, hoGroupIds] = await Promise.all([
       getGroupIdsByNameMatch(["ministry of justice"]),
       getGroupIdsByNameMatch(["crown prosecution"]),
       getGroupIdsByNameMatch(["home office"]),
     ]);
-    const rankedSet = new Set(rankedGroupIds);
     const deptSets: { label: string; set: Set<number> }[] = [
       { label: "Ministry of Justice", set: new Set(mojGroupIds) },
       { label: "Crown Prosecution Service", set: new Set(cpsGroupIds) },
       { label: "Home Office", set: new Set(hoGroupIds) },
     ];
     const personnel = scanCache
-      .filter((m) => m.groupIds.some((id) => rankedSet.has(id)))
+      .filter((m) => deptSets.some((d) => m.groupIds.some((id) => d.set.has(id))))
       .map((m) => ({
         userId: m.userId,
         username: m.username,
@@ -494,6 +615,144 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }))
       .sort((a, b) => a.username.localeCompare(b.username));
     res.status(200).json({ personnel });
+    return;
+  }
+
+  // Public Records Requests — anyone signed in can ask for more detail on a
+  // person; MOJ / CPS / Home Office review and reply from Internal Messaging.
+  if (type === "hmctsPublicRecordsRequests") {
+    if (!session) {
+      res.status(401).send("You must be signed in.");
+      return;
+    }
+
+    if (req.method === "GET") {
+      if (!(await isHmctsEditor(session.userId))) {
+        res.status(403).send("Public Records Requests are restricted to Ministry of Justice, Crown Prosecution Service, and Home Office.");
+        return;
+      }
+      const requests = ((await kv.get<HmctsPublicRecordsRequest[]>("hmctsPublicRecordsRequests")) || []).sort(
+        (a, b) => b.createdAt - a.createdAt
+      );
+      res.status(200).json({ requests });
+      return;
+    }
+
+    if (req.method === "POST") {
+      const body = req.body as {
+        action?: string;
+        username?: string;
+        requestedInfo?: string;
+        id?: string;
+        reply?: string;
+      };
+      const action = body.action || "create";
+
+      if (action === "reply") {
+        if (!(await isHmctsEditor(session.userId))) {
+          res.status(403).send("Only Ministry of Justice, Crown Prosecution Service, and Home Office can reply.");
+          return;
+        }
+        const id = (body.id || "").toString().trim();
+        const reply = (body.reply || "").toString().trim();
+        if (!reply) {
+          res.status(400).send("Reply can't be empty.");
+          return;
+        }
+        if (reply.length > 2000) {
+          res.status(400).send("Reply is too long (max 2000 characters).");
+          return;
+        }
+        if (containsBlockedLanguage(reply)) {
+          res.status(400).send(MODERATION_REJECTION_MESSAGE);
+          return;
+        }
+        const all = (await kv.get<HmctsPublicRecordsRequest[]>("hmctsPublicRecordsRequests")) || [];
+        const idx = all.findIndex((r) => r.id === id);
+        if (idx === -1) {
+          res.status(404).send("Request not found.");
+          return;
+        }
+        const updated: HmctsPublicRecordsRequest = {
+          ...all[idx],
+          reply,
+          status: "replied",
+          repliedByUsername: session.username,
+          repliedAt: Date.now(),
+        };
+        all[idx] = updated;
+        await kv.set("hmctsPublicRecordsRequests", all);
+        await sendSystemMessage(
+          updated.requesterUsername,
+          `eJudiciary has replied to your Public Records request regarding ${updated.subjectUsername}: "${reply}"`
+        );
+        await appendAuditLog({
+          type: "hmcts_public_records_request_replied",
+          username: session.username,
+          detail: `Replied to Public Records request from ${updated.requesterUsername} re. ${updated.subjectUsername}`,
+        });
+        res.status(200).json(updated);
+        return;
+      }
+
+      const usernameQuery = (body.username || "").toString().trim();
+      const requestedInfo = (body.requestedInfo || "").toString().trim();
+      if (!usernameQuery || !requestedInfo) {
+        res.status(400).send("Both a username and requested information are required.");
+        return;
+      }
+      if (requestedInfo.length > 1000) {
+        res.status(400).send("Requested information is too long (max 1000 characters).");
+        return;
+      }
+      if (containsBlockedLanguage(requestedInfo)) {
+        res.status(400).send(MODERATION_REJECTION_MESSAGE);
+        return;
+      }
+      const resolved = await resolveRobloxUserId(usernameQuery);
+      if (!resolved) {
+        res.status(404).send(`Couldn't find a Roblox user matching "${usernameQuery}".`);
+        return;
+      }
+      const [requesterGroupIds, catalog] = await Promise.all([getUserGroupIds(session.userId), getGroupCatalog()]);
+      const requesterGroups = requesterGroupIds
+        .filter((id) => id in catalog)
+        .map((id) => ({ id, name: catalog[id].name, category: catalog[id].category }));
+
+      const entry: HmctsPublicRecordsRequest = {
+        id: crypto.randomBytes(12).toString("hex"),
+        subjectUsername: resolved.username,
+        subjectUserId: resolved.userId,
+        requestedInfo,
+        requesterUserId: session.userId,
+        requesterUsername: session.username,
+        requesterGroups,
+        status: "pending",
+        createdAt: Date.now(),
+      };
+      const all = (await kv.get<HmctsPublicRecordsRequest[]>("hmctsPublicRecordsRequests")) || [];
+      all.push(entry);
+      await kv.set("hmctsPublicRecordsRequests", all);
+
+      const chatEntry: HmctsMessage = {
+        id: crypto.randomBytes(12).toString("hex"),
+        fromUserId: "system",
+        fromUsername: "eJudiciary",
+        departments: [],
+        text: `New Public Records Request from ${session.username} regarding ${resolved.username}.`,
+        createdAt: Date.now(),
+        kind: "publicRecordsRequest",
+        requestId: entry.id,
+      };
+      const chatAll = (await kv.get<HmctsMessage[]>("hmctsMessages")) || [];
+      const chatNext = [...chatAll, chatEntry].slice(-500);
+      await kv.set("hmctsMessages", chatNext);
+
+      res.status(200).json(entry);
+      return;
+    }
+
+    res.status(405).send("Method not allowed");
     return;
   }
 

@@ -5644,6 +5644,39 @@
   flex-direction: column;
   gap: 6px;
 }
+.hmcts-case-divider {
+  height: 1px;
+  background: #e1dfdd;
+  margin: 14px 0;
+}
+.hmcts-case-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+}
+.hmcts-case-delete-btn {
+  color: #b91c1c;
+}
+.hmcts-pr-request-focused {
+  background: #fef9e7;
+  outline: 2px solid #f2c744;
+  outline-offset: 4px;
+}
+.hmcts-pr-copy-box {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.hmcts-pr-copy-box input {
+  flex: 1;
+  border: 1px solid #c8c6c4;
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #605e5c;
+  background: #faf9f8;
+}
 .hmcts-case-visibility {
   font-size: 10.5px;
   font-weight: 700;

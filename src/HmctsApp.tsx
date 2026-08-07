@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getChargeName } from "./pncCharges";
 
-type HmctsPanel = "search" | "chat" | "cases" | "lrr" | "publicRecords" | "personnel";
+type HmctsPanel = "search" | "chat" | "cases" | "lrr" | "publicRecords" | "personnel" | "prRequests";
 
 interface HmctsTile {
   id: string;
@@ -35,7 +35,7 @@ const TILES: HmctsTile[] = [
   },
   {
     id: "caseDocket",
-    label: "Case and Docket Management",
+    label: "Cases & Citations",
     color: "#7a0d0d",
     glyph: "CDM",
     editorOnly: true,
@@ -354,11 +354,8 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
   const [result, setResult] = useState<PersonSearchResult | null>(null);
   const [usernameCopied, setUsernameCopied] = useState(false);
   const [showPreviousPhotos, setShowPreviousPhotos] = useState(false);
-  const [showPreviousPlates, setShowPreviousPlates] = useState(false);
   const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [newVehicleType, setNewVehicleType] = useState("");
-  const [addingVehicle, setAddingVehicle] = useState(false);
 
   async function handleSearch(overrideQuery?: string) {
     const q = (overrideQuery ?? query).trim();
@@ -376,7 +373,6 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
       setResult(data);
       setQuery(data.username);
       setShowPreviousPhotos(false);
-      setShowPreviousPlates(false);
     } catch {
       setError("Couldn't reach the search service.");
     } finally {
@@ -401,45 +397,7 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
   function togglePreviousPhotos() {
     const next = !showPreviousPhotos;
     setShowPreviousPhotos(next);
-    setShowPreviousPlates(false);
     if (next && history.length === 0) loadHistory();
-  }
-  function togglePreviousPlates() {
-    const next = !showPreviousPlates;
-    setShowPreviousPlates(next);
-    setShowPreviousPhotos(false);
-    if (next && history.length === 0) loadHistory();
-  }
-
-  async function handleAddVehicle() {
-    if (!result || !newVehicleType.trim()) return;
-    setAddingVehicle(true);
-    try {
-      const res = await fetch("/api/blume-search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "hmctsAddVehicle", userId: result.userId, vehicleType: newVehicleType.trim() }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setResult((prev) => (prev ? { ...prev, vehicleTags: data.vehicleTags || [] } : prev));
-        setNewVehicleType("");
-      }
-    } finally {
-      setAddingVehicle(false);
-    }
-  }
-
-  async function handleRemoveVehicle(id: string) {
-    const res = await fetch("/api/blume-search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "hmctsRemoveVehicle", id }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setResult((prev) => (prev ? { ...prev, vehicleTags: data.vehicleTags || [] } : prev));
-    }
   }
 
   function handleCopyUsername(username: string) {
@@ -491,19 +449,9 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
 
             {result.apiError && <p className="hmcts-bgsearch-error">{result.apiError}</p>}
 
-            <div className="hmcts-bgsearch-row">
-              <span className="hmcts-bgsearch-label" style={{ marginBottom: 0 }}>
-                Equipped plate
-              </span>
-              <span className="hmcts-bgsearch-row-value">{result.customPlate || "None on file"}</span>
-            </div>
-
             <div className="hmcts-bgsearch-actions">
               <button className="hmcts-bgsearch-link-btn" onClick={togglePreviousPhotos}>
                 {showPreviousPhotos ? "Hide previous photos" : "View previous photos"}
-              </button>
-              <button className="hmcts-bgsearch-link-btn" onClick={togglePreviousPlates}>
-                {showPreviousPlates ? "Hide previous plates" : "View previous plates"}
               </button>
             </div>
 
@@ -525,59 +473,6 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
                 )}
               </div>
             )}
-
-            {showPreviousPlates && (
-              <div className="hmcts-bgsearch-history-panel">
-                {historyLoading ? (
-                  <p className="hmcts-bgsearch-muted">Loading…</p>
-                ) : history.length === 0 ? (
-                  <p className="hmcts-bgsearch-muted">No previous plates cached.</p>
-                ) : (
-                  <div>
-                    {history.map((h) => (
-                      <div className="hmcts-bgsearch-history-row" key={h.id}>
-                        <span>{h.customPlate || "—"}</span>
-                        <span className="hmcts-bgsearch-history-meta">
-                          {new Date(h.createdAt).toLocaleString()} · searched by {h.searchedByUsername}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="hmcts-bgsearch-section">
-              <span className="hmcts-bgsearch-label">Known vehicles</span>
-              <div className="hmcts-bgsearch-chip-list">
-                {result.vehicleTags.length === 0 && <p className="hmcts-bgsearch-muted">None tagged yet.</p>}
-                {result.vehicleTags.map((v) => (
-                  <div className="hmcts-bgsearch-chip" key={v.id}>
-                    <span>{v.vehicleType}</span>
-                    <button onClick={() => handleRemoveVehicle(v.id)} title="Remove">
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="hmcts-bgsearch-vehicle-form">
-                <input
-                  placeholder="Add a known vehicle type…"
-                  value={newVehicleType}
-                  onChange={(e) => setNewVehicleType(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !addingVehicle) handleAddVehicle();
-                  }}
-                />
-                <button
-                  className="hmcts-bgsearch-btn"
-                  disabled={!newVehicleType.trim() || addingVehicle}
-                  onClick={handleAddVehicle}
-                >
-                  Add
-                </button>
-              </div>
-            </div>
 
             <div className="hmcts-bgsearch-section">
               <span className="hmcts-bgsearch-label">Groups</span>
@@ -687,9 +582,17 @@ interface HmctsMessage {
   departments: string[];
   text: string;
   createdAt: number;
+  kind?: "publicRecordsRequest";
+  requestId?: string;
 }
 
-function InternalMessagingPanel({ onBack }: { onBack: () => void }) {
+function InternalMessagingPanel({
+  onBack,
+  onOpenRequest,
+}: {
+  onBack: () => void;
+  onOpenRequest?: (requestId: string) => void;
+}) {
   const [messages, setMessages] = useState<HmctsMessage[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -763,6 +666,14 @@ function InternalMessagingPanel({ onBack }: { onBack: () => void }) {
                 <span className="hmcts-chat-message-time">{formatDateTimeNoSeconds(m.createdAt)}</span>
               </div>
               <div className="hmcts-chat-message-text">{m.text}</div>
+              {m.kind === "publicRecordsRequest" && m.requestId && (
+                <button
+                  className="hmcts-bgsearch-link-btn"
+                  onClick={() => onOpenRequest?.(m.requestId as string)}
+                >
+                  View Request
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -798,9 +709,13 @@ interface HmctsCase {
   photos: HmctsCaseAttachment[];
   files: HmctsCaseAttachment[];
   isPublic: boolean;
+  createdByUserId: string;
   createdByUsername: string;
   createdAt: number;
 }
+
+const HMCTS_CASE_PHOTO_LIMIT = 4;
+const HMCTS_CASE_FILE_LIMIT = 3;
 
 function fileToDataUrl(f: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -824,6 +739,16 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editInfo, setEditInfo] = useState("");
+  const [editIsPublic, setEditIsPublic] = useState(false);
+  const [editAddPhotoFiles, setEditAddPhotoFiles] = useState<File[]>([]);
+  const [editAddDocFiles, setEditAddDocFiles] = useState<File[]>([]);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   function toggleExpanded(id: string) {
     setExpandedIds((prev) => {
@@ -832,6 +757,72 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
       else next.add(id);
       return next;
     });
+  }
+
+  function startEdit(c: HmctsCase) {
+    setEditingId(c.id);
+    setEditTitle(c.title);
+    setEditInfo(c.info);
+    setEditIsPublic(c.isPublic);
+    setEditAddPhotoFiles([]);
+    setEditAddDocFiles([]);
+    setEditError(null);
+    setExpandedIds((prev) => new Set(prev).add(c.id));
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditError(null);
+  }
+
+  async function handleSaveEdit(c: HmctsCase) {
+    if (!editTitle.trim()) {
+      setEditError("Missing title.");
+      return;
+    }
+    setEditSubmitting(true);
+    setEditError(null);
+    try {
+      const addPhotos = await Promise.all(
+        editAddPhotoFiles.map(async (f) => ({ name: f.name, dataUrl: await fileToDataUrl(f) }))
+      );
+      const addFiles = await Promise.all(
+        editAddDocFiles.map(async (f) => ({ name: f.name, dataUrl: await fileToDataUrl(f) }))
+      );
+      const res = await fetch(`/api/blume-content?type=hmctsCases&id=${encodeURIComponent(c.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editTitle.trim(), info: editInfo.trim(), isPublic: editIsPublic, addPhotos, addFiles }),
+      });
+      if (!res.ok) {
+        setEditError(await res.text());
+        return;
+      }
+      const updated = await res.json();
+      setCases((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+      setEditingId(null);
+    } catch {
+      setEditError("Couldn't save changes.");
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/blume-content?type=hmctsCases&id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) {
+        setDeleteError(await res.text());
+        return;
+      }
+      setCases((prev) => prev.filter((c) => c.id !== id));
+    } catch {
+      setDeleteError("Couldn't remove that case.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function loadCases() {
@@ -897,7 +888,7 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
       <div className="hmcts-bgsearch-card">
         <div className="hmcts-case-header">
           <h4 className="hmcts-bgsearch-title" style={{ margin: 0 }}>
-            Case and Docket Management
+            Cases & Citations
           </h4>
           <button className="hmcts-plus-btn" onClick={() => setShowForm((s) => !s)} title="New case">
             +
@@ -936,6 +927,10 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
+        <div className="hmcts-case-divider" />
+
+        {deleteError && <p className="hmcts-bgsearch-error">{deleteError}</p>}
+
         {loading ? (
           <p className="hmcts-bgsearch-muted">Loading…</p>
         ) : cases.length === 0 ? (
@@ -944,6 +939,9 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
           <div className="hmcts-case-list">
             {cases.map((c) => {
               const expanded = expandedIds.has(c.id);
+              const isEditing = editingId === c.id;
+              const photosLeft = HMCTS_CASE_PHOTO_LIMIT - c.photos.length;
+              const filesLeft = HMCTS_CASE_FILE_LIMIT - c.files.length;
               return (
                 <div className={`hmcts-case-card${expanded ? " hmcts-case-card-expanded" : ""}`} key={c.id}>
                   <button className="hmcts-case-card-head" onClick={() => toggleExpanded(c.id)}>
@@ -961,7 +959,7 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
                       {formatDateTimeNoSeconds(c.createdAt)}
                     </span>
                   )}
-                  {expanded && (
+                  {expanded && !isEditing && (
                     <div className="hmcts-case-card-body">
                       {c.subjectUsername && <p className="hmcts-bgsearch-muted">Subject: {c.subjectUsername}</p>}
                       {c.info && <p>{c.info}</p>}
@@ -986,6 +984,63 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
                       <span className="hmcts-bgsearch-history-meta">
                         Filed by {c.createdByUsername} · {formatDateTimeNoSeconds(c.createdAt)}
                       </span>
+                      <div className="hmcts-case-actions">
+                        <button className="hmcts-bgsearch-link-btn" onClick={() => startEdit(c)}>
+                          Edit
+                        </button>
+                        <button
+                          className="hmcts-bgsearch-link-btn hmcts-case-delete-btn"
+                          disabled={deletingId === c.id}
+                          onClick={() => handleDelete(c.id)}
+                        >
+                          {deletingId === c.id ? "Removing…" : "Remove case"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {expanded && isEditing && (
+                    <div className="hmcts-case-card-body hmcts-case-form">
+                      <input placeholder="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                      <textarea
+                        placeholder="Information"
+                        value={editInfo}
+                        onChange={(e) => setEditInfo(e.target.value)}
+                        rows={4}
+                      />
+                      {photosLeft > 0 && (
+                        <label className="hmcts-case-file-label">
+                          Add photos ({photosLeft} more allowed)
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) => setEditAddPhotoFiles(Array.from(e.target.files || []).slice(0, photosLeft))}
+                          />
+                        </label>
+                      )}
+                      {filesLeft > 0 && (
+                        <label className="hmcts-case-file-label">
+                          Add files ({filesLeft} more allowed)
+                          <input
+                            type="file"
+                            multiple
+                            onChange={(e) => setEditAddDocFiles(Array.from(e.target.files || []).slice(0, filesLeft))}
+                          />
+                        </label>
+                      )}
+                      <label className="hmcts-case-checkbox-label">
+                        <input type="checkbox" checked={editIsPublic} onChange={(e) => setEditIsPublic(e.target.checked)} />
+                        Mark as public (title will be visible via Public Records)
+                      </label>
+                      {editError && <p className="hmcts-bgsearch-error">{editError}</p>}
+                      <div className="hmcts-case-actions">
+                        <button className="hmcts-bgsearch-btn" disabled={editSubmitting} onClick={() => handleSaveEdit(c)}>
+                          {editSubmitting ? "Saving…" : "Save changes"}
+                        </button>
+                        <button className="hmcts-bgsearch-link-btn" disabled={editSubmitting} onClick={cancelEdit}>
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1118,6 +1173,12 @@ function PublicRecordsPanel({ onBack }: { onBack: () => void }) {
     null
   );
 
+  const [reqUsername, setReqUsername] = useState("");
+  const [reqInfo, setReqInfo] = useState("");
+  const [reqSubmitting, setReqSubmitting] = useState(false);
+  const [reqError, setReqError] = useState<string | null>(null);
+  const [reqSent, setReqSent] = useState(false);
+
   async function handleSearch() {
     const q = query.trim();
     if (!q) return;
@@ -1138,6 +1199,31 @@ function PublicRecordsPanel({ onBack }: { onBack: () => void }) {
     }
   }
 
+  async function handleSubmitRequest() {
+    if (!reqUsername.trim() || !reqInfo.trim()) return;
+    setReqSubmitting(true);
+    setReqError(null);
+    setReqSent(false);
+    try {
+      const res = await fetch("/api/blume-content?type=hmctsPublicRecordsRequests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: reqUsername.trim(), requestedInfo: reqInfo.trim() }),
+      });
+      if (!res.ok) {
+        setReqError(await res.text());
+        return;
+      }
+      setReqUsername("");
+      setReqInfo("");
+      setReqSent(true);
+    } catch {
+      setReqError("Couldn't send that request.");
+    } finally {
+      setReqSubmitting(false);
+    }
+  }
+
   return (
     <div className="hmcts-bgsearch-view">
       <button className="hmcts-back" onClick={onBack}>
@@ -1145,6 +1231,37 @@ function PublicRecordsPanel({ onBack }: { onBack: () => void }) {
       </button>
       <div className="hmcts-bgsearch-card">
         <h4 className="hmcts-bgsearch-title">Public Records</h4>
+
+        <div className="hmcts-case-header">
+          <span className="hmcts-bgsearch-label" style={{ marginBottom: 0 }}>
+            Public Records Request
+          </span>
+        </div>
+        <div className="hmcts-case-form">
+          <input
+            placeholder="Username the request is about…"
+            value={reqUsername}
+            onChange={(e) => setReqUsername(e.target.value)}
+          />
+          <textarea
+            placeholder="What information are you requesting?"
+            value={reqInfo}
+            onChange={(e) => setReqInfo(e.target.value)}
+            rows={3}
+          />
+          {reqError && <p className="hmcts-bgsearch-error">{reqError}</p>}
+          {reqSent && <p className="hmcts-bgsearch-muted">Request sent — MOJ, CPS, and Home Office have been notified.</p>}
+          <button
+            className="hmcts-bgsearch-btn"
+            disabled={!reqUsername.trim() || !reqInfo.trim() || reqSubmitting}
+            onClick={handleSubmitRequest}
+          >
+            {reqSubmitting ? "Sending…" : "Send request"}
+          </button>
+        </div>
+
+        <div className="hmcts-case-divider" />
+
         <div className="hmcts-bgsearch-form">
           <input
             placeholder="Search by name or ID…"
@@ -1253,6 +1370,175 @@ function PersonnelDirectoryPanel({ onBack }: { onBack: () => void }) {
   );
 }
 
+interface HmctsPrRequesterGroup {
+  id: number;
+  name: string;
+  category: string;
+}
+
+interface HmctsPublicRecordsRequest {
+  id: string;
+  subjectUsername: string;
+  subjectUserId: string;
+  requestedInfo: string;
+  requesterUserId: string;
+  requesterUsername: string;
+  requesterGroups: HmctsPrRequesterGroup[];
+  status: "pending" | "replied";
+  reply?: string;
+  repliedByUsername?: string;
+  repliedAt?: number;
+  createdAt: number;
+}
+
+function PublicRecordsRequestsPanel({
+  onBack,
+  focusRequestId,
+}: {
+  onBack: () => void;
+  focusRequestId?: string | null;
+}) {
+  const [requests, setRequests] = useState<HmctsPublicRecordsRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [replyErrors, setReplyErrors] = useState<Record<string, string>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/blume-content?type=hmctsPublicRecordsRequests")
+      .then(async (res) => {
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+      })
+      .then((data) => setRequests(data.requests || []))
+      .catch((e) => setError(e.message || "Couldn't load requests."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!focusRequestId || loading) return;
+    const el = document.getElementById(`hmcts-pr-request-${focusRequestId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusRequestId, loading]);
+
+  async function handleReply(r: HmctsPublicRecordsRequest) {
+    const reply = (replyDrafts[r.id] || "").trim();
+    if (!reply) return;
+    setSubmittingId(r.id);
+    setReplyErrors((prev) => ({ ...prev, [r.id]: "" }));
+    try {
+      const res = await fetch("/api/blume-content?type=hmctsPublicRecordsRequests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reply", id: r.id, reply }),
+      });
+      if (!res.ok) {
+        const message = await res.text();
+        setReplyErrors((prev) => ({ ...prev, [r.id]: message }));
+        return;
+      }
+      const updated = await res.json();
+      setRequests((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+    } catch {
+      setReplyErrors((prev) => ({ ...prev, [r.id]: "Couldn't send that reply." }));
+    } finally {
+      setSubmittingId(null);
+    }
+  }
+
+  function handleCopy(r: HmctsPublicRecordsRequest) {
+    const text = `eJudiciary has replied to your Public Records request regarding ${r.subjectUsername}. Check your Westbridge OS messages for the response.`;
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setCopiedId(r.id);
+    window.setTimeout(() => setCopiedId((c) => (c === r.id ? null : c)), 1500);
+  }
+
+  return (
+    <div className="hmcts-bgsearch-view">
+      <button className="hmcts-back" onClick={onBack}>
+        ← Back
+      </button>
+      <div className="hmcts-bgsearch-card">
+        <h4 className="hmcts-bgsearch-title">Public Records Requests</h4>
+        {loading && <p className="hmcts-bgsearch-muted">Loading…</p>}
+        {error && <p className="hmcts-bgsearch-error">{error}</p>}
+        {!loading && !error && requests.length === 0 && <p className="hmcts-bgsearch-muted">No requests yet.</p>}
+        <div className="hmcts-case-list">
+          {requests.map((r) => (
+            <div
+              className={`hmcts-case-card${focusRequestId === r.id ? " hmcts-pr-request-focused" : ""}`}
+              id={`hmcts-pr-request-${r.id}`}
+              key={r.id}
+            >
+              <div className="hmcts-case-card-head" style={{ cursor: "default" }}>
+                <span className="hmcts-case-card-title">
+                  <strong>Re: {r.subjectUsername}</strong>
+                </span>
+                <span className={`hmcts-case-visibility${r.status === "replied" ? " hmcts-case-visibility-public" : ""}`}>
+                  {r.status === "replied" ? "Replied" : "Pending"}
+                </span>
+              </div>
+              <div className="hmcts-case-card-body">
+                <p>{r.requestedInfo}</p>
+                <p className="hmcts-bgsearch-muted">
+                  Requested by {r.requesterUsername} · {formatDateTimeNoSeconds(r.createdAt)}
+                </p>
+                {r.requesterGroups.length > 0 && (
+                  <div className="hmcts-bgsearch-chip-list">
+                    {r.requesterGroups.map((g) => (
+                      <span key={g.id} className="hmcts-bgsearch-chip">
+                        {g.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {r.status === "pending" ? (
+                  <>
+                    <textarea
+                      placeholder="Write a reply…"
+                      value={replyDrafts[r.id] || ""}
+                      onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                      rows={3}
+                    />
+                    {replyErrors[r.id] && <p className="hmcts-bgsearch-error">{replyErrors[r.id]}</p>}
+                    <button
+                      className="hmcts-bgsearch-btn"
+                      disabled={!(replyDrafts[r.id] || "").trim() || submittingId === r.id}
+                      onClick={() => handleReply(r)}
+                    >
+                      {submittingId === r.id ? "Sending…" : "Send reply"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      <strong>Reply:</strong> {r.reply}
+                    </p>
+                    <p className="hmcts-bgsearch-muted">
+                      Replied by {r.repliedByUsername} · {r.repliedAt ? formatDateTimeNoSeconds(r.repliedAt) : ""}
+                    </p>
+                    <div className="hmcts-pr-copy-box">
+                      <input
+                        readOnly
+                        value={`eJudiciary has replied to your Public Records request regarding ${r.subjectUsername}. Check your Westbridge OS messages for the response.`}
+                      />
+                      <button className="hmcts-bgsearch-link-btn" onClick={() => handleCopy(r)}>
+                        {copiedId === r.id ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function HmctsApp() {
   const [stage, setStage] = useState<"signin" | "authenticating" | "dashboard">("signin");
   const [typedName] = useState(randomMaskedName);
@@ -1260,6 +1546,7 @@ export function HmctsApp() {
   const [ranked, setRanked] = useState<boolean | null>(null);
   const [canEdit, setCanEdit] = useState(false);
   const [activeTile, setActiveTile] = useState<HmctsTile | null>(null);
+  const [prFocusId, setPrFocusId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -1376,6 +1663,13 @@ export function HmctsApp() {
     setActiveTile(tile);
   }
 
+  // Not a dashboard tile — only reachable via the "View Request" button on an
+  // automated chat message, per spec.
+  function openPublicRecordsRequests(requestId?: string) {
+    setPrFocusId(requestId || null);
+    setActiveTile({ id: "publicRecordsRequests", label: "Public Records Requests", color: "#498205", glyph: "PRR", panel: "prRequests" });
+  }
+
   if (stage === "signin" || stage === "authenticating") {
     return (
       <div className="hmcts-app hmcts-signin">
@@ -1475,7 +1769,7 @@ export function HmctsApp() {
               )}
               {searchResults.cases.length > 0 && (
                 <div className="hmcts-search-group">
-                  <p className="hmcts-search-group-label">Case and Docket Management</p>
+                  <p className="hmcts-search-group-label">Cases & Citations</p>
                   {searchResults.cases.map((c) => (
                     <button key={c.id} className="hmcts-search-result" onMouseDown={() => goToPanel("cases")}>
                       {c.title}
@@ -1492,7 +1786,10 @@ export function HmctsApp() {
         activeTile.panel === "search" ? (
           <BackgroundSearchPanel onBack={() => setActiveTile(null)} />
         ) : activeTile.panel === "chat" ? (
-          <InternalMessagingPanel onBack={() => setActiveTile(null)} />
+          <InternalMessagingPanel
+            onBack={() => setActiveTile(null)}
+            onOpenRequest={(id) => openPublicRecordsRequests(id)}
+          />
         ) : activeTile.panel === "cases" ? (
           <CaseDocketPanel onBack={() => setActiveTile(null)} />
         ) : activeTile.panel === "lrr" ? (
@@ -1501,6 +1798,8 @@ export function HmctsApp() {
           <PublicRecordsPanel onBack={() => setActiveTile(null)} />
         ) : activeTile.panel === "personnel" ? (
           <PersonnelDirectoryPanel onBack={() => setActiveTile(null)} />
+        ) : activeTile.panel === "prRequests" ? (
+          <PublicRecordsRequestsPanel onBack={() => setActiveTile(null)} focusRequestId={prFocusId} />
         ) : (
           <div className="hmcts-tile-detail">
             <button className="hmcts-back" onClick={() => setActiveTile(null)}>
