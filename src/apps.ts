@@ -129,7 +129,7 @@ export const APPS: AppDef[] = [
   },
   {
     id: "hmcts",
-    name: "HMCTS",
+    name: "eJudiciary",
     icon: "",
     color: "#7a0d0d",
     defaultSize: { width: 760, height: 600 },
