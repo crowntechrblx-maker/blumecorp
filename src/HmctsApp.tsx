@@ -6,7 +6,9 @@ interface HmctsTile {
   color: string;
   glyph: string;
   locked?: boolean;
+  editable?: boolean;
   external?: string;
+  detail?: string;
 }
 
 const TILES: HmctsTile[] = [
@@ -19,6 +21,33 @@ const TILES: HmctsTile[] = [
   { id: "security", label: "Security", color: "#3b3a39", glyph: "SEC" },
   { id: "eirs", label: "eIRS", color: "#7a0d0d", glyph: "eIRS", locked: true },
   { id: "chatnow", label: "Chat Now for Magistrate Peer Mentoring, Guidance, Coaching and Advice", color: "#b4009e", glyph: "CHAT" },
+  {
+    id: "caseDocket",
+    label: "Case and Docket Management",
+    color: "#7a0d0d",
+    glyph: "CDM",
+    locked: true,
+    editable: true,
+    detail: "Links to active court schedules, electronic filing systems, and case tracking workflows.",
+  },
+  {
+    id: "legalResearch",
+    label: "Legal Research Repositories",
+    color: "#5c2d91",
+    glyph: "LRR",
+    locked: true,
+    editable: true,
+    detail: "Internal databases for local court rules, bench books, precedent decisions, and statutory updates.",
+  },
+  {
+    id: "personnelDirectory",
+    label: "Personnel Directory",
+    color: "#038387",
+    glyph: "PD",
+    locked: true,
+    editable: true,
+    detail: "Contact lists, role descriptions, and organizational charts for judges, clerks, and administrative staff.",
+  },
   { id: "bbc", label: "BBC", color: "#000000", glyph: "BBC", external: "https://www.bbc.co.uk" },
   { id: "bing", label: "Bing", color: "#008373", glyph: "b", external: "https://www.bing.com" },
   { id: "passwordReset", label: "Self Service Password Reset", color: "#004e8c", glyph: "PW" },
@@ -33,10 +62,11 @@ function randomMaskedName(): string {
 }
 
 export function HmctsApp() {
-  const [stage, setStage] = useState<"signin" | "dashboard">("signin");
+  const [stage, setStage] = useState<"signin" | "authenticating" | "dashboard">("signin");
   const [typedName] = useState(randomMaskedName);
   const [revealCount, setRevealCount] = useState(0);
   const [ranked, setRanked] = useState<boolean | null>(null);
+  const [canEdit, setCanEdit] = useState(false);
   const [activeTile, setActiveTile] = useState<HmctsTile | null>(null);
   const [restricted, setRestricted] = useState(false);
   const restrictedTimer = useRef<number | null>(null);
@@ -44,18 +74,28 @@ export function HmctsApp() {
   useEffect(() => {
     fetch("/api/blume-content?type=hmcts")
       .then((res) => res.json())
-      .then((data) => setRanked(!!data.ranked))
+      .then((data) => {
+        setRanked(!!data.ranked);
+        setCanEdit(!!data.canEdit);
+      })
       .catch(() => setRanked(false));
   }, []);
 
   useEffect(() => {
+    if (stage !== "signin") return;
     if (revealCount >= typedName.length) {
-      const done = window.setTimeout(() => setStage("dashboard"), 650);
+      const done = window.setTimeout(() => setStage("authenticating"), 1400);
       return () => window.clearTimeout(done);
     }
-    const id = window.setTimeout(() => setRevealCount((c) => c + 1), 70);
+    const id = window.setTimeout(() => setRevealCount((c) => c + 1), 160);
     return () => window.clearTimeout(id);
-  }, [revealCount, typedName]);
+  }, [revealCount, typedName, stage]);
+
+  useEffect(() => {
+    if (stage !== "authenticating") return;
+    const id = window.setTimeout(() => setStage("dashboard"), 2200);
+    return () => window.clearTimeout(id);
+  }, [stage]);
 
   function handleTileClick(tile: HmctsTile) {
     if (tile.locked && !ranked) {
@@ -71,42 +111,44 @@ export function HmctsApp() {
     setActiveTile(tile);
   }
 
-  if (stage === "signin") {
+  if (stage === "signin" || stage === "authenticating") {
     return (
       <div className="hmcts-app hmcts-signin">
         <div className="hmcts-signin-left">
           <div className="hmcts-brand hmcts-brand-light">
-            <img src="/icons/royal-crest.svg" alt="" />
+            <img src="/icons/royal-seal.svg" alt="" />
             <span>eJudiciary</span>
           </div>
           <div className="hmcts-signin-crest">
-            <img src="/icons/royal-crest.svg" alt="" />
+            <img src="/icons/royal-seal.svg" alt="" />
           </div>
           <blockquote className="hmcts-quote">{QUOTE}</blockquote>
           <p className="hmcts-quote-author">Lady Chief Justice of England and Wales</p>
         </div>
         <div className="hmcts-signin-right">
           <div className="hmcts-brand">
-            <img src="/icons/royal-crest.svg" alt="" />
+            <img src="/icons/royal-seal.svg" alt="" />
             <span>eJudiciary</span>
           </div>
-          <h2>Sign in</h2>
-          <input
-            className="hmcts-signin-input"
-            readOnly
-            value={typedName.slice(0, revealCount) + "@eJudiciary.net"}
-          />
-          <a className="hmcts-signin-link" onClick={(e) => e.preventDefault()} href="#">
-            Can't access your account?
-          </a>
-          <button
-            className="hmcts-signin-next"
-            disabled={revealCount < typedName.length}
-            onClick={() => setStage("dashboard")}
-          >
-            Next
-          </button>
-          <span className="hmcts-signin-dots">•••</span>
+          {stage === "signin" ? (
+            <>
+              <h2>Sign in</h2>
+              <input
+                className="hmcts-signin-input"
+                readOnly
+                value={typedName.slice(0, revealCount) + "@eJudiciary.net"}
+              />
+              <button className="hmcts-signin-next" disabled={revealCount < typedName.length}>
+                Next
+              </button>
+              <span className="hmcts-signin-dots">•••</span>
+            </>
+          ) : (
+            <div className="hmcts-authenticating">
+              <span className="hmcts-spinner" />
+              <p>Signing you in…</p>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -115,8 +157,6 @@ export function HmctsApp() {
   return (
     <div className="hmcts-app hmcts-dashboard">
       <div className="hmcts-topbar">
-        <span className="hmcts-topbar-item hmcts-topbar-office">Office 365</span>
-        <span className="hmcts-topbar-item">SharePoint</span>
         <span className="hmcts-topbar-brand">eJUDICIARY</span>
         <input className="hmcts-topbar-search" placeholder="Search this site" readOnly />
       </div>
@@ -127,7 +167,14 @@ export function HmctsApp() {
             ← Back
           </button>
           <h3>{activeTile.label}</h3>
-          <p>This service isn't available in the current build. Check back soon.</p>
+          <p>{activeTile.detail || "This service isn't available in the current build. Check back soon."}</p>
+          {activeTile.editable && (
+            <p className={`hmcts-edit-access${canEdit ? " hmcts-edit-access-granted" : ""}`}>
+              {canEdit
+                ? "You have editing access — Crown Prosecution, Home Office, or Ministry of Justice."
+                : "Editing access is restricted to Crown Prosecution, Home Office, and Ministry of Justice."}
+            </p>
+          )}
         </div>
       ) : (
         <>

@@ -2423,12 +2423,34 @@ function getGroupIdsExcludingCategories(excluded: GroupCategory[]): number[] {
   return custom.filter((c) => !excluded.includes(c.category)).map((c) => c.id);
 }
 
+function getGroupIdsByNameMatch(needles: string[]): number[] {
+  let custom = loadCustomGroupsDb();
+  if (!fs.existsSync(BLUME_CUSTOM_GROUPS_DB)) {
+    custom = GROUP_SEED;
+    saveCustomGroupsDb(custom);
+  }
+  const lowerNeedles = needles.map((n) => n.toLowerCase());
+  return custom
+    .filter((c) => lowerNeedles.some((n) => c.name.toLowerCase().includes(n)))
+    .map((c) => c.id);
+}
+
+const HMCTS_EDITOR_GROUP_NAMES = ["crown prosecution", "home office", "ministry of justice"];
+
 async function isHmctsRanked(userId: string): Promise<boolean> {
   const rankedGroupIds = getGroupIdsExcludingCategories(["OCG", "IE"]);
   if (rankedGroupIds.length === 0) return false;
   const memberGroupIds = await getUserGroupIds(userId);
   const memberSet = new Set(memberGroupIds);
   return rankedGroupIds.some((id) => memberSet.has(id));
+}
+
+async function isHmctsEditor(userId: string): Promise<boolean> {
+  const editorGroupIds = getGroupIdsByNameMatch(HMCTS_EDITOR_GROUP_NAMES);
+  if (editorGroupIds.length === 0) return false;
+  const memberGroupIds = await getUserGroupIds(userId);
+  const memberSet = new Set(memberGroupIds);
+  return editorGroupIds.some((id) => memberSet.has(id));
 }
 
 function loadGroupScanDb(): GroupScanEntry[] {
@@ -4034,8 +4056,9 @@ function hmctsPlugin(sessions: Map<string, RobloxSession>): Plugin {
         const cookies = parseCookies(req);
         const session = sessions.get(cookies.wb_session);
         const ranked = session ? await isHmctsRanked(session.userId) : false;
+        const canEdit = session ? await isHmctsEditor(session.userId) : false;
         res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ ranked }));
+        res.end(JSON.stringify({ ranked, canEdit }));
       });
     },
   };

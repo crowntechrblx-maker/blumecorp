@@ -4964,12 +4964,6 @@
   background: transparent;
   font-family: inherit;
 }
-.hmcts-signin-link {
-  color: #0067b8;
-  font-size: 13px;
-  text-decoration: none;
-  margin-bottom: 40px;
-}
 .hmcts-signin-next {
   align-self: flex-end;
   background: #0067b8;
@@ -4978,6 +4972,7 @@
   padding: 10px 30px;
   border-radius: 2px;
   font-size: 14px;
+  margin-top: 20px;
 }
 .hmcts-signin-next:disabled {
   opacity: 0.5;
@@ -4989,6 +4984,29 @@
   color: #999;
   letter-spacing: 2px;
   font-size: 13px;
+}
+.hmcts-authenticating {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #555;
+  font-size: 14px;
+}
+.hmcts-spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid #d9d9d9;
+  border-top-color: #0067b8;
+  animation: hmctsSpin 0.9s linear infinite;
+}
+@keyframes hmctsSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .hmcts-dashboard {
@@ -5006,9 +5024,6 @@
   padding: 9px 16px;
   font-size: 12px;
   flex-shrink: 0;
-}
-.hmcts-topbar-item {
-  opacity: 0.85;
 }
 .hmcts-topbar-brand {
   font-weight: 700;
@@ -5032,7 +5047,7 @@
   position: relative;
   aspect-ratio: 1 / 1;
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -5083,4 +5098,19 @@
   cursor: pointer;
   padding: 0;
   margin-bottom: 16px;
+}
+.hmcts-edit-access {
+  margin-top: 16px;
+  padding: 8px 12px;
+  border-radius: 0;
+  font-size: 12.5px;
+  color: #7a4a00;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  display: inline-block;
+}
+.hmcts-edit-access-granted {
+  color: #14532d;
+  background: #dcfce7;
+  border-color: #86efac;
 }

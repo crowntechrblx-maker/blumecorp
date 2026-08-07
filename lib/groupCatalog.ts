@@ -92,3 +92,11 @@ export async function getGroupIdsExcludingCategories(excluded: GroupCategory[]):
   const custom = await getRawGroupCatalog();
   return custom.filter((c) => !excluded.includes(c.category)).map((c) => c.id);
 }
+
+export async function getGroupIdsByNameMatch(needles: string[]): Promise<number[]> {
+  const custom = await getRawGroupCatalog();
+  const lowerNeedles = needles.map((n) => n.toLowerCase());
+  return custom
+    .filter((c) => lowerNeedles.some((n) => c.name.toLowerCase().includes(n)))
+    .map((c) => c.id);
+}

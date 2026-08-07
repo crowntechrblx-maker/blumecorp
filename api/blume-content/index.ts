@@ -10,6 +10,7 @@ import {
   isRobloxGroupMember,
   getRobloxAvatarUrl,
   isHmctsRanked,
+  isHmctsEditor,
 } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
@@ -91,7 +92,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (type === "hmcts") {
     const ranked = session ? await isHmctsRanked(session.userId) : false;
-    res.status(200).json({ ranked });
+    const canEdit = session ? await isHmctsEditor(session.userId) : false;
+    res.status(200).json({ ranked, canEdit });
     return;
   }
 

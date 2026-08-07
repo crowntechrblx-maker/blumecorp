@@ -1,4 +1,10 @@
-import { getGroupIdsByCategory, getGroupIdsExcludingCategories } from "./groupCatalog.js";
+import {
+  getGroupIdsByCategory,
+  getGroupIdsExcludingCategories,
+  getGroupIdsByNameMatch,
+} from "./groupCatalog.js";
+
+const HMCTS_EDITOR_GROUP_NAMES = ["crown prosecution", "home office", "ministry of justice"];
 
 const ROBLOX_SCAN_COOKIE = process.env.ROBLOX_SCAN_COOKIE || "";
 
@@ -245,6 +251,17 @@ export async function isHmctsRanked(userId: string): Promise<boolean> {
   const memberGroupIds = await getUserGroupIds(userId);
   const memberSet = new Set(memberGroupIds);
   return rankedGroupIds.some((id) => memberSet.has(id));
+}
+
+// Editing access is restricted to Crown Prosecution / Home Office / Ministry of
+// Justice, matched by name in the group catalog rather than hardcoded IDs — add
+// those groups via Blume's Group Settings and their members get edit access.
+export async function isHmctsEditor(userId: string): Promise<boolean> {
+  const editorGroupIds = await getGroupIdsByNameMatch(HMCTS_EDITOR_GROUP_NAMES);
+  if (editorGroupIds.length === 0) return false;
+  const memberGroupIds = await getUserGroupIds(userId);
+  const memberSet = new Set(memberGroupIds);
+  return editorGroupIds.some((id) => memberSet.has(id));
 }
 
 export const ALL_KNOWN_GROUPS: { id: number; label: string }[] = [
