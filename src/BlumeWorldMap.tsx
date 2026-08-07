@@ -67,8 +67,8 @@ function pointInPolygon(x: number, y: number, poly: [number, number][]): boolean
   return inside;
 }
 
-const ROAD_STROKE: Record<string, number> = { motorway: 2.6, ring: 1.7, primary: 1, minor: 0.6 };
-const ROAD_OPACITY: Record<string, number> = { motorway: 0.8, ring: 0.5, primary: 0.34, minor: 0.22 };
+const ROAD_STROKE: Record<string, number> = { motorway: 2.4, primary: 1.1, secondary: 0.65 };
+const ROAD_OPACITY: Record<string, number> = { motorway: 0.75, primary: 0.4, secondary: 0.26 };
 
 interface Ping {
   id: number;
