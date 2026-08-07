@@ -201,6 +201,45 @@ export async function resolveRobloxUserId(
   }
 }
 
+// Resolves many usernames in as few requests as possible (Roblox's batch
+// endpoint accepts up to 100 usernames per call). Returns a map keyed by
+// lowercased input username -> resolved user, or null if not found.
+export async function resolveRobloxUsernamesBulk(
+  usernames: string[]
+): Promise<Map<string, { userId: string; username: string } | null>> {
+  const unique = [...new Set(usernames.map((u) => u.trim()).filter(Boolean))];
+  const result = new Map<string, { userId: string; username: string } | null>();
+  const CHUNK = 90;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const chunk = unique.slice(i, i + CHUNK);
+    try {
+      const res = await fetch("https://users.roblox.com/v1/usernames/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...robloxHeaders() },
+        body: JSON.stringify({ usernames: chunk, excludeBannedUsers: false }),
+      });
+      if (!res.ok) {
+        for (const u of chunk) result.set(u.toLowerCase(), null);
+        continue;
+      }
+      const data = (await res.json()) as {
+        data?: { id?: number; name?: string; requestedUsername?: string }[];
+      };
+      const byRequested = new Map(
+        (data.data || [])
+          .filter((d): d is { id: number; name: string; requestedUsername?: string } => !!d.id && !!d.name)
+          .map((d) => [(d.requestedUsername || d.name).toLowerCase(), { userId: String(d.id), username: d.name }])
+      );
+      for (const u of chunk) {
+        result.set(u.toLowerCase(), byRequested.get(u.toLowerCase()) || null);
+      }
+    } catch {
+      for (const u of chunk) result.set(u.toLowerCase(), null);
+    }
+  }
+  return result;
+}
+
 export async function getRobloxFriends(
   userId: string
 ): Promise<{ userId: string; username: string }[]> {

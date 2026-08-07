@@ -240,6 +240,42 @@ async function resolveRobloxUserId(
   }
 }
 
+async function resolveRobloxUsernamesBulk(
+  usernames: string[]
+): Promise<Map<string, { userId: string; username: string } | null>> {
+  const unique = [...new Set(usernames.map((u) => u.trim()).filter(Boolean))];
+  const result = new Map<string, { userId: string; username: string } | null>();
+  const CHUNK = 90;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const chunk = unique.slice(i, i + CHUNK);
+    try {
+      const res = await fetch("https://users.roblox.com/v1/usernames/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...robloxHeaders() },
+        body: JSON.stringify({ usernames: chunk, excludeBannedUsers: false }),
+      });
+      if (!res.ok) {
+        for (const u of chunk) result.set(u.toLowerCase(), null);
+        continue;
+      }
+      const data = (await res.json()) as {
+        data?: { id?: number; name?: string; requestedUsername?: string }[];
+      };
+      const byRequested = new Map(
+        (data.data || [])
+          .filter((d): d is { id: number; name: string; requestedUsername?: string } => !!d.id && !!d.name)
+          .map((d) => [(d.requestedUsername || d.name).toLowerCase(), { userId: String(d.id), username: d.name }])
+      );
+      for (const u of chunk) {
+        result.set(u.toLowerCase(), byRequested.get(u.toLowerCase()) || null);
+      }
+    } catch {
+      for (const u of chunk) result.set(u.toLowerCase(), null);
+    }
+  }
+  return result;
+}
+
 type GroupCategory = "Emergency Services" | "Intelligence" | "IE" | "OCG" | "Other";
 const GROUP_CATEGORIES: GroupCategory[] = ["Emergency Services", "Intelligence", "IE", "OCG", "Other"];
 
@@ -308,6 +344,8 @@ interface BlumeReportEntry {
   linkedUserId?: string;
   linkedUsername?: string;
   expiresAt?: number;
+  sheetSource?: "nst" | "aosKos";
+  sheetRowKey?: string;
 }
 
 // Kept as a static fallback set only for ALL_KNOWN_GROUPS/getMemberGroupNames labeling below.
@@ -3543,6 +3581,8 @@ interface VerifilePunishment {
   addedByUserId: string;
   addedByUsername: string;
   createdAt: number;
+  sheetSource?: "dismissals" | "blacklist";
+  sheetRowKey?: string;
 }
 
 const VERIFILE_WHITELIST_DB = path.resolve(process.cwd(), "verifile-whitelist-data.json");
@@ -3567,6 +3607,507 @@ function loadVerifilePunishmentsDb(): VerifilePunishment[] {
 }
 function saveVerifilePunishmentsDb(entries: VerifilePunishment[]) {
   fs.writeFileSync(VERIFILE_PUNISHMENTS_DB, JSON.stringify(entries, null, 2));
+}
+
+// --- HM Government sheet sync (dev mirror of lib/govSheetParse.ts + the
+// govSheetSync branch in api/blume-content/index.ts). Manually triggerable
+// locally via GET /api/blume-content?type=govSheetSync for testing; there is
+// no local cron scheduler, only the endpoint logic. ---
+
+const GOV_SHEET_ID = "1jsxddEoTg7uk-bOEf7mlnUmTXlcz4WyRDFtK62GWnAU";
+const GOV_SHEET_GIDS = {
+  nst: "1132600417",
+  aosKos: "1169949125",
+  dismissals: "1014641520",
+  blacklist: "0",
+} as const;
+type GovSheetSource = keyof typeof GOV_SHEET_GIDS;
+
+function govSheetCsvUrl(gid: string): string {
+  return `https://docs.google.com/spreadsheets/d/${GOV_SHEET_ID}/export?format=csv&gid=${gid}`;
+}
+
+async function fetchGovSheetCsv(source: GovSheetSource): Promise<string> {
+  const res = await fetch(govSheetCsvUrl(GOV_SHEET_GIDS[source]));
+  if (!res.ok) throw new Error(`Couldn't fetch ${source} sheet (HTTP ${res.status}).`);
+  return res.text();
+}
+
+function parseGovCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += c;
+      }
+      continue;
+    }
+    if (c === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (c === ",") {
+      row.push(field);
+      field = "";
+      continue;
+    }
+    if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+      continue;
+    }
+    field += c;
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
+function findGovHeader(
+  rows: string[][],
+  required: string[]
+): { colIndex: Record<string, number>; dataStart: number } | null {
+  const scanLimit = Math.min(rows.length, 15);
+  for (let r = 0; r < scanLimit; r++) {
+    const cells = rows[r].map((c) => c.trim().toUpperCase());
+    const colIndex: Record<string, number> = {};
+    let matched = 0;
+    for (const name of required) {
+      const idx = cells.indexOf(name.toUpperCase());
+      if (idx !== -1) {
+        colIndex[name] = idx;
+        matched++;
+      }
+    }
+    if (matched === required.length) return { colIndex, dataStart: r + 1 };
+  }
+  return null;
+}
+
+function govCell(row: string[], colIndex: Record<string, number>, name: string): string {
+  const idx = colIndex[name];
+  if (idx === undefined || idx >= row.length) return "";
+  return (row[idx] || "").trim();
+}
+
+function isGovRowBlank(row: string[]): boolean {
+  return row.every((c) => !c || !c.trim());
+}
+
+function isGovAppealSuccessful(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  if (!v) return false;
+  return v.includes("granted") || v.includes("exonerated");
+}
+
+function looksLikeGovSampleRow(...fields: string[]): boolean {
+  return fields.some((f) => f.trim().toLowerCase() === "example");
+}
+
+function parseGovUkDate(raw: string): number | undefined {
+  const v = raw.trim();
+  const m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return undefined;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  let year = Number(m[3]);
+  if (year < 100) year += 2000;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return undefined;
+  const ms = Date.UTC(year, month - 1, day);
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
+function govSlugKey(...parts: string[]): string {
+  return parts.map((p) => p.trim().toLowerCase().replace(/\s+/g, " ")).join("|");
+}
+
+interface GovNstRow {
+  rowKey: string;
+  username: string;
+  isGroupEntry: boolean;
+  profileLink: string;
+  designationDateRaw: string;
+  designationDateMs?: number;
+  notes: string;
+}
+
+function parseGovNstRows(csv: string): GovNstRow[] {
+  const rows = parseGovCsv(csv);
+  const header = findGovHeader(rows, ["USERNAME", "PROFILE LINK", "DESIGNATION DATE", "NOTES", "APPEAL STATUS"]);
+  if (!header) return [];
+  const out: GovNstRow[] = [];
+  for (let r = header.dataStart; r < rows.length; r++) {
+    const row = rows[r];
+    if (isGovRowBlank(row)) continue;
+    const username = govCell(row, header.colIndex, "USERNAME");
+    if (!username) continue;
+    if (isGovAppealSuccessful(govCell(row, header.colIndex, "APPEAL STATUS"))) continue;
+    const profileLink = govCell(row, header.colIndex, "PROFILE LINK");
+    const designationDateRaw = govCell(row, header.colIndex, "DESIGNATION DATE");
+    out.push({
+      rowKey: govSlugKey("nst", username),
+      username,
+      isGroupEntry: /\/communities\//i.test(profileLink) || /^all members/i.test(username),
+      profileLink,
+      designationDateRaw,
+      designationDateMs: parseGovUkDate(designationDateRaw),
+      notes: govCell(row, header.colIndex, "NOTES"),
+    });
+  }
+  return out;
+}
+
+interface GovAosKosRow {
+  rowKey: string;
+  username: string;
+  issuer: string;
+  designation: string;
+  reason: string;
+  duration: string;
+  notes: string;
+}
+
+function parseGovAosKosRows(csv: string): GovAosKosRow[] {
+  const rows = parseGovCsv(csv);
+  const header = findGovHeader(rows, [
+    "ROBLOX USERNAME",
+    "ISSUER",
+    "KILL/ARREST ON SIGHT",
+    "REASON",
+    "DURATION",
+    "APPEAL",
+    "NOTES",
+  ]);
+  if (!header) return [];
+  const out: GovAosKosRow[] = [];
+  for (let r = header.dataStart; r < rows.length; r++) {
+    const row = rows[r];
+    if (isGovRowBlank(row)) continue;
+    const username = govCell(row, header.colIndex, "ROBLOX USERNAME");
+    if (!username) continue;
+    if (isGovAppealSuccessful(govCell(row, header.colIndex, "APPEAL"))) continue;
+    const reason = govCell(row, header.colIndex, "REASON");
+    const issuer = govCell(row, header.colIndex, "ISSUER");
+    out.push({
+      rowKey: govSlugKey("aosKos", username, issuer, reason),
+      username,
+      issuer,
+      designation: govCell(row, header.colIndex, "KILL/ARREST ON SIGHT"),
+      reason,
+      duration: govCell(row, header.colIndex, "DURATION"),
+      notes: govCell(row, header.colIndex, "NOTES"),
+    });
+  }
+  return out;
+}
+
+interface GovDismissalRow {
+  rowKey: string;
+  username: string;
+  discord: string;
+  service: string;
+  reason: string;
+  dateRaw: string;
+  dateMs?: number;
+  notes: string;
+}
+
+function parseGovDismissalRows(csv: string): GovDismissalRow[] {
+  const rows = parseGovCsv(csv);
+  const header = findGovHeader(rows, ["USERNAME", "DISCORD", "SERVICE", "REASON", "DISMISSAL DATE", "APPEAL", "NOTES"]);
+  if (!header) return [];
+  const out: GovDismissalRow[] = [];
+  for (let r = header.dataStart; r < rows.length; r++) {
+    const row = rows[r];
+    if (isGovRowBlank(row)) continue;
+    const username = govCell(row, header.colIndex, "USERNAME");
+    if (!username) continue;
+    if (isGovAppealSuccessful(govCell(row, header.colIndex, "APPEAL"))) continue;
+    const reason = govCell(row, header.colIndex, "REASON");
+    const service = govCell(row, header.colIndex, "SERVICE");
+    const dateRaw = govCell(row, header.colIndex, "DISMISSAL DATE");
+    if (!reason && !service) continue;
+    out.push({
+      rowKey: govSlugKey("dismissals", username, service, dateRaw),
+      username,
+      discord: govCell(row, header.colIndex, "DISCORD"),
+      service,
+      reason,
+      dateRaw,
+      dateMs: parseGovUkDate(dateRaw),
+      notes: govCell(row, header.colIndex, "NOTES"),
+    });
+  }
+  return out;
+}
+
+interface GovBlacklistRow {
+  rowKey: string;
+  username: string;
+  profileLink: string;
+  reason: string;
+  authoriserName: string;
+  authoriserPosition: string;
+  dateRaw: string;
+  dateMs?: number;
+  notes: string;
+}
+
+function parseGovBlacklistRows(csv: string): GovBlacklistRow[] {
+  const rows = parseGovCsv(csv);
+  const header = findGovHeader(rows, [
+    "USERNAME",
+    "PROFILE",
+    "REASON",
+    "NAME OF AUTHORISER",
+    "POSITION OF AUTHORISER",
+    "DATE (DD/MM/YY)",
+    "APPEAL STATUS",
+    "ADDITIONAL NOTES",
+  ]);
+  if (!header) return [];
+  const out: GovBlacklistRow[] = [];
+  for (let r = header.dataStart; r < rows.length; r++) {
+    const row = rows[r];
+    if (isGovRowBlank(row)) continue;
+    const username = govCell(row, header.colIndex, "USERNAME");
+    if (!username) continue;
+    const reason = govCell(row, header.colIndex, "REASON");
+    const notes = govCell(row, header.colIndex, "ADDITIONAL NOTES");
+    if (looksLikeGovSampleRow(reason, notes)) continue;
+    if (isGovAppealSuccessful(govCell(row, header.colIndex, "APPEAL STATUS"))) continue;
+    if (!reason) continue;
+    const dateRaw = govCell(row, header.colIndex, "DATE (DD/MM/YY)");
+    out.push({
+      rowKey: govSlugKey("blacklist", username, dateRaw),
+      username,
+      profileLink: govCell(row, header.colIndex, "PROFILE"),
+      reason,
+      authoriserName: govCell(row, header.colIndex, "NAME OF AUTHORISER"),
+      authoriserPosition: govCell(row, header.colIndex, "POSITION OF AUTHORISER"),
+      dateRaw,
+      dateMs: parseGovUkDate(dateRaw),
+      notes,
+    });
+  }
+  return out;
+}
+
+function matchGovServiceGroup(
+  serviceName: string,
+  catalog: { id: number; name: string }[]
+): { id: number; name: string } | null {
+  const lower = serviceName.trim().toLowerCase();
+  if (!lower) return null;
+  const exact = catalog.find((g) => g.name.toLowerCase() === lower);
+  if (exact) return { id: exact.id, name: exact.name };
+  const partial = catalog.find(
+    (g) => g.name.toLowerCase().includes(lower) || lower.includes(g.name.toLowerCase())
+  );
+  return partial ? { id: partial.id, name: partial.name } : null;
+}
+
+async function runGovSheetSyncDev() {
+  const [nstCsv, aosKosCsv, dismissalsCsv, blacklistCsv] = await Promise.all([
+    fetchGovSheetCsv("nst"),
+    fetchGovSheetCsv("aosKos"),
+    fetchGovSheetCsv("dismissals"),
+    fetchGovSheetCsv("blacklist"),
+  ]);
+  const nstRows = parseGovNstRows(nstCsv);
+  const aosKosRows = parseGovAosKosRows(aosKosCsv);
+  const dismissalRows = parseGovDismissalRows(dismissalsCsv);
+  const blacklistRows = parseGovBlacklistRows(blacklistCsv);
+
+  const allUsernames = [
+    ...nstRows.filter((r) => !r.isGroupEntry).map((r) => r.username),
+    ...aosKosRows.map((r) => r.username),
+    ...dismissalRows.map((r) => r.username),
+    ...blacklistRows.map((r) => r.username),
+  ];
+  const resolved = await resolveRobloxUsernamesBulk(allUsernames);
+  const groupCatalog = loadCustomGroupsDb();
+
+  const allReports = loadBlumeReportsDb();
+  const otherReports = allReports.filter((r) => r.sheetSource !== "nst" && r.sheetSource !== "aosKos");
+  const existingNst = new Map(allReports.filter((r) => r.sheetSource === "nst").map((r) => [r.sheetRowKey!, r]));
+  const existingAosKos = new Map(
+    allReports.filter((r) => r.sheetSource === "aosKos").map((r) => [r.sheetRowKey!, r])
+  );
+
+  const nextNst: BlumeReportEntry[] = nstRows.map((row) => {
+    const existing = existingNst.get(row.rowKey);
+    const linked = row.isGroupEntry ? null : resolved.get(row.username.toLowerCase());
+    const bodyLines: string[] = [];
+    if (row.notes) bodyLines.push(row.notes);
+    if (row.profileLink) bodyLines.push(`Profile: ${row.profileLink}`);
+    if (bodyLines.length === 0) bodyLines.push("Designated as a National Security Threat.");
+    return {
+      id: existing?.id || crypto.randomBytes(12).toString("hex"),
+      title: `National Security Threat: ${row.username}`,
+      body: bodyLines.join("\n"),
+      authorUsername: "HM Government Sheet Sync",
+      createdAt: existing?.createdAt || row.designationDateMs || Date.now(),
+      ...(linked ? { linkedUserId: linked.userId, linkedUsername: linked.username } : {}),
+      sheetSource: "nst" as const,
+      sheetRowKey: row.rowKey,
+    };
+  });
+
+  const nextAosKos: BlumeReportEntry[] = aosKosRows.map((row) => {
+    const existing = existingAosKos.get(row.rowKey);
+    const linked = resolved.get(row.username.toLowerCase());
+    const bodyLines: string[] = [];
+    if (row.issuer) bodyLines.push(`Authorised by: ${row.issuer}`);
+    if (row.reason) bodyLines.push(`Reason: ${row.reason}`);
+    if (row.duration) bodyLines.push(`Duration: ${row.duration}`);
+    if (row.notes) bodyLines.push(row.notes);
+    return {
+      id: existing?.id || crypto.randomBytes(12).toString("hex"),
+      title: `${row.designation || "AOS/KOS"}: ${row.username}`,
+      body: bodyLines.join("\n"),
+      authorUsername: "HM Government Sheet Sync",
+      createdAt: existing?.createdAt || Date.now(),
+      ...(linked ? { linkedUserId: linked.userId, linkedUsername: linked.username } : {}),
+      sheetSource: "aosKos" as const,
+      sheetRowKey: row.rowKey,
+    };
+  });
+
+  saveBlumeReportsDb([...otherReports, ...nextNst, ...nextAosKos]);
+
+  const allPunishments = loadVerifilePunishmentsDb();
+  const otherPunishments = allPunishments.filter(
+    (p) => p.sheetSource !== "dismissals" && p.sheetSource !== "blacklist"
+  );
+  const existingDismissals = new Map(
+    allPunishments.filter((p) => p.sheetSource === "dismissals").map((p) => [p.sheetRowKey!, p])
+  );
+  const existingBlacklist = new Map(
+    allPunishments.filter((p) => p.sheetSource === "blacklist").map((p) => [p.sheetRowKey!, p])
+  );
+
+  let dismissalsSkipped = 0;
+  const nextDismissals: VerifilePunishment[] = [];
+  for (const row of dismissalRows) {
+    const linked = resolved.get(row.username.toLowerCase());
+    if (!linked) {
+      dismissalsSkipped++;
+      continue;
+    }
+    const existing = existingDismissals.get(row.rowKey);
+    const service = matchGovServiceGroup(row.service, groupCatalog);
+    const detailLines: string[] = [];
+    if (row.reason) detailLines.push(row.reason);
+    if (row.discord && row.discord !== "-") detailLines.push(`Discord: ${row.discord}`);
+    if (row.notes) detailLines.push(row.notes);
+    nextDismissals.push({
+      id: existing?.id || crypto.randomBytes(12).toString("hex"),
+      targetUserId: linked.userId,
+      targetUsername: linked.username,
+      type: "Service Dismissal",
+      details: detailLines.join(" — ") || "Dismissed from service.",
+      serviceGroupId: service?.id || 0,
+      serviceGroupName: service?.name || row.service || "Unknown Service",
+      addedByUserId: "system",
+      addedByUsername: "HM Government Sheet Sync",
+      createdAt: existing?.createdAt || row.dateMs || Date.now(),
+      sheetSource: "dismissals",
+      sheetRowKey: row.rowKey,
+    });
+  }
+
+  let blacklistSkipped = 0;
+  const nextBlacklist: VerifilePunishment[] = [];
+  for (const row of blacklistRows) {
+    const linked = resolved.get(row.username.toLowerCase());
+    if (!linked) {
+      blacklistSkipped++;
+      continue;
+    }
+    const existing = existingBlacklist.get(row.rowKey);
+    const detailLines: string[] = [];
+    if (row.reason) detailLines.push(row.reason);
+    if (row.authoriserName && row.authoriserName !== "--") {
+      const withPosition =
+        row.authoriserPosition && row.authoriserPosition !== "--" ? ` (${row.authoriserPosition})` : "";
+      detailLines.push(`Authorised by: ${row.authoriserName}${withPosition}`);
+    } else if (row.authoriserPosition && row.authoriserPosition !== "--") {
+      detailLines.push(`Authorised by: ${row.authoriserPosition}`);
+    }
+    if (row.notes) detailLines.push(row.notes);
+    nextBlacklist.push({
+      id: existing?.id || crypto.randomBytes(12).toString("hex"),
+      targetUserId: linked.userId,
+      targetUsername: linked.username,
+      type: "HM Government Blacklist",
+      details: detailLines.join(" — ") || "Blacklisted by HM Government.",
+      serviceGroupId: 0,
+      serviceGroupName: "HM Government (Cross-Service)",
+      addedByUserId: "system",
+      addedByUsername: "HM Government Sheet Sync",
+      createdAt: existing?.createdAt || row.dateMs || Date.now(),
+      sheetSource: "blacklist",
+      sheetRowKey: row.rowKey,
+    });
+  }
+
+  saveVerifilePunishmentsDb([...otherPunishments, ...nextDismissals, ...nextBlacklist]);
+
+  const summary = {
+    ok: true,
+    nst: { total: nextNst.length },
+    aosKos: { total: nextAosKos.length },
+    dismissals: { total: nextDismissals.length, skippedUnresolved: dismissalsSkipped },
+    blacklist: { total: nextBlacklist.length, skippedUnresolved: blacklistSkipped },
+    syncedAt: Date.now(),
+  };
+  return summary;
+}
+
+function govSheetSyncPlugin(): Plugin {
+  return {
+    name: "gov-sheet-sync-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "govSheetSync") {
+          next();
+          return;
+        }
+        const expected = process.env.CRON_SECRET ? `Bearer ${process.env.CRON_SECRET}` : "";
+        if (!expected || req.headers.authorization !== expected) {
+          res.statusCode = 401;
+          res.end("Unauthorized.");
+          return;
+        }
+        try {
+          const summary = await runGovSheetSyncDev();
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(summary));
+        } catch (err) {
+          res.statusCode = 500;
+          res.end("Sync failed: " + (err as Error).message);
+        }
+      });
+    },
+  };
 }
 
 async function isVerifileAuthorized(userId: string): Promise<boolean> {
@@ -5431,6 +5972,7 @@ export default defineConfig(({ mode }) => {
       verifilePlugin(sessions),
       hmrcPlugin(sessions),
       britishGasPlugin(sessions),
+      govSheetSyncPlugin(),
       hmctsPlugin(sessions),
       hmctsChatPlugin(sessions),
       hmctsCasesPlugin(sessions),
