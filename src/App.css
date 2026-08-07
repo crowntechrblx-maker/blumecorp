@@ -5747,9 +5747,12 @@
 }
 .britgas-hero {
   width: 100%;
-  border-radius: 10px;
   display: block;
   object-fit: cover;
+  flex-shrink: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
 }
 .britgas-home-welcome h2 {
   margin: 0 0 8px;
@@ -5760,6 +5763,18 @@
   margin: 0;
   font-size: 13px;
   color: #4a5568;
+  line-height: 1.5;
+}
+.britgas-award-banner {
+  background: #eaf5ff;
+  border: 1px solid #d6e8fb;
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.britgas-award-banner p {
+  margin: 0;
+  font-size: 13px;
+  color: #0b3d68;
   line-height: 1.5;
 }
 .britgas-muted {
@@ -5790,9 +5805,9 @@
   flex: 1;
   text-align: center;
 }
-.britgas-hazard {
-  color: #d21f1f;
-  font-size: 16px;
+.britgas-hazard-icon {
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
 }
 .britgas-incident-description {
@@ -5842,12 +5857,13 @@
 .britgas-contact {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  text-align: center;
   gap: 12px;
 }
 .britgas-discord-btn {
   display: inline-block;
-  background: #5865f2;
+  background: #0b3d68;
   color: #fff;
   font-weight: 600;
   font-size: 13px;
@@ -5896,10 +5912,17 @@
 .britgas-admin-form {
   display: flex;
   gap: 8px;
+  align-items: flex-start;
 }
 .britgas-admin-form input {
   flex: 1;
   margin-bottom: 0;
+}
+.britgas-admin-add-btn {
+  background: #1697ef !important;
+  color: #fff;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .britgas-admin-list {
   margin-top: 10px;

@@ -168,6 +168,8 @@ export function BritishGasApp() {
 
   return (
     <div className="app-content britgas">
+      <img className="britgas-hero" src="/british-gas-hero.jpg" alt="British Gas" />
+
       <div className="britgas-tabbar">
         <button className={`britgas-tab${tab === "home" ? " britgas-tab-active" : ""}`} onClick={() => setTab("home")}>
           Home
@@ -197,12 +199,18 @@ export function BritishGasApp() {
       <div className="britgas-body">
         {tab === "home" && (
           <div className="britgas-home">
-            <img className="britgas-hero" src="/british-gas-hero.jpg" alt="British Gas" />
             <div className="britgas-home-welcome">
               <h2>Welcome to British Gas</h2>
               <p>
                 Boiler installations, servicing, and emergency call-outs across Westbridge. Check the Incidents tab
                 for any live service disruptions, or reach us on the Contact tab.
+              </p>
+            </div>
+            <div className="britgas-award-banner">
+              <p>
+                We've been awarded the Uswitch Energy Awards, Best Overall Improvement two years running! Cheers to
+                another year. We've also been approved as a Which? trusted trader and approved service for boiler
+                installation.
               </p>
             </div>
           </div>
@@ -218,13 +226,9 @@ export function BritishGasApp() {
               incidents.map((incident) => (
                 <div className="britgas-incident-card" key={incident.id}>
                   <div className="britgas-incident-header">
-                    <span className="britgas-hazard" aria-hidden="true">
-                      ⚠️
-                    </span>
+                    <img className="britgas-hazard-icon" src="/icons/britgas-hazard.svg" alt="" aria-hidden="true" />
                     <h3>{incident.title}</h3>
-                    <span className="britgas-hazard" aria-hidden="true">
-                      ⚠️
-                    </span>
+                    <img className="britgas-hazard-icon" src="/icons/britgas-hazard.svg" alt="" aria-hidden="true" />
                   </div>
                   {incident.description && <p className="britgas-incident-description">{incident.description}</p>}
                   {incident.imageUrl && (
@@ -310,7 +314,11 @@ export function BritishGasApp() {
                   value={adminInput}
                   onChange={(e) => setAdminInput(e.target.value)}
                 />
-                <button className="britgas-cta" disabled={!adminInput.trim() || addingAdmin} onClick={handleAddAdmin}>
+                <button
+                  className="britgas-admin-add-btn"
+                  disabled={!adminInput.trim() || addingAdmin}
+                  onClick={handleAddAdmin}
+                >
                   {addingAdmin ? "Adding…" : "Add admin"}
                 </button>
               </div>
