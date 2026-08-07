@@ -5114,3 +5114,13 @@
   background: #dcfce7;
   border-color: #86efac;
 }
+.hmcts-bgsearch-view {
+  padding: 28px;
+}
+.hmcts-bgsearch-panel {
+  border-radius: 6px;
+  max-width: 640px;
+  flex: none;
+  min-height: 0;
+  overflow: visible;
+}

@@ -6,6 +6,7 @@ import { decodeSession } from "../../lib/session.js";
 import {
   isBlumeAuthorized,
   isBlumeSuperUser,
+  isHmctsRanked,
   getRobloxAvatarUrl,
   getUserGroupIds,
   resolveRobloxUserId,
@@ -243,6 +244,203 @@ async function recordGroupMembershipAndGetFormerGroups(
   return formerGroups;
 }
 
+interface PersonSearchResult {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  customPlate: string | null;
+  arrestHistory: unknown;
+  groups: ReturnType<typeof relevantGroups>;
+  formerGroups: unknown[];
+  vehicleTags: VehicleTag[];
+  knownFriends: { userId: string; username: string; avatarUrl: string | null; redGroupNames: string[] }[];
+  groupScanChange: GroupScanEntry["changed"];
+  apiError: string | null;
+  lastSeenOnlineAt: number | null;
+}
+
+// Shared by both Blume's Person Search and HMCTS's Background Searches — same
+// underlying lookup, just gated by different authorization checks per caller.
+async function performPersonSearch(
+  query: string,
+  session: { userId: string; username: string }
+): Promise<{ status: 404; error: string } | { status: 200; data: PersonSearchResult }> {
+  const resolved = await resolveRobloxUserId(query);
+  if (!resolved) {
+    return { status: 404, error: "No Roblox user found matching that name or ID." };
+  }
+  const { userId, username } = resolved;
+
+  const catalog = await getGroupCatalog();
+  const [avatarUrl, groupIds] = await Promise.all([
+    getRobloxAvatarUrl(userId),
+    getUserGroupIds(userId),
+  ]);
+  const groups = relevantGroups(groupIds, catalog);
+
+  let customPlate: string | null = null;
+  let arrestHistory: unknown = null;
+  let apiError: string | null = null;
+
+  try {
+    const playerRes = await fetch(`${READONLY_API}/player/${encodeURIComponent(userId)}`);
+    const playerText = await playerRes.text();
+    let playerData: any;
+    try {
+      playerData = JSON.parse(playerText);
+    } catch {
+      playerData = null;
+    }
+    if (!playerRes.ok || !playerData) {
+      apiError = `The records API didn't respond as expected (status ${playerRes.status}).`;
+    } else if (playerData.error) {
+      apiError = String(playerData.error);
+    } else {
+      customPlate = playerData.CustomPlate ?? null;
+      arrestHistory = playerData.ArrestHistory ?? null;
+    }
+  } catch (err) {
+    apiError = "Couldn't reach the records API: " + (err as Error).message;
+  }
+
+  const vehicleTags = ((await kv.get<VehicleTag[]>("blumeVehicleTags")) || []).filter(
+    (v) => v.userId === userId
+  );
+
+  const [allHistoryForFriends, groupScanForFriends] = await Promise.all([
+    kv.get<SearchSnapshot[]>("blumeSearchHistory"),
+    kv.get<GroupScanEntry[]>("blumeGroupScanCache"),
+  ]);
+  const historyList = allHistoryForFriends || [];
+  const scanList = groupScanForFriends || [];
+  const knownAvatarByUserId = new Map<string, string | null>();
+  for (const h of historyList) knownAvatarByUserId.set(h.userId, h.avatarUrl);
+  for (const s of scanList) knownAvatarByUserId.set(s.userId, s.avatarUrl);
+  const scanByUserId = new Map<string, GroupScanEntry>();
+  for (const s of scanList) scanByUserId.set(s.userId, s);
+  const knownIds = new Set<string>([...historyList.map((h) => h.userId), ...scanList.map((s) => s.userId)]);
+
+  const friendMap = new Map<string, { userId: string; username: string }>();
+  for (const f of scanByUserId.get(userId)?.friends || []) {
+    if (f.userId !== userId && knownIds.has(f.userId)) friendMap.set(f.userId, f);
+  }
+  for (const s of scanList) {
+    if (s.userId === userId) continue;
+    if ((s.friends || []).some((f) => f.userId === userId)) {
+      friendMap.set(s.userId, { userId: s.userId, username: s.username });
+    }
+  }
+  const knownFriends = Array.from(friendMap.values()).map((f) => {
+    const scanEntry = scanByUserId.get(f.userId);
+    const redGroupNames = scanEntry
+      ? relevantGroups(scanEntry.groupIds, catalog)
+          .filter((g) => g.tier === "red")
+          .map((g) => g.name)
+      : [];
+    return {
+      userId: f.userId,
+      username: f.username,
+      avatarUrl: knownAvatarByUserId.get(f.userId) ?? null,
+      redGroupNames,
+    };
+  });
+
+  const ownScanEntry = scanList.find((s) => s.userId === userId);
+  const groupScanChange = ownScanEntry?.changed || null;
+
+  if (avatarUrl || customPlate) {
+    const allHistory = (await kv.get<SearchSnapshot[]>("blumeSearchHistory")) || [];
+    const existingForPerson = allHistory
+      .filter((h) => h.userId === userId)
+      .sort((a, b) => b.createdAt - a.createdAt);
+    const mostRecent = existingForPerson[0];
+    const unchanged =
+      mostRecent && mostRecent.avatarUrl === avatarUrl && mostRecent.customPlate === customPlate;
+    if (!unchanged) {
+      const entry: SearchSnapshot = {
+        id: crypto.randomBytes(12).toString("hex"),
+        userId,
+        username,
+        avatarUrl,
+        customPlate,
+        searchedByUsername: session.username,
+        createdAt: Date.now(),
+      };
+      const others = allHistory.filter((h) => h.userId !== userId);
+      const mine = [entry, ...existingForPerson].slice(0, HISTORY_PER_PERSON_CAP);
+      await kv.set("blumeSearchHistory", [...others, ...mine]);
+    }
+  }
+
+  const rawFormerGroups = await recordGroupMembershipAndGetFormerGroups(userId, username, groupIds, avatarUrl);
+  const formerGroups = rawFormerGroups
+    .filter((f) => Date.now() - f.lastSeenAt <= FORMER_GROUP_WINDOW_MS)
+    .map((f) => {
+      const info = catalog[f.groupId];
+      return info ? { id: f.groupId, ...info, lastSeenAt: f.lastSeenAt } : null;
+    })
+    .filter((f): f is NonNullable<typeof f> => !!f && f.tier === "red")
+    .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
+
+  return {
+    status: 200,
+    data: {
+      userId,
+      username,
+      avatarUrl,
+      customPlate,
+      arrestHistory,
+      groups,
+      formerGroups,
+      vehicleTags,
+      knownFriends,
+      groupScanChange,
+      apiError,
+      lastSeenOnlineAt: scanByUserId.get(userId)?.lastSeenOnlineAt || null,
+    },
+  };
+}
+
+async function addVehicleTagFor(
+  userId: string,
+  vehicleType: string,
+  addedByUsername: string
+): Promise<{ status: 200; vehicleTags: VehicleTag[] } | { status: 400; error: string }> {
+  if (!userId || !vehicleType) return { status: 400, error: "Missing userId or vehicleType." };
+  if (vehicleType.length > 80) return { status: 400, error: "Vehicle type is too long (max 80 characters)." };
+  if (containsBlockedLanguage(vehicleType)) return { status: 400, error: MODERATION_REJECTION_MESSAGE };
+  const entry: VehicleTag = {
+    id: crypto.randomBytes(12).toString("hex"),
+    userId,
+    vehicleType,
+    addedByUsername,
+    createdAt: Date.now(),
+  };
+  const tags = (await kv.get<VehicleTag[]>("blumeVehicleTags")) || [];
+  tags.push(entry);
+  await kv.set("blumeVehicleTags", tags);
+  return { status: 200, vehicleTags: tags.filter((t) => t.userId === userId) };
+}
+
+async function removeVehicleTagFor(
+  id: string,
+  session: { userId: string; username: string }
+): Promise<
+  | { status: 200; vehicleTags: VehicleTag[] }
+  | { status: 400 | 403 | 404; error: string }
+> {
+  if (!id) return { status: 400, error: "Missing vehicle tag id." };
+  const tags = (await kv.get<VehicleTag[]>("blumeVehicleTags")) || [];
+  const target = tags.find((t) => t.id === id);
+  if (!target) return { status: 404, error: "Vehicle tag not found." };
+  if (target.addedByUsername !== session.username && !(await isPlatformAdmin(session.userId, session.username))) {
+    return { status: 403, error: "You can only remove vehicle tags you added." };
+  }
+  const next = tags.filter((t) => t.id !== id);
+  await kv.set("blumeVehicleTags", next);
+  return { status: 200, vehicleTags: next.filter((t) => t.userId === target.userId) };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "POST") {
     const rawBody = req.body as { action?: string } | undefined;
@@ -280,6 +478,80 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!session) {
     res.status(401).send("You must be signed in.");
     return;
+  }
+
+  // HMCTS "Background Searches" — the same Person Search lookup as Blume, gated
+  // to HMCTS's own ranked tier (all groups except OCG/IE) instead of Blume clearance.
+  if (
+    req.method === "GET" &&
+    (req.query.hmctsBackgroundSearch || req.query.hmctsBackgroundHistory)
+  ) {
+    if (!(await isHmctsRanked(session.userId))) {
+      res.status(403).send("You do not have the ranked clearance required for Background Searches.");
+      return;
+    }
+    if (req.query.hmctsBackgroundSearch) {
+      const q = (req.query.hmctsBackgroundSearch as string).trim();
+      if (!q) {
+        res.status(400).send("Missing search query.");
+        return;
+      }
+      const result = await performPersonSearch(q, session);
+      if (result.status === 404) {
+        res.status(404).send(result.error);
+        return;
+      }
+      await appendAuditLog({
+        type: "hmcts_background_search",
+        username: session.username,
+        detail: `Searched ${result.data.username} (${result.data.userId})`,
+      });
+      res.status(200).json(result.data);
+      return;
+    }
+    if (req.query.hmctsBackgroundHistory) {
+      const historyForUserId = (req.query.hmctsBackgroundHistory as string).trim();
+      const all = (await kv.get<SearchSnapshot[]>("blumeSearchHistory")) || [];
+      const history = all
+        .filter((h) => h.userId === historyForUserId)
+        .sort((a, b) => b.createdAt - a.createdAt);
+      res.status(200).json({ history });
+      return;
+    }
+  }
+
+  if (
+    req.method === "POST" &&
+    ((req.body as { action?: string } | undefined)?.action === "hmctsAddVehicle" ||
+      (req.body as { action?: string } | undefined)?.action === "hmctsRemoveVehicle")
+  ) {
+    if (!(await isHmctsRanked(session.userId))) {
+      res.status(403).send("You do not have the ranked clearance required for Background Searches.");
+      return;
+    }
+    const body = req.body as { action?: string; userId?: string; vehicleType?: string; id?: string };
+    if (body.action === "hmctsAddVehicle") {
+      const result = await addVehicleTagFor(
+        (body.userId || "").toString().trim(),
+        (body.vehicleType || "").toString().trim(),
+        session.username
+      );
+      if (result.status !== 200) {
+        res.status(result.status).send(result.error);
+        return;
+      }
+      res.status(200).json({ vehicleTags: result.vehicleTags });
+      return;
+    }
+    if (body.action === "hmctsRemoveVehicle") {
+      const result = await removeVehicleTagFor((body.id || "").toString().trim(), session);
+      if (result.status !== 200) {
+        res.status(result.status).send(result.error);
+        return;
+      }
+      res.status(200).json({ vehicleTags: result.vehicleTags });
+      return;
+    }
   }
 
   if (req.method === "GET" && (req.query.verifileSearch || req.query.verifileMyServices)) {
@@ -630,151 +902,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const resolved = await resolveRobloxUserId(query);
-    if (!resolved) {
-      res.status(404).send("No Roblox user found matching that name or ID.");
+    const result = await performPersonSearch(query, session);
+    if (result.status === 404) {
+      res.status(404).send(result.error);
       return;
     }
-    const { userId, username } = resolved;
-
-    const catalog = await getGroupCatalog();
-    const [avatarUrl, groupIds] = await Promise.all([
-      getRobloxAvatarUrl(userId),
-      getUserGroupIds(userId),
-    ]);
-    const groups = relevantGroups(groupIds, catalog);
-
-    let customPlate: string | null = null;
-    let arrestHistory: unknown = null;
-    let apiError: string | null = null;
-
-    try {
-      const playerRes = await fetch(`${READONLY_API}/player/${encodeURIComponent(userId)}`);
-      const playerText = await playerRes.text();
-      let playerData: any;
-      try {
-        playerData = JSON.parse(playerText);
-      } catch {
-        playerData = null;
-      }
-      if (!playerRes.ok || !playerData) {
-        apiError = `The records API didn't respond as expected (status ${playerRes.status}).`;
-      } else if (playerData.error) {
-        apiError = String(playerData.error);
-      } else {
-        customPlate = playerData.CustomPlate ?? null;
-        arrestHistory = playerData.ArrestHistory ?? null;
-      }
-    } catch (err) {
-      apiError = "Couldn't reach the records API: " + (err as Error).message;
-    }
-
-    const vehicleTags = ((await kv.get<VehicleTag[]>("blumeVehicleTags")) || []).filter(
-      (v) => v.userId === userId
-    );
-
-    const [allHistoryForFriends, groupScanForFriends] = await Promise.all([
-      kv.get<SearchSnapshot[]>("blumeSearchHistory"),
-      kv.get<GroupScanEntry[]>("blumeGroupScanCache"),
-    ]);
-    const historyList = allHistoryForFriends || [];
-    const scanList = groupScanForFriends || [];
-    const knownAvatarByUserId = new Map<string, string | null>();
-    for (const h of historyList) knownAvatarByUserId.set(h.userId, h.avatarUrl);
-    for (const s of scanList) knownAvatarByUserId.set(s.userId, s.avatarUrl);
-    const scanByUserId = new Map<string, GroupScanEntry>();
-    for (const s of scanList) scanByUserId.set(s.userId, s);
-    const knownIds = new Set<string>([...historyList.map((h) => h.userId), ...scanList.map((s) => s.userId)]);
-
-    const friendMap = new Map<string, { userId: string; username: string }>();
-    for (const f of scanByUserId.get(userId)?.friends || []) {
-      if (f.userId !== userId && knownIds.has(f.userId)) friendMap.set(f.userId, f);
-    }
-    for (const s of scanList) {
-      if (s.userId === userId) continue;
-      if ((s.friends || []).some((f) => f.userId === userId)) {
-        friendMap.set(s.userId, { userId: s.userId, username: s.username });
-      }
-    }
-    const knownFriends = Array.from(friendMap.values()).map((f) => {
-      const scanEntry = scanByUserId.get(f.userId);
-      const redGroupNames = scanEntry
-        ? relevantGroups(scanEntry.groupIds, catalog)
-            .filter((g) => g.tier === "red")
-            .map((g) => g.name)
-        : [];
-      return {
-        userId: f.userId,
-        username: f.username,
-        avatarUrl: knownAvatarByUserId.get(f.userId) ?? null,
-        redGroupNames,
-      };
-    });
-
-    const ownScanEntry = scanList.find((s) => s.userId === userId);
-    const groupScanChange = ownScanEntry?.changed || null;
-
-    if (avatarUrl || customPlate) {
-      const allHistory = (await kv.get<SearchSnapshot[]>("blumeSearchHistory")) || [];
-      const existingForPerson = allHistory
-        .filter((h) => h.userId === userId)
-        .sort((a, b) => b.createdAt - a.createdAt);
-      const mostRecent = existingForPerson[0];
-      const unchanged =
-        mostRecent &&
-        mostRecent.avatarUrl === avatarUrl &&
-        mostRecent.customPlate === customPlate;
-      if (!unchanged) {
-        const entry: SearchSnapshot = {
-          id: crypto.randomBytes(12).toString("hex"),
-          userId,
-          username,
-          avatarUrl,
-          customPlate,
-          searchedByUsername: session.username,
-          createdAt: Date.now(),
-        };
-        const others = allHistory.filter((h) => h.userId !== userId);
-        const mine = [entry, ...existingForPerson].slice(0, HISTORY_PER_PERSON_CAP);
-        await kv.set("blumeSearchHistory", [...others, ...mine]);
-      }
-    }
-
-    const rawFormerGroups = await recordGroupMembershipAndGetFormerGroups(
-      userId,
-      username,
-      groupIds,
-      avatarUrl
-    );
-    const formerGroups = rawFormerGroups
-      .filter((f) => Date.now() - f.lastSeenAt <= FORMER_GROUP_WINDOW_MS)
-      .map((f) => {
-        const info = catalog[f.groupId];
-        return info ? { id: f.groupId, ...info, lastSeenAt: f.lastSeenAt } : null;
-      })
-      .filter((f): f is NonNullable<typeof f> => !!f && f.tier === "red")
-      .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
-
     await appendAuditLog({
       type: "blume_person_search",
       username: session.username,
-      detail: `Searched ${username} (${userId})`,
+      detail: `Searched ${result.data.username} (${result.data.userId})`,
     });
-
-    res.status(200).json({
-      userId,
-      username,
-      avatarUrl,
-      customPlate,
-      arrestHistory,
-      groups,
-      formerGroups,
-      vehicleTags,
-      knownFriends,
-      groupScanChange,
-      apiError,
-      lastSeenOnlineAt: scanByUserId.get(userId)?.lastSeenOnlineAt || null,
-    });
+    res.status(200).json(result.data);
     return;
   }
 
@@ -884,56 +1022,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (action === "addVehicle") {
-        const userId = (body.userId || "").toString().trim();
-        const vehicleType = (body.vehicleType || "").toString().trim();
-        if (!userId || !vehicleType) {
-          res.status(400).send("Missing userId or vehicleType.");
+        const result = await addVehicleTagFor(
+          (body.userId || "").toString().trim(),
+          (body.vehicleType || "").toString().trim(),
+          session.username
+        );
+        if (result.status !== 200) {
+          res.status(result.status).send(result.error);
           return;
         }
-        if (vehicleType.length > 80) {
-          res.status(400).send("Vehicle type is too long (max 80 characters).");
-          return;
-        }
-        if (containsBlockedLanguage(vehicleType)) {
-          res.status(400).send(MODERATION_REJECTION_MESSAGE);
-          return;
-        }
-        const entry: VehicleTag = {
-          id: crypto.randomBytes(12).toString("hex"),
-          userId,
-          vehicleType,
-          addedByUsername: session.username,
-          createdAt: Date.now(),
-        };
-        const tags = (await kv.get<VehicleTag[]>("blumeVehicleTags")) || [];
-        tags.push(entry);
-        await kv.set("blumeVehicleTags", tags);
-        res.status(200).json({ vehicleTags: tags.filter((t) => t.userId === userId) });
+        res.status(200).json({ vehicleTags: result.vehicleTags });
         return;
       }
 
       if (action === "removeVehicle") {
-        const id = (body.id || "").toString().trim();
-        if (!id) {
-          res.status(400).send("Missing vehicle tag id.");
+        const result = await removeVehicleTagFor((body.id || "").toString().trim(), session);
+        if (result.status !== 200) {
+          res.status(result.status).send(result.error);
           return;
         }
-        const tags = (await kv.get<VehicleTag[]>("blumeVehicleTags")) || [];
-        const target = tags.find((t) => t.id === id);
-        if (!target) {
-          res.status(404).send("Vehicle tag not found.");
-          return;
-        }
-        if (
-          target.addedByUsername !== session.username &&
-          !(await isPlatformAdmin(session.userId, session.username))
-        ) {
-          res.status(403).send("You can only remove vehicle tags you added.");
-          return;
-        }
-        const next = tags.filter((t) => t.id !== id);
-        await kv.set("blumeVehicleTags", next);
-        res.status(200).json({ vehicleTags: next.filter((t) => t.userId === target.userId) });
+        res.status(200).json({ vehicleTags: result.vehicleTags });
         return;
       }
 

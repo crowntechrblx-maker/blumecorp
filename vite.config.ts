@@ -2629,6 +2629,181 @@ async function recordGroupMembershipAndGetFormerGroups(
   return formerGroups;
 }
 
+// Shared by both Blume's Person Search and HMCTS's Background Searches — same
+// underlying lookup, just gated by different authorization checks per caller.
+async function performPersonSearchDev(
+  query: string,
+  session: { userId: string; username: string }
+): Promise<{ status: 404; error: string } | { status: 200; data: any }> {
+  const resolved = await resolveRobloxUserId(query);
+  if (!resolved) {
+    return { status: 404, error: "No Roblox user found matching that name or ID." };
+  }
+  const { userId, username } = resolved;
+
+  const catalog = await getGroupCatalog();
+  const [avatarUrl, groupIds] = await Promise.all([
+    getRobloxAvatarUrl(userId),
+    getUserGroupIds(userId),
+  ]);
+  const groups = relevantGroups(groupIds, catalog);
+
+  let customPlate: string | null = null;
+  let arrestHistory: unknown = null;
+  let apiError: string | null = null;
+
+  try {
+    const playerRes = await fetch(`${READONLY_API}/player/${encodeURIComponent(userId)}`);
+    const playerText = await playerRes.text();
+    let playerData: any;
+    try {
+      playerData = JSON.parse(playerText);
+    } catch {
+      playerData = null;
+    }
+    if (!playerRes.ok || !playerData) {
+      apiError = `The records API didn't respond as expected (status ${playerRes.status}).`;
+    } else if (playerData.error) {
+      apiError = String(playerData.error);
+    } else {
+      customPlate = playerData.CustomPlate ?? null;
+      arrestHistory = playerData.ArrestHistory ?? null;
+    }
+  } catch (err) {
+    apiError = "Couldn't reach the records API: " + (err as Error).message;
+  }
+
+  const vehicleTags = loadVehicleTagsDb().filter((v) => v.userId === userId);
+
+  const historyListForFriends = loadSearchHistoryDb();
+  const scanListForFriends = loadGroupScanDb();
+  const knownAvatarByUserId = new Map<string, string | null>();
+  for (const h of historyListForFriends) knownAvatarByUserId.set(h.userId, h.avatarUrl);
+  for (const s of scanListForFriends) knownAvatarByUserId.set(s.userId, s.avatarUrl);
+  const scanByUserId = new Map<string, GroupScanEntry>();
+  for (const s of scanListForFriends) scanByUserId.set(s.userId, s);
+  const knownIds = new Set<string>([
+    ...historyListForFriends.map((h) => h.userId),
+    ...scanListForFriends.map((s) => s.userId),
+  ]);
+  const friendMap = new Map<string, { userId: string; username: string }>();
+  for (const f of scanByUserId.get(userId)?.friends || []) {
+    if (f.userId !== userId && knownIds.has(f.userId)) friendMap.set(f.userId, f);
+  }
+  for (const s of scanListForFriends) {
+    if (s.userId === userId) continue;
+    if ((s.friends || []).some((f) => f.userId === userId)) {
+      friendMap.set(s.userId, { userId: s.userId, username: s.username });
+    }
+  }
+  const knownFriends = Array.from(friendMap.values()).map((f) => {
+    const scanEntry = scanByUserId.get(f.userId);
+    const redGroupNames = scanEntry
+      ? relevantGroups(scanEntry.groupIds, catalog)
+          .filter((g) => g.tier === "red")
+          .map((g) => g.name)
+      : [];
+    return {
+      userId: f.userId,
+      username: f.username,
+      avatarUrl: knownAvatarByUserId.get(f.userId) ?? null,
+      redGroupNames,
+    };
+  });
+
+  const ownScanEntry = scanListForFriends.find((s) => s.userId === userId);
+  const groupScanChange = ownScanEntry?.changed || null;
+
+  if (avatarUrl || customPlate) {
+    const allHistory = loadSearchHistoryDb();
+    const existingForPerson = allHistory
+      .filter((h) => h.userId === userId)
+      .sort((a, b) => b.createdAt - a.createdAt);
+    const mostRecent = existingForPerson[0];
+    const unchanged =
+      mostRecent && mostRecent.avatarUrl === avatarUrl && mostRecent.customPlate === customPlate;
+    if (!unchanged) {
+      const entry: SearchSnapshot = {
+        id: crypto.randomBytes(12).toString("hex"),
+        userId,
+        username,
+        avatarUrl,
+        customPlate,
+        searchedByUsername: session.username,
+        createdAt: Date.now(),
+      };
+      const others = allHistory.filter((h) => h.userId !== userId);
+      const mine = [entry, ...existingForPerson].slice(0, HISTORY_PER_PERSON_CAP);
+      saveSearchHistoryDb([...others, ...mine]);
+    }
+  }
+
+  const rawFormerGroups = await recordGroupMembershipAndGetFormerGroups(userId, username, groupIds, avatarUrl);
+  const formerGroups = rawFormerGroups
+    .filter((f) => Date.now() - f.lastSeenAt <= FORMER_GROUP_WINDOW_MS)
+    .map((f) => {
+      const info = catalog[f.groupId];
+      return info ? { id: f.groupId, ...info, lastSeenAt: f.lastSeenAt } : null;
+    })
+    .filter((f): f is NonNullable<typeof f> => !!f && f.tier === "red")
+    .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
+
+  return {
+    status: 200,
+    data: {
+      userId,
+      username,
+      avatarUrl,
+      customPlate,
+      arrestHistory,
+      groups,
+      formerGroups,
+      vehicleTags,
+      knownFriends,
+      groupScanChange,
+      apiError,
+      lastSeenOnlineAt: scanByUserId.get(userId)?.lastSeenOnlineAt || null,
+    },
+  };
+}
+
+function addVehicleTagForDev(
+  userId: string,
+  vehicleType: string,
+  addedByUsername: string
+): { status: 200; vehicleTags: VehicleTag[] } | { status: 400; error: string } {
+  if (!userId || !vehicleType) return { status: 400, error: "Missing userId or vehicleType." };
+  if (vehicleType.length > 80) return { status: 400, error: "Vehicle type is too long (max 80 characters)." };
+  if (containsBlockedLanguage(vehicleType)) return { status: 400, error: MODERATION_REJECTION_MESSAGE };
+  const entry: VehicleTag = {
+    id: crypto.randomBytes(12).toString("hex"),
+    userId,
+    vehicleType,
+    addedByUsername,
+    createdAt: Date.now(),
+  };
+  const tags = loadVehicleTagsDb();
+  tags.push(entry);
+  saveVehicleTagsDb(tags);
+  return { status: 200, vehicleTags: tags.filter((t) => t.userId === userId) };
+}
+
+function removeVehicleTagForDev(
+  id: string,
+  session: { userId: string; username: string }
+): { status: 200; vehicleTags: VehicleTag[] } | { status: 400 | 403 | 404; error: string } {
+  if (!id) return { status: 400, error: "Missing vehicle tag id." };
+  const tags = loadVehicleTagsDb();
+  const target = tags.find((t) => t.id === id);
+  if (!target) return { status: 404, error: "Vehicle tag not found." };
+  if (target.addedByUsername !== session.username && !isPlatformAdmin(session.userId, session.username)) {
+    return { status: 403, error: "You can only remove vehicle tags you added." };
+  }
+  const next = tags.filter((t) => t.id !== id);
+  saveVehicleTagsDb(next);
+  return { status: 200, vehicleTags: next.filter((t) => t.userId === target.userId) };
+}
+
 function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
   return {
     name: "blume-search-api",
@@ -2683,6 +2858,88 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
           res.statusCode = 401;
           res.end("You must be signed in.");
           return;
+        }
+
+        // HMCTS "Background Searches" — the same Person Search lookup as Blume, gated
+        // to HMCTS's own ranked tier (all groups except OCG/IE) instead of Blume clearance.
+        if (
+          req.method === "GET" &&
+          (url.searchParams.get("hmctsBackgroundSearch") || url.searchParams.get("hmctsBackgroundHistory"))
+        ) {
+          if (!(await isHmctsRanked(session.userId))) {
+            res.statusCode = 403;
+            res.end("You do not have the ranked clearance required for Background Searches.");
+            return;
+          }
+          const hmctsQuery = url.searchParams.get("hmctsBackgroundSearch");
+          if (hmctsQuery) {
+            const q = hmctsQuery.trim();
+            if (!q) {
+              res.statusCode = 400;
+              res.end("Missing search query.");
+              return;
+            }
+            const result = await performPersonSearchDev(q, session);
+            if (result.status === 404) {
+              res.statusCode = 404;
+              res.end(result.error);
+              return;
+            }
+            appendAuditLog({
+              type: "hmcts_background_search",
+              username: session.username,
+              detail: `Searched ${result.data.username} (${result.data.userId})`,
+            });
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(result.data));
+            return;
+          }
+          const hmctsHistoryUserId = url.searchParams.get("hmctsBackgroundHistory");
+          if (hmctsHistoryUserId) {
+            const history = loadSearchHistoryDb()
+              .filter((h) => h.userId === hmctsHistoryUserId)
+              .sort((a, b) => b.createdAt - a.createdAt);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ history }));
+            return;
+          }
+        }
+
+        if (req.method === "POST") {
+          const hmctsPeekBody = (req as any)._parsedBody;
+          if (hmctsPeekBody?.action === "hmctsAddVehicle" || hmctsPeekBody?.action === "hmctsRemoveVehicle") {
+            if (!(await isHmctsRanked(session.userId))) {
+              res.statusCode = 403;
+              res.end("You do not have the ranked clearance required for Background Searches.");
+              return;
+            }
+            if (hmctsPeekBody.action === "hmctsAddVehicle") {
+              const result = addVehicleTagForDev(
+                (hmctsPeekBody.userId || "").toString().trim(),
+                (hmctsPeekBody.vehicleType || "").toString().trim(),
+                session.username
+              );
+              res.statusCode = result.status;
+              if (result.status !== 200) {
+                res.end(result.error);
+                return;
+              }
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ vehicleTags: result.vehicleTags }));
+              return;
+            }
+            if (hmctsPeekBody.action === "hmctsRemoveVehicle") {
+              const result = removeVehicleTagForDev((hmctsPeekBody.id || "").toString().trim(), session);
+              res.statusCode = result.status;
+              if (result.status !== 200) {
+                res.end(result.error);
+                return;
+              }
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ vehicleTags: result.vehicleTags }));
+              return;
+            }
+          }
         }
 
         if (req.method === "GET" && (url.searchParams.get("verifileSearch") || url.searchParams.get("verifileMyServices"))) {
@@ -3043,152 +3300,19 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             return;
           }
 
-          const resolved = await resolveRobloxUserId(query);
-          if (!resolved) {
+          const result = await performPersonSearchDev(query, session);
+          if (result.status === 404) {
             res.statusCode = 404;
-            res.end("No Roblox user found matching that name or ID.");
+            res.end(result.error);
             return;
           }
-          const { userId, username } = resolved;
-
-          const catalog = await getGroupCatalog();
-          const [avatarUrl, groupIds] = await Promise.all([
-            getRobloxAvatarUrl(userId),
-            getUserGroupIds(userId),
-          ]);
-          const groups = relevantGroups(groupIds, catalog);
-
-          let customPlate: string | null = null;
-          let arrestHistory: unknown = null;
-          let apiError: string | null = null;
-
-          try {
-            const playerRes = await fetch(`${READONLY_API}/player/${encodeURIComponent(userId)}`);
-            const playerText = await playerRes.text();
-            let playerData: any;
-            try {
-              playerData = JSON.parse(playerText);
-            } catch {
-              playerData = null;
-            }
-            if (!playerRes.ok || !playerData) {
-              apiError = `The records API didn't respond as expected (status ${playerRes.status}).`;
-            } else if (playerData.error) {
-              apiError = String(playerData.error);
-            } else {
-              customPlate = playerData.CustomPlate ?? null;
-              arrestHistory = playerData.ArrestHistory ?? null;
-            }
-          } catch (err) {
-            apiError = "Couldn't reach the records API: " + (err as Error).message;
-          }
-
-          const vehicleTags = loadVehicleTagsDb().filter((v) => v.userId === userId);
-
-          const historyListForFriends = loadSearchHistoryDb();
-          const scanListForFriends = loadGroupScanDb();
-          const knownAvatarByUserId = new Map<string, string | null>();
-          for (const h of historyListForFriends) knownAvatarByUserId.set(h.userId, h.avatarUrl);
-          for (const s of scanListForFriends) knownAvatarByUserId.set(s.userId, s.avatarUrl);
-          const scanByUserId = new Map<string, GroupScanEntry>();
-          for (const s of scanListForFriends) scanByUserId.set(s.userId, s);
-          const knownIds = new Set<string>([
-            ...historyListForFriends.map((h) => h.userId),
-            ...scanListForFriends.map((s) => s.userId),
-          ]);
-          const friendMap = new Map<string, { userId: string; username: string }>();
-          for (const f of scanByUserId.get(userId)?.friends || []) {
-            if (f.userId !== userId && knownIds.has(f.userId)) friendMap.set(f.userId, f);
-          }
-          for (const s of scanListForFriends) {
-            if (s.userId === userId) continue;
-            if ((s.friends || []).some((f) => f.userId === userId)) {
-              friendMap.set(s.userId, { userId: s.userId, username: s.username });
-            }
-          }
-          const knownFriends = Array.from(friendMap.values())
-            .map((f) => {
-              const scanEntry = scanByUserId.get(f.userId);
-              const redGroupNames = scanEntry
-                ? relevantGroups(scanEntry.groupIds, catalog)
-                    .filter((g) => g.tier === "red")
-                    .map((g) => g.name)
-                : [];
-              return {
-                userId: f.userId,
-                username: f.username,
-                avatarUrl: knownAvatarByUserId.get(f.userId) ?? null,
-                redGroupNames,
-              };
-            });
-
-          const ownScanEntry = scanListForFriends.find((s) => s.userId === userId);
-          const groupScanChange = ownScanEntry?.changed || null;
-
-          if (avatarUrl || customPlate) {
-            const allHistory = loadSearchHistoryDb();
-            const existingForPerson = allHistory
-              .filter((h) => h.userId === userId)
-              .sort((a, b) => b.createdAt - a.createdAt);
-            const mostRecent = existingForPerson[0];
-            const unchanged =
-              mostRecent &&
-              mostRecent.avatarUrl === avatarUrl &&
-              mostRecent.customPlate === customPlate;
-            if (!unchanged) {
-              const entry: SearchSnapshot = {
-                id: crypto.randomBytes(12).toString("hex"),
-                userId,
-                username,
-                avatarUrl,
-                customPlate,
-                searchedByUsername: session.username,
-                createdAt: Date.now(),
-              };
-              const others = allHistory.filter((h) => h.userId !== userId);
-              const mine = [entry, ...existingForPerson].slice(0, HISTORY_PER_PERSON_CAP);
-              saveSearchHistoryDb([...others, ...mine]);
-            }
-          }
-
-          const rawFormerGroups = await recordGroupMembershipAndGetFormerGroups(
-            userId,
-            username,
-            groupIds,
-            avatarUrl
-          );
-          const formerGroups = rawFormerGroups
-            .filter((f) => Date.now() - f.lastSeenAt <= FORMER_GROUP_WINDOW_MS)
-            .map((f) => {
-              const info = catalog[f.groupId];
-              return info ? { id: f.groupId, ...info, lastSeenAt: f.lastSeenAt } : null;
-            })
-            .filter((f): f is NonNullable<typeof f> => !!f && f.tier === "red")
-            .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
-
           appendAuditLog({
             type: "blume_person_search",
             username: session.username,
-            detail: `Searched ${username} (${userId})`,
+            detail: `Searched ${result.data.username} (${result.data.userId})`,
           });
-
           res.setHeader("Content-Type", "application/json");
-          res.end(
-            JSON.stringify({
-              userId,
-              username,
-              avatarUrl,
-              customPlate,
-              arrestHistory,
-              groups,
-              formerGroups,
-              vehicleTags,
-              knownFriends,
-              groupScanChange,
-              apiError,
-              lastSeenOnlineAt: scanByUserId.get(userId)?.lastSeenOnlineAt || null,
-            })
-          );
+          res.end(JSON.stringify(result.data));
           return;
         }
 
@@ -3302,66 +3426,30 @@ function blumeSearchPlugin(sessions: Map<string, RobloxSession>): Plugin {
             }
 
             if (action === "addVehicle") {
-              const userId = (body.userId || "").toString().trim();
-              const vehicleType = (body.vehicleType || "").toString().trim();
-              if (!userId || !vehicleType) {
-                res.statusCode = 400;
-                res.end("Missing userId or vehicleType.");
+              const result = addVehicleTagForDev(
+                (body.userId || "").toString().trim(),
+                (body.vehicleType || "").toString().trim(),
+                session.username
+              );
+              res.statusCode = result.status;
+              if (result.status !== 200) {
+                res.end(result.error);
                 return;
               }
-              if (vehicleType.length > 80) {
-                res.statusCode = 400;
-                res.end("Vehicle type is too long (max 80 characters).");
-                return;
-              }
-              if (containsBlockedLanguage(vehicleType)) {
-                res.statusCode = 400;
-                res.end(MODERATION_REJECTION_MESSAGE);
-                return;
-              }
-              const entry: VehicleTag = {
-                id: crypto.randomBytes(12).toString("hex"),
-                userId,
-                vehicleType,
-                addedByUsername: session.username,
-                createdAt: Date.now(),
-              };
-              const tags = loadVehicleTagsDb();
-              tags.push(entry);
-              saveVehicleTagsDb(tags);
               res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ vehicleTags: tags.filter((t) => t.userId === userId) }));
+              res.end(JSON.stringify({ vehicleTags: result.vehicleTags }));
               return;
             }
 
             if (action === "removeVehicle") {
-              const id = (body.id || "").toString().trim();
-              if (!id) {
-                res.statusCode = 400;
-                res.end("Missing vehicle tag id.");
+              const result = removeVehicleTagForDev((body.id || "").toString().trim(), session);
+              res.statusCode = result.status;
+              if (result.status !== 200) {
+                res.end(result.error);
                 return;
               }
-              const tags = loadVehicleTagsDb();
-              const target = tags.find((t) => t.id === id);
-              if (!target) {
-                res.statusCode = 404;
-                res.end("Vehicle tag not found.");
-                return;
-              }
-              if (
-                target.addedByUsername !== session.username &&
-                !isPlatformAdmin(session.userId, session.username)
-              ) {
-                res.statusCode = 403;
-                res.end("You can only remove vehicle tags you added.");
-                return;
-              }
-              const next = tags.filter((t) => t.id !== id);
-              saveVehicleTagsDb(next);
               res.setHeader("Content-Type", "application/json");
-              res.end(
-                JSON.stringify({ vehicleTags: next.filter((t) => t.userId === target.userId) })
-              );
+              res.end(JSON.stringify({ vehicleTags: result.vehicleTags }));
               return;
             }
 
