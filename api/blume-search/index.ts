@@ -244,6 +244,19 @@ async function recordGroupMembershipAndGetFormerGroups(
   return formerGroups;
 }
 
+interface VerifilePunishment {
+  id: string;
+  targetUserId: string;
+  targetUsername: string;
+  type: string;
+  details: string;
+  serviceGroupId: number;
+  serviceGroupName: string;
+  addedByUserId: string;
+  addedByUsername: string;
+  createdAt: number;
+}
+
 interface PersonSearchResult {
   userId: string;
   username: string;
@@ -257,6 +270,7 @@ interface PersonSearchResult {
   groupScanChange: GroupScanEntry["changed"];
   apiError: string | null;
   lastSeenOnlineAt: number | null;
+  punishments: VerifilePunishment[];
 }
 
 // Shared by both Blume's Person Search and HMCTS's Background Searches — same
@@ -382,6 +396,11 @@ async function performPersonSearch(
     .filter((f): f is NonNullable<typeof f> => !!f && f.tier === "red")
     .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
 
+  // Folds Verifile's disciplinary log into the same result card.
+  const punishments = ((await kv.get<VerifilePunishment[]>("verifilePunishments")) || [])
+    .filter((p) => p.targetUserId === userId)
+    .sort((a, b) => b.createdAt - a.createdAt);
+
   return {
     status: 200,
     data: {
@@ -397,6 +416,7 @@ async function performPersonSearch(
       groupScanChange,
       apiError,
       lastSeenOnlineAt: scanByUserId.get(userId)?.lastSeenOnlineAt || null,
+      punishments,
     },
   };
 }

@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { getChargeName } from "./pncCharges";
 
+type HmctsPanel = "search" | "chat" | "cases" | "lrr" | "publicRecords";
+
 interface HmctsTile {
   id: string;
   label: string;
   color: string;
   glyph: string;
   locked?: boolean;
+  editorOnly?: boolean;
   editable?: boolean;
   external?: string;
   detail?: string;
-  search?: boolean;
+  panel?: HmctsPanel;
 }
 
 const TILES: HmctsTile[] = [
@@ -20,16 +23,23 @@ const TILES: HmctsTile[] = [
     color: "#1b2a4a",
     glyph: "BGS",
     locked: true,
-    search: true,
+    panel: "search",
+  },
+  {
+    id: "internalMessaging",
+    label: "Internal Messaging",
+    color: "#5c2d91",
+    glyph: "MSG",
+    editorOnly: true,
+    panel: "chat",
   },
   {
     id: "caseDocket",
     label: "Case and Docket Management",
     color: "#7a0d0d",
     glyph: "CDM",
-    locked: true,
-    editable: true,
-    detail: "Links to active court schedules, electronic filing systems, and case tracking workflows.",
+    editorOnly: true,
+    panel: "cases",
   },
   {
     id: "legalResearch",
@@ -37,8 +47,7 @@ const TILES: HmctsTile[] = [
     color: "#5c2d91",
     glyph: "LRR",
     locked: true,
-    editable: true,
-    detail: "Internal databases for local court rules, bench books, precedent decisions, and statutory updates.",
+    panel: "lrr",
   },
   {
     id: "personnelDirectory",
@@ -48,6 +57,13 @@ const TILES: HmctsTile[] = [
     locked: true,
     editable: true,
     detail: "Contact lists, role descriptions, and organizational charts for judges, clerks, and administrative staff.",
+  },
+  {
+    id: "publicRecords",
+    label: "Public Records",
+    color: "#498205",
+    glyph: "PR",
+    panel: "publicRecords",
   },
 ];
 
@@ -95,6 +111,14 @@ interface KnownFriend {
 interface FormerGroup extends PersonGroup {
   lastSeenAt: number;
 }
+interface VerifilePunishment {
+  id: string;
+  type: string;
+  details: string;
+  serviceGroupName: string;
+  addedByUsername: string;
+  createdAt: number;
+}
 interface PersonSearchResult {
   userId: string;
   username: string;
@@ -107,6 +131,7 @@ interface PersonSearchResult {
   knownFriends: KnownFriend[];
   apiError: string | null;
   lastSeenOnlineAt: number | null;
+  punishments?: VerifilePunishment[];
 }
 interface HistorySnapshot {
   id: string;
@@ -564,6 +589,519 @@ function BackgroundSearchPanel({ onBack }: { onBack: () => void }) {
               <span className="hmcts-bgsearch-label">Arrest history</span>
               <ArrestRecord data={result.arrestHistory} />
             </div>
+
+            <div className="hmcts-bgsearch-section">
+              <span className="hmcts-bgsearch-label">Disciplinary record (Verifile)</span>
+              {!result.punishments || result.punishments.length === 0 ? (
+                <p className="hmcts-bgsearch-muted">None on file.</p>
+              ) : (
+                <div>
+                  {result.punishments.map((p) => (
+                    <div className="hmcts-bgsearch-arrest-row" key={p.id}>
+                      <div className="hmcts-bgsearch-arrest-charges">
+                        {p.type} — {p.serviceGroupName}
+                      </div>
+                      <div>{p.details}</div>
+                      <div className="hmcts-bgsearch-arrest-meta">
+                        <span>Logged by {p.addedByUsername}</span>
+                        <span>{formatDateTimeNoSeconds(p.createdAt)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface HmctsMessage {
+  id: string;
+  fromUserId: string;
+  fromUsername: string;
+  departments: string[];
+  text: string;
+  createdAt: number;
+}
+
+function InternalMessagingPanel({ onBack }: { onBack: () => void }) {
+  const [messages, setMessages] = useState<HmctsMessage[]>([]);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  async function loadMessages() {
+    try {
+      const res = await fetch("/api/blume-content?type=hmctsChat");
+      if (!res.ok) return;
+      const data = await res.json();
+      setMessages(data.messages || []);
+    } catch {
+    }
+  }
+
+  useEffect(() => {
+    loadMessages();
+    const id = window.setInterval(loadMessages, 4000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  async function handleSend() {
+    const t = text.trim();
+    if (!t) return;
+    setSending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/blume-content?type=hmctsChat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: t }),
+      });
+      if (!res.ok) {
+        setError(await res.text());
+        return;
+      }
+      const data = await res.json();
+      setMessages((prev) => [...prev, data.message]);
+      setText("");
+    } catch {
+      setError("Couldn't send that message.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="hmcts-bgsearch-view">
+      <button className="hmcts-back" onClick={onBack}>
+        ← Back
+      </button>
+      <div className="hmcts-bgsearch-card hmcts-chat-card">
+        <h4 className="hmcts-bgsearch-title">Internal Messaging</h4>
+        <p className="hmcts-bgsearch-muted" style={{ marginBottom: 12 }}>
+          Shared channel for Ministry of Justice, Crown Prosecution Service, and Home Office.
+        </p>
+        <div className="hmcts-chat-messages" ref={listRef}>
+          {messages.length === 0 && <p className="hmcts-bgsearch-muted">No messages yet.</p>}
+          {messages.map((m) => (
+            <div className="hmcts-chat-message" key={m.id}>
+              <div className="hmcts-chat-message-head">
+                <span className="hmcts-chat-message-name">{m.fromUsername}</span>
+                {m.departments.map((d) => (
+                  <span className="hmcts-chat-dept-tag" key={d}>
+                    {d}
+                  </span>
+                ))}
+                <span className="hmcts-chat-message-time">{formatDateTimeNoSeconds(m.createdAt)}</span>
+              </div>
+              <div className="hmcts-chat-message-text">{m.text}</div>
+            </div>
+          ))}
+        </div>
+        {error && <p className="hmcts-bgsearch-error">{error}</p>}
+        <div className="hmcts-bgsearch-form">
+          <input
+            placeholder="Message the channel…"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !sending) handleSend();
+            }}
+          />
+          <button className="hmcts-bgsearch-btn" disabled={!text.trim() || sending} onClick={handleSend}>
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface HmctsCaseAttachment {
+  name: string;
+  url: string;
+}
+interface HmctsCase {
+  id: string;
+  title: string;
+  info: string;
+  subjectUserId: string | null;
+  subjectUsername: string | null;
+  photos: HmctsCaseAttachment[];
+  files: HmctsCaseAttachment[];
+  isPublic: boolean;
+  createdByUsername: string;
+  createdAt: number;
+}
+
+function fileToDataUrl(f: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(f);
+  });
+}
+
+function CaseDocketPanel({ onBack }: { onBack: () => void }) {
+  const [cases, setCases] = useState<HmctsCase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [title, setTitle] = useState("");
+  const [subjectQuery, setSubjectQuery] = useState("");
+  const [info, setInfo] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [docFiles, setDocFiles] = useState<File[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadCases() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/blume-content?type=hmctsCases");
+      const data = await res.json();
+      setCases(data.cases || []);
+    } catch {
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadCases();
+  }, []);
+
+  async function handleSubmit() {
+    if (!title.trim()) {
+      setError("Missing title.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const photos = await Promise.all(
+        photoFiles.map(async (f) => ({ name: f.name, dataUrl: await fileToDataUrl(f) }))
+      );
+      const files = await Promise.all(
+        docFiles.map(async (f) => ({ name: f.name, dataUrl: await fileToDataUrl(f) }))
+      );
+      const res = await fetch("/api/blume-content?type=hmctsCases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title.trim(), info: info.trim(), subjectQuery: subjectQuery.trim(), isPublic, photos, files }),
+      });
+      if (!res.ok) {
+        setError(await res.text());
+        return;
+      }
+      const entry = await res.json();
+      setCases((prev) => [entry, ...prev]);
+      setTitle("");
+      setSubjectQuery("");
+      setInfo("");
+      setIsPublic(false);
+      setPhotoFiles([]);
+      setDocFiles([]);
+      setShowForm(false);
+    } catch {
+      setError("Couldn't save that case.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="hmcts-bgsearch-view">
+      <button className="hmcts-back" onClick={onBack}>
+        ← Back
+      </button>
+      <div className="hmcts-bgsearch-card">
+        <div className="hmcts-case-header">
+          <h4 className="hmcts-bgsearch-title" style={{ margin: 0 }}>
+            Case and Docket Management
+          </h4>
+          <button className="hmcts-plus-btn" onClick={() => setShowForm((s) => !s)} title="New case">
+            +
+          </button>
+        </div>
+        <p className="hmcts-bgsearch-muted" style={{ marginBottom: 12 }}>
+          Active court schedules, electronic filing, and case tracking. Visible only to Ministry of Justice, Crown
+          Prosecution Service, and Home Office.
+        </p>
+
+        {showForm && (
+          <div className="hmcts-case-form">
+            <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input
+              placeholder="Subject — Roblox username or ID (optional)"
+              value={subjectQuery}
+              onChange={(e) => setSubjectQuery(e.target.value)}
+            />
+            <textarea placeholder="Information" value={info} onChange={(e) => setInfo(e.target.value)} rows={4} />
+            <label className="hmcts-case-file-label">
+              Photos
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => setPhotoFiles(Array.from(e.target.files || []).slice(0, 4))}
+              />
+            </label>
+            <label className="hmcts-case-file-label">
+              Files
+              <input type="file" multiple onChange={(e) => setDocFiles(Array.from(e.target.files || []).slice(0, 3))} />
+            </label>
+            <label className="hmcts-case-checkbox-label">
+              <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
+              Mark as public (title will be visible via Public Records)
+            </label>
+            {error && <p className="hmcts-bgsearch-error">{error}</p>}
+            <button className="hmcts-bgsearch-btn" disabled={submitting} onClick={handleSubmit}>
+              {submitting ? "Saving…" : "File case"}
+            </button>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="hmcts-bgsearch-muted">Loading…</p>
+        ) : cases.length === 0 ? (
+          <p className="hmcts-bgsearch-muted">No cases filed yet.</p>
+        ) : (
+          <div>
+            {cases.map((c) => (
+              <div className="hmcts-case-card" key={c.id}>
+                <div className="hmcts-case-card-head">
+                  <strong>{c.title}</strong>
+                  <span className={`hmcts-case-visibility${c.isPublic ? " hmcts-case-visibility-public" : ""}`}>
+                    {c.isPublic ? "Public" : "Private"}
+                  </span>
+                </div>
+                {c.subjectUsername && <p className="hmcts-bgsearch-muted">Subject: {c.subjectUsername}</p>}
+                {c.info && <p>{c.info}</p>}
+                {c.photos.length > 0 && (
+                  <div className="hmcts-bgsearch-photo-grid">
+                    {c.photos.map((p, i) => (
+                      <a href={p.url} target="_blank" rel="noreferrer" key={i}>
+                        <img src={p.url} alt={p.name} className="hmcts-case-photo" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {c.files.length > 0 && (
+                  <div className="hmcts-case-file-list">
+                    {c.files.map((f, i) => (
+                      <a href={f.url} target="_blank" rel="noreferrer" key={i}>
+                        {f.name}
+                      </a>
+                    ))}
+                  </div>
+                )}
+                <span className="hmcts-bgsearch-history-meta">
+                  Filed by {c.createdByUsername} · {formatDateTimeNoSeconds(c.createdAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface HmctsLrrPost {
+  id: string;
+  title: string;
+  link: string;
+  postedByUsername: string;
+  createdAt: number;
+}
+
+function LrrPanel({ onBack, canEdit }: { onBack: () => void; canEdit: boolean }) {
+  const [posts, setPosts] = useState<HmctsLrrPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [title, setTitle] = useState("");
+  const [link, setLink] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadPosts() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/blume-content?type=hmctsLrr");
+      const data = await res.json();
+      setPosts(data.posts || []);
+    } catch {
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadPosts();
+  }, []);
+
+  async function handleSubmit() {
+    if (!title.trim() || !link.trim()) {
+      setError("Missing title or link.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/blume-content?type=hmctsLrr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title.trim(), link: link.trim() }),
+      });
+      if (!res.ok) {
+        setError(await res.text());
+        return;
+      }
+      const entry = await res.json();
+      setPosts((prev) => [entry, ...prev]);
+      setTitle("");
+      setLink("");
+      setShowForm(false);
+    } catch {
+      setError("Couldn't save that update.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="hmcts-bgsearch-view">
+      <button className="hmcts-back" onClick={onBack}>
+        ← Back
+      </button>
+      <div className="hmcts-bgsearch-card">
+        <div className="hmcts-case-header">
+          <h4 className="hmcts-bgsearch-title" style={{ margin: 0 }}>
+            Legal Research Repositories
+          </h4>
+          {canEdit && (
+            <button className="hmcts-plus-btn" onClick={() => setShowForm((s) => !s)} title="Post an update">
+              +
+            </button>
+          )}
+        </div>
+        <p className="hmcts-bgsearch-muted" style={{ marginBottom: 12 }}>
+          Local court rules, bench books, precedent decisions, and statutory updates.
+        </p>
+
+        {showForm && canEdit && (
+          <div className="hmcts-case-form">
+            <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input placeholder="Link (https://…)" value={link} onChange={(e) => setLink(e.target.value)} />
+            {error && <p className="hmcts-bgsearch-error">{error}</p>}
+            <button className="hmcts-bgsearch-btn" disabled={submitting} onClick={handleSubmit}>
+              {submitting ? "Posting…" : "Post update"}
+            </button>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="hmcts-bgsearch-muted">Loading…</p>
+        ) : posts.length === 0 ? (
+          <p className="hmcts-bgsearch-muted">No updates posted yet.</p>
+        ) : (
+          <div>
+            {posts.map((p) => (
+              <div className="hmcts-case-card" key={p.id}>
+                <a className="hmcts-lrr-link" href={p.link} target="_blank" rel="noreferrer">
+                  {p.title}
+                </a>
+                <span className="hmcts-bgsearch-history-meta">
+                  Posted by {p.postedByUsername} · {formatDateTimeNoSeconds(p.createdAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PublicRecordsPanel({ onBack }: { onBack: () => void }) {
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ userId: string; username: string; records: { id: string; title: string; createdAt: number }[] } | null>(
+    null
+  );
+
+  async function handleSearch() {
+    const q = query.trim();
+    if (!q) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/blume-content?type=hmctsPublicRecords&query=${encodeURIComponent(q)}`);
+      if (!res.ok) {
+        setError(await res.text());
+        setResult(null);
+        return;
+      }
+      setResult(await res.json());
+    } catch {
+      setError("Couldn't reach the records service.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="hmcts-bgsearch-view">
+      <button className="hmcts-back" onClick={onBack}>
+        ← Back
+      </button>
+      <div className="hmcts-bgsearch-card">
+        <h4 className="hmcts-bgsearch-title">Public Records</h4>
+        <p className="hmcts-bgsearch-muted" style={{ marginBottom: 12 }}>
+          Search a person to see the titles of any case entries marked public.
+        </p>
+        <div className="hmcts-bgsearch-form">
+          <input
+            placeholder="Search by name or ID…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !loading) handleSearch();
+            }}
+          />
+          <button className="hmcts-bgsearch-btn" disabled={!query.trim() || loading} onClick={handleSearch}>
+            {loading ? "Searching…" : "Search"}
+          </button>
+        </div>
+        {error && <p className="hmcts-bgsearch-error">{error}</p>}
+        {result && (
+          <div className="hmcts-bgsearch-result">
+            <p>
+              <strong>{result.username}</strong> <span className="hmcts-bgsearch-muted">ID {result.userId}</span>
+            </p>
+            {result.records.length === 0 ? (
+              <p className="hmcts-bgsearch-muted">No public records found.</p>
+            ) : (
+              <div className="hmcts-bgsearch-chip-list">
+                {result.records.map((r) => (
+                  <span className="hmcts-bgsearch-chip" key={r.id}>
+                    {r.title}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -607,8 +1145,14 @@ export function HmctsApp() {
     return () => window.clearTimeout(id);
   }, [stage]);
 
+  function isTileLocked(tile: HmctsTile): boolean {
+    if (tile.editorOnly) return !canEdit;
+    if (tile.locked) return !ranked;
+    return false;
+  }
+
   function handleTileClick(tile: HmctsTile) {
-    if (tile.locked && !ranked) {
+    if (isTileLocked(tile)) {
       setRestricted(true);
       if (restrictedTimer.current) window.clearTimeout(restrictedTimer.current);
       restrictedTimer.current = window.setTimeout(() => setRestricted(false), 2400);
@@ -672,8 +1216,16 @@ export function HmctsApp() {
       </div>
 
       {activeTile ? (
-        activeTile.search ? (
+        activeTile.panel === "search" ? (
           <BackgroundSearchPanel onBack={() => setActiveTile(null)} />
+        ) : activeTile.panel === "chat" ? (
+          <InternalMessagingPanel onBack={() => setActiveTile(null)} />
+        ) : activeTile.panel === "cases" ? (
+          <CaseDocketPanel onBack={() => setActiveTile(null)} />
+        ) : activeTile.panel === "lrr" ? (
+          <LrrPanel onBack={() => setActiveTile(null)} canEdit={canEdit} />
+        ) : activeTile.panel === "publicRecords" ? (
+          <PublicRecordsPanel onBack={() => setActiveTile(null)} />
         ) : (
           <div className="hmcts-tile-detail">
             <button className="hmcts-back" onClick={() => setActiveTile(null)}>
@@ -694,7 +1246,7 @@ export function HmctsApp() {
         <>
           <div className="hmcts-tile-grid">
             {TILES.map((tile) => {
-              const locked = !!tile.locked && !ranked;
+              const locked = isTileLocked(tile);
               return (
                 <button
                   key={tile.id}
@@ -711,7 +1263,8 @@ export function HmctsApp() {
           </div>
           {restricted && (
             <p className="hmcts-restricted-note">
-              Restricted — this service requires a recognised judiciary rank.
+              Restricted — this service requires either a recognised judiciary rank or membership in Ministry of
+              Justice, Crown Prosecution Service, or Home Office.
             </p>
           )}
         </>

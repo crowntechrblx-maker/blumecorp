@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "node:crypto";
+import { put, del } from "@vercel/blob";
 import { kv } from "../../lib/kv.js";
 import { parseCookies } from "../../lib/cookies.js";
 import { decodeSession } from "../../lib/session.js";
@@ -11,6 +12,9 @@ import {
   getRobloxAvatarUrl,
   isHmctsRanked,
   isHmctsEditor,
+  getHmctsUserDepartments,
+  MIME_EXT,
+  parseDataUrl,
 } from "../../lib/roblox.js";
 import { containsBlockedLanguage, MODERATION_REJECTION_MESSAGE } from "../../lib/moderation.js";
 import { appendAuditLog } from "../../lib/audit.js";
@@ -85,6 +89,54 @@ interface BlumeBlogPost {
   createdAt: number;
 }
 
+interface HmctsMessage {
+  id: string;
+  fromUserId: string;
+  fromUsername: string;
+  departments: string[];
+  text: string;
+  createdAt: number;
+}
+
+interface HmctsCaseAttachment {
+  name: string;
+  url: string;
+}
+
+interface HmctsCase {
+  id: string;
+  title: string;
+  info: string;
+  subjectUserId: string | null;
+  subjectUsername: string | null;
+  photos: HmctsCaseAttachment[];
+  files: HmctsCaseAttachment[];
+  isPublic: boolean;
+  createdByUserId: string;
+  createdByUsername: string;
+  createdAt: number;
+}
+
+interface HmctsLrrPost {
+  id: string;
+  title: string;
+  link: string;
+  postedByUsername: string;
+  createdAt: number;
+}
+
+const HMCTS_CASE_MAX_PHOTOS = 4;
+const HMCTS_CASE_MAX_FILES = 3;
+const HMCTS_CASE_MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+
+// Broader than parseDataUrl (which only accepts image/* mimes) — case files can be
+// PDFs, docs, etc.
+function parseAnyDataUrl(dataUrl: string): { mime: string; buffer: Buffer } | null {
+  const match = /^data:([a-zA-Z0-9.+/-]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) return null;
+  return { mime: match[1], buffer: Buffer.from(match[2], "base64") };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const type = (req.query.type as string) || "report";
   const cookies = parseCookies(req);
@@ -94,6 +146,315 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ranked = session ? await isHmctsRanked(session.userId) : false;
     const canEdit = session ? await isHmctsEditor(session.userId) : false;
     res.status(200).json({ ranked, canEdit });
+    return;
+  }
+
+  // HMCTS internal messaging — single group chat, restricted to MOJ / CPS / Home Office.
+  if (type === "hmctsChat") {
+    if (!session) {
+      res.status(401).send("You must be signed in.");
+      return;
+    }
+    if (!(await isHmctsEditor(session.userId))) {
+      res.status(403).send("Internal Messaging is restricted to Ministry of Justice, Crown Prosecution Service, and Home Office.");
+      return;
+    }
+
+    if (req.method === "GET") {
+      const messages = ((await kv.get<HmctsMessage[]>("hmctsMessages")) || []).slice(-200);
+      res.status(200).json({ messages });
+      return;
+    }
+
+    if (req.method === "POST") {
+      const body = req.body as { text?: string };
+      const text = (body.text || "").toString().trim();
+      if (!text) {
+        res.status(400).send("Message can't be empty.");
+        return;
+      }
+      if (text.length > 1000) {
+        res.status(400).send("Message is too long (max 1000 characters).");
+        return;
+      }
+      if (containsBlockedLanguage(text)) {
+        res.status(400).send(MODERATION_REJECTION_MESSAGE);
+        return;
+      }
+      const departments = await getHmctsUserDepartments(session.userId);
+      const entry: HmctsMessage = {
+        id: crypto.randomBytes(12).toString("hex"),
+        fromUserId: session.userId,
+        fromUsername: session.username,
+        departments,
+        text,
+        createdAt: Date.now(),
+      };
+      const all = (await kv.get<HmctsMessage[]>("hmctsMessages")) || [];
+      const next = [...all, entry].slice(-500);
+      await kv.set("hmctsMessages", next);
+      res.status(200).json({ message: entry });
+      return;
+    }
+
+    res.status(405).send("Method not allowed");
+    return;
+  }
+
+  // Case and Docket Management — viewing AND editing restricted to MOJ / CPS / Home Office.
+  if (type === "hmctsCases") {
+    if (!session) {
+      res.status(401).send("You must be signed in.");
+      return;
+    }
+    if (!(await isHmctsEditor(session.userId))) {
+      res.status(403).send("Case and Docket Management is restricted to Ministry of Justice, Crown Prosecution Service, and Home Office.");
+      return;
+    }
+
+    if (req.method === "GET") {
+      const cases = ((await kv.get<HmctsCase[]>("hmctsCases")) || []).sort((a, b) => b.createdAt - a.createdAt);
+      res.status(200).json({ cases });
+      return;
+    }
+
+    if (req.method === "POST") {
+      try {
+        const body = req.body as {
+          title?: string;
+          info?: string;
+          subjectQuery?: string;
+          isPublic?: boolean;
+          photos?: { name?: string; dataUrl?: string }[];
+          files?: { name?: string; dataUrl?: string }[];
+        };
+        const title = (body.title || "").toString().trim();
+        const info = (body.info || "").toString().trim();
+        if (!title) {
+          res.status(400).send("Missing title.");
+          return;
+        }
+        if (title.length > 140) {
+          res.status(400).send("Title is too long (max 140 characters).");
+          return;
+        }
+        if (info.length > 4000) {
+          res.status(400).send("Information is too long (max 4000 characters).");
+          return;
+        }
+        if (containsBlockedLanguage(title) || containsBlockedLanguage(info)) {
+          res.status(400).send(MODERATION_REJECTION_MESSAGE);
+          return;
+        }
+
+        let subjectUserId: string | null = null;
+        let subjectUsername: string | null = null;
+        const subjectQuery = (body.subjectQuery || "").toString().trim();
+        if (subjectQuery) {
+          const resolved = await resolveRobloxUserId(subjectQuery);
+          if (!resolved) {
+            res.status(400).send(`Couldn't find a Roblox user matching "${subjectQuery}".`);
+            return;
+          }
+          subjectUserId = resolved.userId;
+          subjectUsername = resolved.username;
+        }
+
+        const rawPhotos = Array.isArray(body.photos) ? body.photos.slice(0, HMCTS_CASE_MAX_PHOTOS) : [];
+        const rawFiles = Array.isArray(body.files) ? body.files.slice(0, HMCTS_CASE_MAX_FILES) : [];
+
+        const photos: HmctsCaseAttachment[] = [];
+        for (const p of rawPhotos) {
+          const parsed = parseDataUrl(p.dataUrl || "");
+          if (!parsed) continue;
+          const ext = MIME_EXT[parsed.mime];
+          if (!ext) continue;
+          if (parsed.buffer.length > HMCTS_CASE_MAX_ATTACHMENT_BYTES) {
+            res.status(400).send("A photo is too large (max 4MB each).");
+            return;
+          }
+          const id = crypto.randomBytes(10).toString("hex");
+          const blob = await put(`hmcts-cases/${id}.${ext}`, parsed.buffer, {
+            access: "public",
+            contentType: parsed.mime,
+          });
+          photos.push({ name: (p.name || "photo").toString().slice(0, 80), url: blob.url });
+        }
+
+        const files: HmctsCaseAttachment[] = [];
+        for (const f of rawFiles) {
+          const parsed = parseAnyDataUrl(f.dataUrl || "");
+          if (!parsed) continue;
+          if (parsed.buffer.length > HMCTS_CASE_MAX_ATTACHMENT_BYTES) {
+            res.status(400).send("A file is too large (max 4MB each).");
+            return;
+          }
+          const id = crypto.randomBytes(10).toString("hex");
+          const safeName = (f.name || "file").toString().replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+          const blob = await put(`hmcts-cases/${id}-${safeName}`, parsed.buffer, {
+            access: "public",
+            contentType: parsed.mime,
+          });
+          files.push({ name: safeName, url: blob.url });
+        }
+
+        const entry: HmctsCase = {
+          id: crypto.randomBytes(12).toString("hex"),
+          title,
+          info,
+          subjectUserId,
+          subjectUsername,
+          photos,
+          files,
+          isPublic: !!body.isPublic,
+          createdByUserId: session.userId,
+          createdByUsername: session.username,
+          createdAt: Date.now(),
+        };
+        const all = (await kv.get<HmctsCase[]>("hmctsCases")) || [];
+        all.push(entry);
+        await kv.set("hmctsCases", all);
+        await appendAuditLog({
+          type: "hmcts_case_added",
+          username: session.username,
+          detail: `Filed case "${title}"${subjectUsername ? ` re. ${subjectUsername}` : ""}`,
+        });
+        res.status(200).json(entry);
+        return;
+      } catch (err) {
+        res.status(500).send("Failed to save case: " + (err as Error).message);
+      }
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      const id = (req.query.id as string) || "";
+      const all = (await kv.get<HmctsCase[]>("hmctsCases")) || [];
+      const target = all.find((c) => c.id === id);
+      if (!target) {
+        res.status(404).send("Case not found.");
+        return;
+      }
+      if (target.createdByUserId !== session.userId && !(await isPlatformAdmin(session.userId, session.username))) {
+        res.status(403).send("You can only remove cases you filed.");
+        return;
+      }
+      for (const attachment of [...target.photos, ...target.files]) {
+        try {
+          await del(attachment.url);
+        } catch {
+        }
+      }
+      const next = all.filter((c) => c.id !== id);
+      await kv.set("hmctsCases", next);
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    res.status(405).send("Method not allowed");
+    return;
+  }
+
+  // Legal Research Repositories — viewable by anyone ranked, postable only by
+  // MOJ / CPS / Home Office.
+  if (type === "hmctsLrr") {
+    if (!session) {
+      res.status(401).send("You must be signed in.");
+      return;
+    }
+    if (!(await isHmctsRanked(session.userId))) {
+      res.status(403).send("Legal Research Repositories requires a recognised judiciary rank.");
+      return;
+    }
+
+    if (req.method === "GET") {
+      const posts = ((await kv.get<HmctsLrrPost[]>("hmctsLrrPosts")) || []).sort((a, b) => b.createdAt - a.createdAt);
+      res.status(200).json({ posts });
+      return;
+    }
+
+    if (req.method === "POST") {
+      if (!(await isHmctsEditor(session.userId))) {
+        res.status(403).send("Only Ministry of Justice, Crown Prosecution Service, and Home Office can post updates.");
+        return;
+      }
+      const body = req.body as { title?: string; link?: string };
+      const title = (body.title || "").toString().trim();
+      const link = (body.link || "").toString().trim();
+      if (!title || !link) {
+        res.status(400).send("Missing title or link.");
+        return;
+      }
+      if (title.length > 140) {
+        res.status(400).send("Title is too long (max 140 characters).");
+        return;
+      }
+      if (!/^https?:\/\/.+/i.test(link)) {
+        res.status(400).send("Link must start with http:// or https://.");
+        return;
+      }
+      if (containsBlockedLanguage(title)) {
+        res.status(400).send(MODERATION_REJECTION_MESSAGE);
+        return;
+      }
+      const entry: HmctsLrrPost = {
+        id: crypto.randomBytes(12).toString("hex"),
+        title,
+        link,
+        postedByUsername: session.username,
+        createdAt: Date.now(),
+      };
+      const all = (await kv.get<HmctsLrrPost[]>("hmctsLrrPosts")) || [];
+      all.push(entry);
+      await kv.set("hmctsLrrPosts", all);
+      res.status(200).json(entry);
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      if (!(await isHmctsEditor(session.userId))) {
+        res.status(403).send("Only Ministry of Justice, Crown Prosecution Service, and Home Office can remove updates.");
+        return;
+      }
+      const id = (req.query.id as string) || "";
+      const all = (await kv.get<HmctsLrrPost[]>("hmctsLrrPosts")) || [];
+      const next = all.filter((p) => p.id !== id);
+      await kv.set("hmctsLrrPosts", next);
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    res.status(405).send("Method not allowed");
+    return;
+  }
+
+  // Public Records — no rank required, just signed in. Surfaces only the title of
+  // public case entries linked to the searched person.
+  if (type === "hmctsPublicRecords") {
+    if (!session) {
+      res.status(401).send("You must be signed in.");
+      return;
+    }
+    if (req.method !== "GET") {
+      res.status(405).send("Method not allowed");
+      return;
+    }
+    const q = ((req.query.query as string) || "").trim();
+    if (!q) {
+      res.status(400).send("Missing search query.");
+      return;
+    }
+    const resolved = await resolveRobloxUserId(q);
+    if (!resolved) {
+      res.status(404).send("No Roblox user found matching that name or ID.");
+      return;
+    }
+    const all = (await kv.get<HmctsCase[]>("hmctsCases")) || [];
+    const records = all
+      .filter((c) => c.isPublic && c.subjectUserId === resolved.userId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((c) => ({ id: c.id, title: c.title, createdAt: c.createdAt }));
+    res.status(200).json({ userId: resolved.userId, username: resolved.username, records });
     return;
   }
 

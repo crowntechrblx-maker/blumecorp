@@ -2453,6 +2453,23 @@ async function isHmctsEditor(userId: string): Promise<boolean> {
   return editorGroupIds.some((id) => memberSet.has(id));
 }
 
+const HMCTS_DEPARTMENTS: { label: string; needle: string }[] = [
+  { label: "Ministry of Justice", needle: "ministry of justice" },
+  { label: "Crown Prosecution Service", needle: "crown prosecution" },
+  { label: "Home Office", needle: "home office" },
+];
+
+async function getHmctsUserDepartments(userId: string): Promise<string[]> {
+  const memberGroupIds = await getUserGroupIds(userId);
+  const memberSet = new Set(memberGroupIds);
+  const departments: string[] = [];
+  for (const dept of HMCTS_DEPARTMENTS) {
+    const groupIds = getGroupIdsByNameMatch([dept.needle]);
+    if (groupIds.some((id) => memberSet.has(id))) departments.push(dept.label);
+  }
+  return departments;
+}
+
 function loadGroupScanDb(): GroupScanEntry[] {
   try {
     return JSON.parse(fs.readFileSync(BLUME_GROUP_SCAN_DB, "utf-8"));
@@ -2748,6 +2765,11 @@ async function performPersonSearchDev(
     .filter((f): f is NonNullable<typeof f> => !!f && f.tier === "red")
     .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
 
+  // Folds Verifile's disciplinary log into the same result card.
+  const punishments = loadVerifilePunishmentsDb()
+    .filter((p) => p.targetUserId === userId)
+    .sort((a, b) => b.createdAt - a.createdAt);
+
   return {
     status: 200,
     data: {
@@ -2763,6 +2785,7 @@ async function performPersonSearchDev(
       groupScanChange,
       apiError,
       lastSeenOnlineAt: scanByUserId.get(userId)?.lastSeenOnlineAt || null,
+      punishments,
     },
   };
 }
@@ -4152,6 +4175,472 @@ function hmctsPlugin(sessions: Map<string, RobloxSession>): Plugin {
   };
 }
 
+interface HmctsMessage {
+  id: string;
+  fromUserId: string;
+  fromUsername: string;
+  departments: string[];
+  text: string;
+  createdAt: number;
+}
+interface HmctsCaseAttachment {
+  name: string;
+  url: string;
+}
+interface HmctsCase {
+  id: string;
+  title: string;
+  info: string;
+  subjectUserId: string | null;
+  subjectUsername: string | null;
+  photos: HmctsCaseAttachment[];
+  files: HmctsCaseAttachment[];
+  isPublic: boolean;
+  createdByUserId: string;
+  createdByUsername: string;
+  createdAt: number;
+}
+interface HmctsLrrPost {
+  id: string;
+  title: string;
+  link: string;
+  postedByUsername: string;
+  createdAt: number;
+}
+
+const HMCTS_MESSAGES_DB = path.resolve(process.cwd(), "hmcts-messages-data.json");
+const HMCTS_CASES_DB = path.resolve(process.cwd(), "hmcts-cases-data.json");
+const HMCTS_LRR_DB = path.resolve(process.cwd(), "hmcts-lrr-data.json");
+const HMCTS_CASE_DIR = path.resolve(process.cwd(), "public", "hmcts-cases", "uploads");
+const HMCTS_CASE_MAX_PHOTOS = 4;
+const HMCTS_CASE_MAX_FILES = 3;
+const HMCTS_CASE_MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+
+function loadHmctsMessagesDb(): HmctsMessage[] {
+  try {
+    return JSON.parse(fs.readFileSync(HMCTS_MESSAGES_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveHmctsMessagesDb(entries: HmctsMessage[]) {
+  fs.writeFileSync(HMCTS_MESSAGES_DB, JSON.stringify(entries, null, 2));
+}
+function loadHmctsCasesDb(): HmctsCase[] {
+  try {
+    return JSON.parse(fs.readFileSync(HMCTS_CASES_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveHmctsCasesDb(entries: HmctsCase[]) {
+  fs.writeFileSync(HMCTS_CASES_DB, JSON.stringify(entries, null, 2));
+}
+function loadHmctsLrrDb(): HmctsLrrPost[] {
+  try {
+    return JSON.parse(fs.readFileSync(HMCTS_LRR_DB, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveHmctsLrrDb(entries: HmctsLrrPost[]) {
+  fs.writeFileSync(HMCTS_LRR_DB, JSON.stringify(entries, null, 2));
+}
+
+function parseAnyDataUrlDev(dataUrl: string): { mime: string; buffer: Buffer } | null {
+  const match = /^data:([a-zA-Z0-9.+/-]+);base64,(.+)$/.exec(dataUrl);
+  if (!match) return null;
+  return { mime: match[1], buffer: Buffer.from(match[2], "base64") };
+}
+
+function hmctsChatPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "hmcts-chat-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "hmctsChat") {
+          next();
+          return;
+        }
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        if (!session) {
+          res.statusCode = 401;
+          res.end("You must be signed in.");
+          return;
+        }
+        if (!(await isHmctsEditor(session.userId))) {
+          res.statusCode = 403;
+          res.end("Internal Messaging is restricted to Ministry of Justice, Crown Prosecution Service, and Home Office.");
+          return;
+        }
+
+        if (req.method === "GET") {
+          const messages = loadHmctsMessagesDb().slice(-200);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ messages }));
+          return;
+        }
+
+        if (req.method === "POST") {
+          const body = await readJsonBody(req);
+          const text = (body.text || "").toString().trim();
+          if (!text) {
+            res.statusCode = 400;
+            res.end("Message can't be empty.");
+            return;
+          }
+          if (text.length > 1000) {
+            res.statusCode = 400;
+            res.end("Message is too long (max 1000 characters).");
+            return;
+          }
+          if (containsBlockedLanguage(text)) {
+            res.statusCode = 400;
+            res.end(MODERATION_REJECTION_MESSAGE);
+            return;
+          }
+          const departments = await getHmctsUserDepartments(session.userId);
+          const entry: HmctsMessage = {
+            id: crypto.randomBytes(12).toString("hex"),
+            fromUserId: session.userId,
+            fromUsername: session.username,
+            departments,
+            text,
+            createdAt: Date.now(),
+          };
+          const all = loadHmctsMessagesDb();
+          const next2 = [...all, entry].slice(-500);
+          saveHmctsMessagesDb(next2);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ message: entry }));
+          return;
+        }
+
+        res.statusCode = 405;
+        res.end("Method not allowed");
+      });
+    },
+  };
+}
+
+function hmctsCasesPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  fs.mkdirSync(HMCTS_CASE_DIR, { recursive: true });
+  return {
+    name: "hmcts-cases-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "hmctsCases") {
+          next();
+          return;
+        }
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        if (!session) {
+          res.statusCode = 401;
+          res.end("You must be signed in.");
+          return;
+        }
+        if (!(await isHmctsEditor(session.userId))) {
+          res.statusCode = 403;
+          res.end("Case and Docket Management is restricted to Ministry of Justice, Crown Prosecution Service, and Home Office.");
+          return;
+        }
+
+        if (req.method === "GET") {
+          const cases = loadHmctsCasesDb().sort((a, b) => b.createdAt - a.createdAt);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ cases }));
+          return;
+        }
+
+        if (req.method === "POST") {
+          try {
+            const body = await readJsonBody(req);
+            const title = (body.title || "").toString().trim();
+            const info = (body.info || "").toString().trim();
+            if (!title) {
+              res.statusCode = 400;
+              res.end("Missing title.");
+              return;
+            }
+            if (title.length > 140) {
+              res.statusCode = 400;
+              res.end("Title is too long (max 140 characters).");
+              return;
+            }
+            if (info.length > 4000) {
+              res.statusCode = 400;
+              res.end("Information is too long (max 4000 characters).");
+              return;
+            }
+            if (containsBlockedLanguage(title) || containsBlockedLanguage(info)) {
+              res.statusCode = 400;
+              res.end(MODERATION_REJECTION_MESSAGE);
+              return;
+            }
+
+            let subjectUserId: string | null = null;
+            let subjectUsername: string | null = null;
+            const subjectQuery = (body.subjectQuery || "").toString().trim();
+            if (subjectQuery) {
+              const resolved = await resolveRobloxUserId(subjectQuery);
+              if (!resolved) {
+                res.statusCode = 400;
+                res.end(`Couldn't find a Roblox user matching "${subjectQuery}".`);
+                return;
+              }
+              subjectUserId = resolved.userId;
+              subjectUsername = resolved.username;
+            }
+
+            const rawPhotos: { name?: string; dataUrl?: string }[] = Array.isArray(body.photos)
+              ? body.photos.slice(0, HMCTS_CASE_MAX_PHOTOS)
+              : [];
+            const rawFiles: { name?: string; dataUrl?: string }[] = Array.isArray(body.files)
+              ? body.files.slice(0, HMCTS_CASE_MAX_FILES)
+              : [];
+
+            const photos: HmctsCaseAttachment[] = [];
+            for (const p of rawPhotos) {
+              const match = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(p.dataUrl || "");
+              if (!match) continue;
+              const ext = MIME_EXT[match[1]];
+              if (!ext) continue;
+              const buffer = Buffer.from(match[2], "base64");
+              if (buffer.length > HMCTS_CASE_MAX_ATTACHMENT_BYTES) {
+                res.statusCode = 400;
+                res.end("A photo is too large (max 4MB each).");
+                return;
+              }
+              const id = crypto.randomBytes(10).toString("hex");
+              const filename = `${id}.${ext}`;
+              fs.writeFileSync(path.join(HMCTS_CASE_DIR, filename), buffer);
+              photos.push({ name: (p.name || "photo").toString().slice(0, 80), url: `/hmcts-cases/uploads/${filename}` });
+            }
+
+            const files: HmctsCaseAttachment[] = [];
+            for (const f of rawFiles) {
+              const parsed = parseAnyDataUrlDev(f.dataUrl || "");
+              if (!parsed) continue;
+              if (parsed.buffer.length > HMCTS_CASE_MAX_ATTACHMENT_BYTES) {
+                res.statusCode = 400;
+                res.end("A file is too large (max 4MB each).");
+                return;
+              }
+              const id = crypto.randomBytes(10).toString("hex");
+              const safeName = (f.name || "file").toString().replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+              const filename = `${id}-${safeName}`;
+              fs.writeFileSync(path.join(HMCTS_CASE_DIR, filename), parsed.buffer);
+              files.push({ name: safeName, url: `/hmcts-cases/uploads/${filename}` });
+            }
+
+            const entry: HmctsCase = {
+              id: crypto.randomBytes(12).toString("hex"),
+              title,
+              info,
+              subjectUserId,
+              subjectUsername,
+              photos,
+              files,
+              isPublic: !!body.isPublic,
+              createdByUserId: session.userId,
+              createdByUsername: session.username,
+              createdAt: Date.now(),
+            };
+            const all = loadHmctsCasesDb();
+            all.push(entry);
+            saveHmctsCasesDb(all);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(entry));
+          } catch (err) {
+            res.statusCode = 500;
+            res.end("Failed to save case: " + (err as Error).message);
+          }
+          return;
+        }
+
+        if (req.method === "DELETE") {
+          const id = url.searchParams.get("id") || "";
+          const all = loadHmctsCasesDb();
+          const target = all.find((c) => c.id === id);
+          if (!target) {
+            res.statusCode = 404;
+            res.end("Case not found.");
+            return;
+          }
+          if (target.createdByUserId !== session.userId && !isPlatformAdmin(session.userId, session.username)) {
+            res.statusCode = 403;
+            res.end("You can only remove cases you filed.");
+            return;
+          }
+          for (const attachment of [...target.photos, ...target.files]) {
+            const filename = attachment.url.split("/").pop();
+            if (filename) {
+              try {
+                fs.unlinkSync(path.join(HMCTS_CASE_DIR, filename));
+              } catch {
+              }
+            }
+          }
+          const next2 = all.filter((c) => c.id !== id);
+          saveHmctsCasesDb(next2);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
+
+        res.statusCode = 405;
+        res.end("Method not allowed");
+      });
+    },
+  };
+}
+
+function hmctsLrrPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "hmcts-lrr-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "hmctsLrr") {
+          next();
+          return;
+        }
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        if (!session) {
+          res.statusCode = 401;
+          res.end("You must be signed in.");
+          return;
+        }
+        if (!(await isHmctsRanked(session.userId))) {
+          res.statusCode = 403;
+          res.end("Legal Research Repositories requires a recognised judiciary rank.");
+          return;
+        }
+
+        if (req.method === "GET") {
+          const posts = loadHmctsLrrDb().sort((a, b) => b.createdAt - a.createdAt);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ posts }));
+          return;
+        }
+
+        if (req.method === "POST") {
+          if (!(await isHmctsEditor(session.userId))) {
+            res.statusCode = 403;
+            res.end("Only Ministry of Justice, Crown Prosecution Service, and Home Office can post updates.");
+            return;
+          }
+          const body = await readJsonBody(req);
+          const title = (body.title || "").toString().trim();
+          const link = (body.link || "").toString().trim();
+          if (!title || !link) {
+            res.statusCode = 400;
+            res.end("Missing title or link.");
+            return;
+          }
+          if (title.length > 140) {
+            res.statusCode = 400;
+            res.end("Title is too long (max 140 characters).");
+            return;
+          }
+          if (!/^https?:\/\/.+/i.test(link)) {
+            res.statusCode = 400;
+            res.end("Link must start with http:// or https://.");
+            return;
+          }
+          if (containsBlockedLanguage(title)) {
+            res.statusCode = 400;
+            res.end(MODERATION_REJECTION_MESSAGE);
+            return;
+          }
+          const entry: HmctsLrrPost = {
+            id: crypto.randomBytes(12).toString("hex"),
+            title,
+            link,
+            postedByUsername: session.username,
+            createdAt: Date.now(),
+          };
+          const all = loadHmctsLrrDb();
+          all.push(entry);
+          saveHmctsLrrDb(all);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(entry));
+          return;
+        }
+
+        if (req.method === "DELETE") {
+          if (!(await isHmctsEditor(session.userId))) {
+            res.statusCode = 403;
+            res.end("Only Ministry of Justice, Crown Prosecution Service, and Home Office can remove updates.");
+            return;
+          }
+          const id = url.searchParams.get("id") || "";
+          const all = loadHmctsLrrDb();
+          const next2 = all.filter((p) => p.id !== id);
+          saveHmctsLrrDb(next2);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
+
+        res.statusCode = 405;
+        res.end("Method not allowed");
+      });
+    },
+  };
+}
+
+function hmctsPublicRecordsPlugin(sessions: Map<string, RobloxSession>): Plugin {
+  return {
+    name: "hmcts-public-records-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", "http://localhost");
+        if (url.pathname !== "/api/blume-content" || url.searchParams.get("type") !== "hmctsPublicRecords") {
+          next();
+          return;
+        }
+        const cookies = parseCookies(req);
+        const session = sessions.get(cookies.wb_session);
+        if (!session) {
+          res.statusCode = 401;
+          res.end("You must be signed in.");
+          return;
+        }
+        if (req.method !== "GET") {
+          res.statusCode = 405;
+          res.end("Method not allowed");
+          return;
+        }
+        const q = (url.searchParams.get("query") || "").trim();
+        if (!q) {
+          res.statusCode = 400;
+          res.end("Missing search query.");
+          return;
+        }
+        const resolved = await resolveRobloxUserId(q);
+        if (!resolved) {
+          res.statusCode = 404;
+          res.end("No Roblox user found matching that name or ID.");
+          return;
+        }
+        const all = loadHmctsCasesDb();
+        const records = all
+          .filter((c) => c.isPublic && c.subjectUserId === resolved.userId)
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .map((c) => ({ id: c.id, title: c.title, createdAt: c.createdAt }));
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ userId: resolved.userId, username: resolved.username, records }));
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   if (env.ROBLOX_SCAN_COOKIE) process.env.ROBLOX_SCAN_COOKIE = env.ROBLOX_SCAN_COOKIE;
@@ -4173,6 +4662,10 @@ export default defineConfig(({ mode }) => {
       thamesWaterPlugin(sessions),
       hmrcPlugin(sessions),
       hmctsPlugin(sessions),
+      hmctsChatPlugin(sessions),
+      hmctsCasesPlugin(sessions),
+      hmctsLrrPlugin(sessions),
+      hmctsPublicRecordsPlugin(sessions),
     ],
   };
 });

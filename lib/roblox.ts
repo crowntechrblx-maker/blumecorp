@@ -264,6 +264,25 @@ export async function isHmctsEditor(userId: string): Promise<boolean> {
   return editorGroupIds.some((id) => memberSet.has(id));
 }
 
+const HMCTS_DEPARTMENTS: { label: string; needle: string }[] = [
+  { label: "Ministry of Justice", needle: "ministry of justice" },
+  { label: "Crown Prosecution Service", needle: "crown prosecution" },
+  { label: "Home Office", needle: "home office" },
+];
+
+// Returns every HMCTS department the user is a member of (can be more than one),
+// for tagging internal messages by name + department(s).
+export async function getHmctsUserDepartments(userId: string): Promise<string[]> {
+  const memberGroupIds = await getUserGroupIds(userId);
+  const memberSet = new Set(memberGroupIds);
+  const departments: string[] = [];
+  for (const dept of HMCTS_DEPARTMENTS) {
+    const groupIds = await getGroupIdsByNameMatch([dept.needle]);
+    if (groupIds.some((id) => memberSet.has(id))) departments.push(dept.label);
+  }
+  return departments;
+}
+
 export const ALL_KNOWN_GROUPS: { id: number; label: string }[] = [
   { id: ROYAL_FAMILY_GROUP_ID, label: "PS Royal Households of the United Kingdom" },
   ...BLUME_GROUP_IDS.map((id) => ({ id, label: `Blume-authorized group ${id}` })),
