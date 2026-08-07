@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getChargeName } from "./pncCharges";
+import { ImageLightbox, isImageFile } from "./ImageLightbox";
 
 type HmctsPanel = "search" | "chat" | "cases" | "lrr" | "publicRecords" | "personnel" | "prRequests";
 
@@ -1016,21 +1017,32 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
                             <button
                               key={i}
                               type="button"
-                              className="hmcts-case-photo-btn"
+                              className="image-link-thumb-btn"
                               onClick={() => setLightboxUrl(p.url)}
                             >
-                              <img src={p.url} alt={p.name} className="hmcts-case-photo" />
+                              <img src={p.url} alt={p.name} className="image-link-thumb" />
                             </button>
                           ))}
                         </div>
                       )}
                       {c.files.length > 0 && (
                         <div className="hmcts-case-file-list">
-                          {c.files.map((f, i) => (
-                            <a href={f.url} target="_blank" rel="noreferrer" key={i}>
-                              {f.name}
-                            </a>
-                          ))}
+                          {c.files.map((f, i) =>
+                            isImageFile(f.name) ? (
+                              <button
+                                key={i}
+                                type="button"
+                                className="image-link-thumb-btn"
+                                onClick={() => setLightboxUrl(f.url)}
+                              >
+                                <img src={f.url} alt={f.name} className="image-link-thumb" />
+                              </button>
+                            ) : (
+                              <a href={f.url} target="_blank" rel="noreferrer" key={i}>
+                                {f.name}
+                              </a>
+                            )
+                          )}
                         </div>
                       )}
                       <span className="hmcts-bgsearch-history-meta">
@@ -1101,14 +1113,7 @@ function CaseDocketPanel({ onBack }: { onBack: () => void }) {
           </div>
         )}
       </div>
-      {lightboxUrl && (
-        <div className="hmcts-lightbox-backdrop" onClick={() => setLightboxUrl(null)}>
-          <img src={lightboxUrl} alt="" className="hmcts-lightbox-image" onClick={(e) => e.stopPropagation()} />
-          <button className="hmcts-lightbox-close" onClick={() => setLightboxUrl(null)}>
-            ✕
-          </button>
-        </div>
-      )}
+      <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </div>
   );
 }
@@ -1489,6 +1494,7 @@ function PublicRecordsRequestsPanel({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/blume-content?type=hmctsPublicRecordsRequests")
@@ -1667,11 +1673,22 @@ function PublicRecordsRequestsPanel({
                     <p className="hmcts-foi-letter-sent">{r.reply}</p>
                     {r.replyAttachments && r.replyAttachments.length > 0 && (
                       <div className="hmcts-case-file-list">
-                        {r.replyAttachments.map((a, i) => (
-                          <a href={a.url} target="_blank" rel="noreferrer" key={i}>
-                            {a.name}
-                          </a>
-                        ))}
+                        {r.replyAttachments.map((a, i) =>
+                          isImageFile(a.name) ? (
+                            <button
+                              key={i}
+                              type="button"
+                              className="image-link-thumb-btn"
+                              onClick={() => setLightboxUrl(a.url)}
+                            >
+                              <img src={a.url} alt={a.name} className="image-link-thumb" />
+                            </button>
+                          ) : (
+                            <a href={a.url} target="_blank" rel="noreferrer" key={i}>
+                              {a.name}
+                            </a>
+                          )
+                        )}
                       </div>
                     )}
                     <p className="hmcts-bgsearch-muted">
@@ -1695,6 +1712,7 @@ function PublicRecordsRequestsPanel({
           ))}
         </div>
       </div>
+      <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </div>
   );
 }

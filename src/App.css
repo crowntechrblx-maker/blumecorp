@@ -2239,19 +2239,6 @@
   display: inline-flex;
   flex-shrink: 0;
 }
-.blume-hmrc-arrest-charges {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-.blume-hmrc-arrest-charge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  color: inherit;
-  cursor: pointer;
-}
 .blume-hmrc-risk-select {
   width: 76px;
   flex-shrink: 0;
@@ -5596,14 +5583,22 @@
   border-radius: 3px;
   border: 1px solid #e1dfdd;
 }
-.hmcts-case-photo-btn {
+.hmcts-case-photo-btn,
+.image-link-thumb-btn {
   background: none;
   border: none;
   padding: 0;
   cursor: pointer;
   line-height: 0;
 }
-.hmcts-lightbox-backdrop {
+.image-link-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid #e1dfdd;
+}
+.image-lightbox-backdrop {
   position: fixed;
   inset: 0;
   z-index: 30000;
@@ -5613,7 +5608,7 @@
   justify-content: center;
   cursor: pointer;
 }
-.hmcts-lightbox-image {
+.image-lightbox-image {
   max-width: 88vw;
   max-height: 88vh;
   object-fit: contain;
@@ -5621,7 +5616,7 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   cursor: default;
 }
-.hmcts-lightbox-close {
+.image-lightbox-close {
   position: fixed;
   top: 18px;
   right: 22px;
@@ -5634,7 +5629,7 @@
   font-size: 16px;
   cursor: pointer;
 }
-.hmcts-lightbox-close:hover {
+.image-lightbox-close:hover {
   background: rgba(255, 255, 255, 0.22);
 }
 .hmcts-case-file-list {

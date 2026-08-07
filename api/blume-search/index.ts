@@ -257,6 +257,202 @@ interface VerifilePunishment {
   createdAt: number;
 }
 
+// Duplicated locally (same convention as VerifilePunishment above) — this is the
+// live-scan hook for automatic HMRC arrest detection, triggered whenever anyone
+// runs a Person Search / Background Search on a person.
+interface HmrcCard {
+  id: string;
+  targetUserId: string;
+  targetUsername: string;
+  riskLevel: string;
+  riskNotes: string;
+  createdByUserId: string;
+  createdByUsername: string;
+  createdAt: number;
+}
+
+interface HmrcLogEntry {
+  id: string;
+  cardId: string;
+  targetUserId: string;
+  targetUsername: string;
+  type: string;
+  details: string;
+  charges?: string[];
+  sourceKey?: string;
+  loggedByUserId: string;
+  loggedByUsername: string;
+  createdAt: number;
+}
+
+const HMRC_AUTO_CHARGES = ["Tax Evasion", "Money Laundering"];
+const ARREST_CHARGE_KEYS = ["chargeIds", "charges", "chargeId", "charge"];
+const ARREST_OFFICER_KEYS = ["officer", "arrestedBy", "by", "arrestingOfficer"];
+const ARREST_DATE_KEYS = [
+  "date",
+  "timestamp",
+  "createdAt",
+  "time",
+  "arrestedAt",
+  "arrestDate",
+  "arrestTime",
+  "dateTime",
+  "occurredAt",
+];
+
+function getFieldCI(obj: any, names: string[]): any {
+  if (!obj || typeof obj !== "object") return undefined;
+  const keys = Object.keys(obj);
+  for (const name of names) {
+    const key = keys.find((k) => k.toLowerCase() === name.toLowerCase());
+    if (key !== undefined && obj[key] !== undefined && obj[key] !== null) return obj[key];
+  }
+  return undefined;
+}
+
+// PNC id 15 is "Tax Evasion" (see src/pncCharges.ts). "Money Laundering" isn't in the
+// PNC catalog yet, so it's matched as a free-text charge string for forward-compatibility.
+function matchHmrcAutoCharge(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "number") return raw === 15 ? "Tax Evasion" : null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return Number(s) === 15 ? "Tax Evasion" : null;
+  const lower = s.toLowerCase();
+  if (lower.includes("tax evasion")) return "Tax Evasion";
+  if (lower.includes("launder")) return "Money Laundering";
+  return null;
+}
+
+function extractHmrcAutoCharges(item: unknown): string[] {
+  const raw = getFieldCI(item, ARREST_CHARGE_KEYS);
+  const list = Array.isArray(raw) ? raw : raw !== undefined ? [raw] : [];
+  const matched = new Set<string>();
+  for (const c of list) {
+    const label = matchHmrcAutoCharge(c);
+    if (label) matched.add(label);
+  }
+  return Array.from(matched);
+}
+
+function extractArrestOfficer(item: unknown): string {
+  const v = getFieldCI(item, ARREST_OFFICER_KEYS);
+  return v ? String(v) : "Unknown Officer";
+}
+
+function extractArrestTimestamp(item: unknown): number {
+  const v = getFieldCI(item, ARREST_DATE_KEYS);
+  if (v === undefined) return Date.now();
+  if (typeof v === "number") return v > 1e12 ? v : v * 1000;
+  const parsed = Date.parse(String(v));
+  return isNaN(parsed) ? Date.now() : parsed;
+}
+
+function buildHmrcSourceKey(officer: string, charges: string[], timestamp: number): string {
+  return `${officer}|${[...charges].sort().join(",")}|${timestamp}`;
+}
+
+function hmrcAutoRiskLevel(chargeCount: number): string {
+  if (chargeCount > 6) return "High";
+  if (chargeCount > 3) return "Medium";
+  return "Low";
+}
+
+function formatHmrcTimestamp(ms: number): string {
+  const d = new Date(ms);
+  return `${d.toLocaleDateString("en-GB")}, ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+// Best-effort: scans live arrest history for Tax Evasion / Money Laundering and
+// auto-creates an HMRC card + log entry. Never throws — a failure here must not
+// break the primary Person Search response.
+async function detectAndLogHmrcArrests(userId: string, username: string, arrestHistory: unknown): Promise<void> {
+  try {
+    if (!Array.isArray(arrestHistory) || arrestHistory.length === 0) return;
+
+    const matches: { charges: string[]; officer: string; timestamp: number }[] = [];
+    for (const item of arrestHistory) {
+      const charges = extractHmrcAutoCharges(item);
+      if (charges.length === 0) continue;
+      matches.push({ charges, officer: extractArrestOfficer(item), timestamp: extractArrestTimestamp(item) });
+    }
+    if (matches.length === 0) return;
+
+    const [cardsRaw, logsRaw] = await Promise.all([
+      kv.get<HmrcCard[]>("hmrcCards"),
+      kv.get<HmrcLogEntry[]>("hmrcLogEntries"),
+    ]);
+    const cardList = cardsRaw || [];
+    const logList = logsRaw || [];
+
+    let card = cardList.find((c) => c.targetUserId === userId);
+    const existingKeys = new Set(
+      logList.filter((l) => card && l.cardId === card.id).map((l) => l.sourceKey).filter(Boolean)
+    );
+
+    let cardsChanged = false;
+    let logsChanged = false;
+
+    for (const m of matches) {
+      const sourceKey = buildHmrcSourceKey(m.officer, m.charges, m.timestamp);
+      if (existingKeys.has(sourceKey)) continue;
+
+      if (!card) {
+        card = {
+          id: crypto.randomBytes(12).toString("hex"),
+          targetUserId: userId,
+          targetUsername: username,
+          riskLevel: "Low",
+          riskNotes: "",
+          createdByUserId: "system",
+          createdByUsername: "System",
+          createdAt: Date.now(),
+        };
+        cardList.push(card);
+        cardsChanged = true;
+      }
+
+      const entry: HmrcLogEntry = {
+        id: crypto.randomBytes(12).toString("hex"),
+        cardId: card.id,
+        targetUserId: userId,
+        targetUsername: username,
+        type: "Arrest by HMRC",
+        details: `Arrested by ${m.officer} for ${m.charges.join(", ")} at ${formatHmrcTimestamp(m.timestamp)}`,
+        charges: m.charges,
+        sourceKey,
+        loggedByUserId: "system",
+        loggedByUsername: "System",
+        createdAt: Date.now(),
+      };
+      logList.push(entry);
+      existingKeys.add(sourceKey);
+      logsChanged = true;
+    }
+
+    if (logsChanged && card) {
+      const finalCard = card;
+      const chargeCount = logList
+        .filter((l) => l.cardId === finalCard.id && l.charges && l.charges.length > 0)
+        .reduce((sum, l) => sum + (l.charges || []).filter((c) => HMRC_AUTO_CHARGES.includes(c)).length, 0);
+      finalCard.riskLevel = hmrcAutoRiskLevel(chargeCount);
+      cardsChanged = true;
+    }
+
+    if (cardsChanged) await kv.set("hmrcCards", cardList);
+    if (logsChanged) await kv.set("hmrcLogEntries", logList);
+    if (logsChanged) {
+      await appendAuditLog({
+        type: "hmrc_auto_arrest_detected",
+        username: "System",
+        detail: `Auto-detected arrest(s) for ${username}`,
+      });
+    }
+  } catch {
+    // Swallow — auto-detection must never break Person Search.
+  }
+}
+
 interface PersonSearchResult {
   userId: string;
   username: string;
@@ -315,6 +511,10 @@ async function performPersonSearch(
     }
   } catch (err) {
     apiError = "Couldn't reach the records API: " + (err as Error).message;
+  }
+
+  if (arrestHistory) {
+    await detectAndLogHmrcArrests(userId, username, arrestHistory);
   }
 
   const vehicleTags = ((await kv.get<VehicleTag[]>("blumeVehicleTags")) || []).filter(

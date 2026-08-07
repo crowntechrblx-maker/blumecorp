@@ -2515,6 +2515,168 @@ async function recordGroupMembershipAndGetFormerGroups(
 
 // Shared by both Blume's Person Search and HMCTS's Background Searches — same
 // underlying lookup, just gated by different authorization checks per caller.
+// Dev mirror of the auto-detection helpers in api/blume-search/index.ts. Uses the
+// JSON-file HMRC store (loadHmrcCardsDb/saveHmrcCardsDb/loadHmrcLogsDb/saveHmrcLogsDb)
+// instead of kv, but the matching/dedupe logic is identical.
+const HMRC_AUTO_CHARGES_DEV = ["Tax Evasion", "Money Laundering"];
+const ARREST_CHARGE_KEYS_DEV = ["chargeIds", "charges", "chargeId", "charge"];
+const ARREST_OFFICER_KEYS_DEV = ["officer", "arrestedBy", "by", "arrestingOfficer"];
+const ARREST_DATE_KEYS_DEV = [
+  "date",
+  "timestamp",
+  "createdAt",
+  "time",
+  "arrestedAt",
+  "arrestDate",
+  "arrestTime",
+  "dateTime",
+  "occurredAt",
+];
+
+function getFieldCIDev(obj: any, names: string[]): any {
+  if (!obj || typeof obj !== "object") return undefined;
+  const keys = Object.keys(obj);
+  for (const name of names) {
+    const key = keys.find((k) => k.toLowerCase() === name.toLowerCase());
+    if (key !== undefined && obj[key] !== undefined && obj[key] !== null) return obj[key];
+  }
+  return undefined;
+}
+
+function matchHmrcAutoChargeDev(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "number") return raw === 15 ? "Tax Evasion" : null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return Number(s) === 15 ? "Tax Evasion" : null;
+  const lower = s.toLowerCase();
+  if (lower.includes("tax evasion")) return "Tax Evasion";
+  if (lower.includes("launder")) return "Money Laundering";
+  return null;
+}
+
+function extractHmrcAutoChargesDev(item: unknown): string[] {
+  const raw = getFieldCIDev(item, ARREST_CHARGE_KEYS_DEV);
+  const list = Array.isArray(raw) ? raw : raw !== undefined ? [raw] : [];
+  const matched = new Set<string>();
+  for (const c of list) {
+    const label = matchHmrcAutoChargeDev(c);
+    if (label) matched.add(label);
+  }
+  return Array.from(matched);
+}
+
+function extractArrestOfficerDev(item: unknown): string {
+  const v = getFieldCIDev(item, ARREST_OFFICER_KEYS_DEV);
+  return v ? String(v) : "Unknown Officer";
+}
+
+function extractArrestTimestampDev(item: unknown): number {
+  const v = getFieldCIDev(item, ARREST_DATE_KEYS_DEV);
+  if (v === undefined) return Date.now();
+  if (typeof v === "number") return v > 1e12 ? v : v * 1000;
+  const parsed = Date.parse(String(v));
+  return isNaN(parsed) ? Date.now() : parsed;
+}
+
+function buildHmrcSourceKeyDev(officer: string, charges: string[], timestamp: number): string {
+  return `${officer}|${[...charges].sort().join(",")}|${timestamp}`;
+}
+
+function hmrcAutoRiskLevelDev(chargeCount: number): string {
+  if (chargeCount > 6) return "High";
+  if (chargeCount > 3) return "Medium";
+  return "Low";
+}
+
+function formatHmrcTimestampDev(ms: number): string {
+  const d = new Date(ms);
+  return `${d.toLocaleDateString("en-GB")}, ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+async function detectAndLogHmrcArrestsDev(userId: string, username: string, arrestHistory: unknown): Promise<void> {
+  try {
+    if (!Array.isArray(arrestHistory) || arrestHistory.length === 0) return;
+
+    const matches: { charges: string[]; officer: string; timestamp: number }[] = [];
+    for (const item of arrestHistory) {
+      const charges = extractHmrcAutoChargesDev(item);
+      if (charges.length === 0) continue;
+      matches.push({ charges, officer: extractArrestOfficerDev(item), timestamp: extractArrestTimestampDev(item) });
+    }
+    if (matches.length === 0) return;
+
+    const cardList = loadHmrcCardsDb();
+    const logList = loadHmrcLogsDb();
+
+    let card = cardList.find((c) => c.targetUserId === userId);
+    const existingKeys = new Set(
+      logList.filter((l) => card && l.cardId === card.id).map((l) => l.sourceKey).filter(Boolean)
+    );
+
+    let cardsChanged = false;
+    let logsChanged = false;
+
+    for (const m of matches) {
+      const sourceKey = buildHmrcSourceKeyDev(m.officer, m.charges, m.timestamp);
+      if (existingKeys.has(sourceKey)) continue;
+
+      if (!card) {
+        card = {
+          id: crypto.randomBytes(12).toString("hex"),
+          targetUserId: userId,
+          targetUsername: username,
+          riskLevel: "Low",
+          riskNotes: "",
+          createdByUserId: "system",
+          createdByUsername: "System",
+          createdAt: Date.now(),
+        };
+        cardList.push(card);
+        cardsChanged = true;
+      }
+
+      const entry: HmrcLogEntry = {
+        id: crypto.randomBytes(12).toString("hex"),
+        cardId: card.id,
+        targetUserId: userId,
+        targetUsername: username,
+        type: "Arrest by HMRC",
+        details: `Arrested by ${m.officer} for ${m.charges.join(", ")} at ${formatHmrcTimestampDev(m.timestamp)}`,
+        charges: m.charges,
+        sourceKey,
+        loggedByUserId: "system",
+        loggedByUsername: "System",
+        createdAt: Date.now(),
+      };
+      logList.push(entry);
+      existingKeys.add(sourceKey);
+      logsChanged = true;
+    }
+
+    if (logsChanged && card) {
+      const finalCard = card;
+      const chargeCount = logList
+        .filter((l) => l.cardId === finalCard.id && l.charges && l.charges.length > 0)
+        .reduce((sum, l) => sum + (l.charges || []).filter((c) => HMRC_AUTO_CHARGES_DEV.includes(c)).length, 0);
+      finalCard.riskLevel = hmrcAutoRiskLevelDev(chargeCount);
+      cardsChanged = true;
+    }
+
+    if (cardsChanged) saveHmrcCardsDb(cardList);
+    if (logsChanged) saveHmrcLogsDb(logList);
+    if (logsChanged) {
+      appendAuditLog({
+        type: "hmrc_auto_arrest_detected",
+        username: "System",
+        detail: `Auto-detected arrest(s) for ${username}`,
+      });
+    }
+  } catch {
+    // Swallow — auto-detection must never break Person Search.
+  }
+}
+
 async function performPersonSearchDev(
   query: string,
   session: { userId: string; username: string }
@@ -2555,6 +2717,10 @@ async function performPersonSearchDev(
     }
   } catch (err) {
     apiError = "Couldn't reach the records API: " + (err as Error).message;
+  }
+
+  if (arrestHistory) {
+    await detectAndLogHmrcArrestsDev(userId, username, arrestHistory);
   }
 
   const vehicleTags = loadVehicleTagsDb().filter((v) => v.userId === userId);
@@ -3692,22 +3858,10 @@ interface HmrcLogEntry {
   type: string;
   details: string;
   charges?: string[];
+  sourceKey?: string;
   loggedByUserId: string;
   loggedByUsername: string;
   createdAt: number;
-}
-
-const HMRC_AUTO_CHARGES = ["Tax Evasion", "Money Laundering"];
-
-function hmrcAutoRiskLevel(chargeCount: number): string {
-  if (chargeCount > 6) return "High";
-  if (chargeCount > 3) return "Medium";
-  return "Low";
-}
-
-function formatHmrcTimestamp(ms: number): string {
-  const d = new Date(ms);
-  return `${d.toLocaleDateString("en-GB")}, ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 const HMRC_CARDS_DB = path.resolve(process.cwd(), "hmrc-cards-data.json");
@@ -3950,85 +4104,6 @@ function hmrcPlugin(sessions: Map<string, RobloxSession>): Plugin {
               });
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ ...entry, canDelete: true }));
-              return;
-            }
-
-            if (action === "quickArrest") {
-              const rawUsername = (body.username || "").toString().trim();
-              const selectedCharges: string[] = (Array.isArray(body.charges) ? body.charges : []).filter((c: string) =>
-                HMRC_AUTO_CHARGES.includes(c)
-              );
-              if (!rawUsername) {
-                res.statusCode = 400;
-                res.end("Missing username.");
-                return;
-              }
-              if (selectedCharges.length === 0) {
-                res.statusCode = 400;
-                res.end("Select at least one charge.");
-                return;
-              }
-              const resolved = await resolveRobloxUserId(rawUsername);
-              if (!resolved) {
-                res.statusCode = 400;
-                res.end(`Couldn't find a Roblox user matching "${rawUsername}".`);
-                return;
-              }
-
-              const cards = loadHmrcCardsDb();
-              let card = cards.find((c) => c.targetUserId === resolved.userId);
-              if (!card) {
-                card = {
-                  id: crypto.randomBytes(12).toString("hex"),
-                  targetUserId: resolved.userId,
-                  targetUsername: resolved.username,
-                  riskLevel: "Low",
-                  riskNotes: "",
-                  createdByUserId: session.userId,
-                  createdByUsername: session.username,
-                  createdAt: Date.now(),
-                };
-                cards.push(card);
-              }
-
-              const now = Date.now();
-              const entry: HmrcLogEntry = {
-                id: crypto.randomBytes(12).toString("hex"),
-                cardId: card.id,
-                targetUserId: card.targetUserId,
-                targetUsername: card.targetUsername,
-                type: "Arrest by HMRC",
-                details: `Arrested by ${session.username} for ${selectedCharges.join(", ")} at ${formatHmrcTimestamp(now)}`,
-                charges: selectedCharges,
-                loggedByUserId: session.userId,
-                loggedByUsername: session.username,
-                createdAt: now,
-              };
-              const logEntries = loadHmrcLogsDb();
-              logEntries.push(entry);
-              saveHmrcLogsDb(logEntries);
-
-              const chargeCount = logEntries
-                .filter((l) => l.cardId === card!.id)
-                .reduce((sum, l) => sum + (l.charges || []).filter((c) => HMRC_AUTO_CHARGES.includes(c)).length, 0);
-              card.riskLevel = hmrcAutoRiskLevel(chargeCount);
-              saveHmrcCardsDb(cards);
-
-              appendAuditLog({
-                type: "hmrc_quick_arrest_logged",
-                username: session.username,
-                detail: `Logged arrest for ${card.targetUsername}: ${selectedCharges.join(", ")}`,
-              });
-
-              const withAvatars = await Promise.all(
-                cards.map(async (c) => ({
-                  ...c,
-                  avatarUrl: await getRobloxAvatarUrl(c.targetUserId),
-                  canDelete: isAdmin || c.createdByUserId === session.userId,
-                }))
-              );
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ cards: withAvatars, cardId: card.id, entry: { ...entry, canDelete: true } }));
               return;
             }
 

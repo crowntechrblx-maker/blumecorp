@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "./Avatar";
 import { useFadingError } from "./useFadingError";
+import { ImageLightbox, isImageFile } from "./ImageLightbox";
 
 interface UserResult {
   username: string;
@@ -32,6 +33,7 @@ export function MessagesApp({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const { error, fading, setError } = useFadingError();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const rosterPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -178,11 +180,22 @@ export function MessagesApp({
                       <span className="bubble-text">{m.text}</span>
                       {m.attachments && m.attachments.length > 0 && (
                         <div className="bubble-attachments">
-                          {m.attachments.map((a, i) => (
-                            <a href={a.url} target="_blank" rel="noreferrer" key={i} className="bubble-attachment">
-                              📎 {a.name}
-                            </a>
-                          ))}
+                          {m.attachments.map((a, i) =>
+                            isImageFile(a.name) ? (
+                              <button
+                                key={i}
+                                type="button"
+                                className="image-link-thumb-btn"
+                                onClick={() => setLightboxUrl(a.url)}
+                              >
+                                <img src={a.url} alt={a.name} className="image-link-thumb" />
+                              </button>
+                            ) : (
+                              <a href={a.url} target="_blank" rel="noreferrer" key={i} className="bubble-attachment">
+                                📎 {a.name}
+                              </a>
+                            )
+                          )}
                         </div>
                       )}
                     </div>
@@ -215,6 +228,7 @@ export function MessagesApp({
           )}
         </div>
       </div>
+      <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </div>
   );
 }

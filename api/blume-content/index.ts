@@ -70,22 +70,10 @@ interface HmrcLogEntry {
   type: string;
   details: string;
   charges?: string[];
+  sourceKey?: string;
   loggedByUserId: string;
   loggedByUsername: string;
   createdAt: number;
-}
-
-const HMRC_AUTO_CHARGES = ["Tax Evasion", "Money Laundering"];
-
-function hmrcAutoRiskLevel(chargeCount: number): string {
-  if (chargeCount > 6) return "High";
-  if (chargeCount > 3) return "Medium";
-  return "Low";
-}
-
-function formatHmrcTimestamp(ms: number): string {
-  const d = new Date(ms);
-  return `${d.toLocaleDateString("en-GB")}, ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 interface BlumeBlogPost {
@@ -1141,7 +1129,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           targetUsername?: string;
           type?: string;
           details?: string;
-          charges?: string[];
         };
         const action = body.action || "";
 
@@ -1279,81 +1266,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             detail: `Logged ${logType} for ${targetUsername}`,
           });
           res.status(200).json({ ...entry, canDelete: true });
-          return;
-        }
-
-        if (action === "quickArrest") {
-          const rawUsername = (body.username || "").toString().trim();
-          const selectedCharges = (Array.isArray(body.charges) ? body.charges : []).filter((c) =>
-            HMRC_AUTO_CHARGES.includes(c)
-          );
-          if (!rawUsername) {
-            res.status(400).send("Missing username.");
-            return;
-          }
-          if (selectedCharges.length === 0) {
-            res.status(400).send("Select at least one charge.");
-            return;
-          }
-          const resolved = await resolveRobloxUserId(rawUsername);
-          if (!resolved) {
-            res.status(400).send(`Couldn't find a Roblox user matching "${rawUsername}".`);
-            return;
-          }
-
-          const cards = (await kv.get<HmrcCard[]>("hmrcCards")) || [];
-          let card = cards.find((c) => c.targetUserId === resolved.userId);
-          if (!card) {
-            card = {
-              id: crypto.randomBytes(12).toString("hex"),
-              targetUserId: resolved.userId,
-              targetUsername: resolved.username,
-              riskLevel: "Low",
-              riskNotes: "",
-              createdByUserId: session.userId,
-              createdByUsername: session.username,
-              createdAt: Date.now(),
-            };
-            cards.push(card);
-          }
-
-          const now = Date.now();
-          const entry: HmrcLogEntry = {
-            id: crypto.randomBytes(12).toString("hex"),
-            cardId: card.id,
-            targetUserId: card.targetUserId,
-            targetUsername: card.targetUsername,
-            type: "Arrest by HMRC",
-            details: `Arrested by ${session.username} for ${selectedCharges.join(", ")} at ${formatHmrcTimestamp(now)}`,
-            charges: selectedCharges,
-            loggedByUserId: session.userId,
-            loggedByUsername: session.username,
-            createdAt: now,
-          };
-          const logEntries = (await kv.get<HmrcLogEntry[]>("hmrcLogEntries")) || [];
-          logEntries.push(entry);
-          await kv.set("hmrcLogEntries", logEntries);
-
-          const chargeCount = logEntries
-            .filter((l) => l.cardId === card!.id)
-            .reduce((sum, l) => sum + (l.charges || []).filter((c) => HMRC_AUTO_CHARGES.includes(c)).length, 0);
-          card.riskLevel = hmrcAutoRiskLevel(chargeCount);
-          await kv.set("hmrcCards", cards);
-
-          await appendAuditLog({
-            type: "hmrc_quick_arrest_logged",
-            username: session.username,
-            detail: `Logged arrest for ${card.targetUsername}: ${selectedCharges.join(", ")}`,
-          });
-
-          const withAvatars = await Promise.all(
-            cards.map(async (c) => ({
-              ...c,
-              avatarUrl: await getRobloxAvatarUrl(c.targetUserId),
-              canDelete: isAdmin || c.createdByUserId === session.userId,
-            }))
-          );
-          res.status(200).json({ cards: withAvatars, cardId: card.id, entry: { ...entry, canDelete: true } });
           return;
         }
 
