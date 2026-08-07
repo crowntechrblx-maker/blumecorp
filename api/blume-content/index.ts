@@ -220,6 +220,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    if (req.method === "DELETE") {
+      if (!(await isPlatformAdmin(session.userId, session.username))) {
+        res.status(403).send("Only admins can delete messages.");
+        return;
+      }
+      const id = (req.query.id as string) || "";
+      const all = (await kv.get<HmctsMessage[]>("hmctsMessages")) || [];
+      const next = all.filter((m) => m.id !== id);
+      await kv.set("hmctsMessages", next);
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     res.status(405).send("Method not allowed");
     return;
   }
@@ -802,6 +815,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await kv.set("hmctsMessages", chatNext);
 
       res.status(200).json(entry);
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      if (!(await isHmctsEditor(session.userId))) {
+        res.status(403).send("Only Ministry of Justice, Crown Prosecution Service, and Home Office can remove requests.");
+        return;
+      }
+      const id = (req.query.id as string) || "";
+      const all = (await kv.get<HmctsPublicRecordsRequest[]>("hmctsPublicRecordsRequests")) || [];
+      const target = all.find((r) => r.id === id);
+      if (!target) {
+        res.status(404).send("Request not found.");
+        return;
+      }
+      for (const attachment of target.replyAttachments || []) {
+        try {
+          await del(attachment.url);
+        } catch {
+        }
+      }
+      const next = all.filter((r) => r.id !== id);
+      await kv.set("hmctsPublicRecordsRequests", next);
+      await appendAuditLog({
+        type: "hmcts_public_records_request_deleted",
+        username: session.username,
+        detail: `Removed Public Records request from ${target.requesterUsername} re. ${target.subjectUsername} (FOI${target.foiYear}/${target.foiNumber})`,
+      });
+      res.status(200).json({ ok: true });
       return;
     }
 

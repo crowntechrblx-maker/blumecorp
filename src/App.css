@@ -5708,6 +5708,7 @@
   background: #f3f2f1;
   color: #605e5c;
   font-size: 12.5px;
+  font-family: "Inter Tight", "Inter", -apple-system, sans-serif;
   white-space: pre-wrap;
   user-select: none;
 }
@@ -5717,7 +5718,7 @@
   resize: none;
   padding: 12px;
   font-size: 13px;
-  font-family: inherit;
+  font-family: "Inter Tight", "Inter", -apple-system, sans-serif;
   line-height: 1.5;
   min-height: 140px;
   overflow: hidden;
@@ -5725,11 +5726,37 @@
 .hmcts-foi-letter-sent {
   white-space: pre-wrap;
   font-size: 13px;
+  font-family: "Inter Tight", "Inter", -apple-system, sans-serif;
   line-height: 1.5;
   background: #faf9f8;
   border: 1px solid #e1dfdd;
   border-radius: 4px;
   padding: 12px;
+}
+.hmcts-chat-context-menu {
+  position: fixed;
+  z-index: 500;
+  background: #fff;
+  border: 1px solid #c8c6c4;
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+}
+.hmcts-chat-context-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 14px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #b91c1c;
+  cursor: pointer;
+  border-radius: 3px;
+  font-family: inherit;
+}
+.hmcts-chat-context-menu button:hover {
+  background: #fef2f2;
 }
 .hmcts-case-visibility {
   font-size: 10.5px;

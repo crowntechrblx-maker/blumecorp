@@ -597,6 +597,8 @@ function InternalMessagingPanel({
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   async function loadMessages() {
@@ -616,9 +618,36 @@ function InternalMessagingPanel({
   }, []);
 
   useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => setIsAdmin(!!data?.isAdmin))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [contextMenu]);
+
+  useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  async function handleDeleteMessage(id: string) {
+    setContextMenu(null);
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+    try {
+      await fetch(`/api/blume-content?type=hmctsChat&id=${id}`, { method: "DELETE" });
+    } catch {
+    }
+  }
 
   async function handleSend() {
     const t = text.trim();
@@ -655,7 +684,15 @@ function InternalMessagingPanel({
         <div className="hmcts-chat-messages" ref={listRef}>
           {messages.length === 0 && <p className="hmcts-bgsearch-muted">No messages yet.</p>}
           {messages.map((m) => (
-            <div className="hmcts-chat-message" key={m.id}>
+            <div
+              className="hmcts-chat-message"
+              key={m.id}
+              onContextMenu={(e) => {
+                if (!isAdmin) return;
+                e.preventDefault();
+                setContextMenu({ id: m.id, x: e.clientX, y: e.clientY });
+              }}
+            >
               <div className="hmcts-chat-message-head">
                 <span className="hmcts-chat-message-name">{m.fromUsername}</span>
                 {m.departments.map((d) => (
@@ -677,6 +714,15 @@ function InternalMessagingPanel({
             </div>
           ))}
         </div>
+        {contextMenu && (
+          <div
+            className="hmcts-chat-context-menu"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button onClick={() => handleDeleteMessage(contextMenu.id)}>Delete</button>
+          </div>
+        )}
         {error && <p className="hmcts-bgsearch-error">{error}</p>}
         <div className="hmcts-bgsearch-form">
           <input
@@ -1427,6 +1473,8 @@ function PublicRecordsRequestsPanel({
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [replyErrors, setReplyErrors] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/blume-content?type=hmctsPublicRecordsRequests")
@@ -1486,6 +1534,25 @@ function PublicRecordsRequestsPanel({
     }
   }
 
+  async function handleDelete(r: HmctsPublicRecordsRequest) {
+    setDeletingId(r.id);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/blume-content?type=hmctsPublicRecordsRequests&id=${r.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        setDeleteError(await res.text());
+        return;
+      }
+      setRequests((prev) => prev.filter((x) => x.id !== r.id));
+    } catch {
+      setDeleteError("Couldn't remove that request.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   function handleCopy(r: HmctsPublicRecordsRequest) {
     const text = `eJudiciary has replied to your Public Records request regarding ${r.subjectUsername} (Reference: ${foiReference(
       r
@@ -1504,6 +1571,7 @@ function PublicRecordsRequestsPanel({
         <h4 className="hmcts-bgsearch-title">FOI Requests</h4>
         {loading && <p className="hmcts-bgsearch-muted">Loading…</p>}
         {error && <p className="hmcts-bgsearch-error">{error}</p>}
+        {deleteError && <p className="hmcts-bgsearch-error">{deleteError}</p>}
         {!loading && !error && requests.length === 0 && <p className="hmcts-bgsearch-muted">No requests yet.</p>}
         <div className="hmcts-case-list">
           {requests.map((r) => (
@@ -1517,8 +1585,17 @@ function PublicRecordsRequestsPanel({
                   <strong>Re: {r.subjectUsername}</strong>
                   <span className="hmcts-bgsearch-muted"> · {foiReference(r)}</span>
                 </span>
-                <span className={`hmcts-case-visibility${r.status === "replied" ? " hmcts-case-visibility-public" : ""}`}>
-                  {r.status === "replied" ? "Replied" : "Pending"}
+                <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span className={`hmcts-case-visibility${r.status === "replied" ? " hmcts-case-visibility-public" : ""}`}>
+                    {r.status === "replied" ? "Replied" : "Pending"}
+                  </span>
+                  <button
+                    className="hmcts-case-delete-btn"
+                    disabled={deletingId === r.id}
+                    onClick={() => handleDelete(r)}
+                  >
+                    {deletingId === r.id ? "Removing…" : "Remove"}
+                  </button>
                 </span>
               </div>
               <div className="hmcts-case-card-body">
@@ -1529,15 +1606,6 @@ function PublicRecordsRequestsPanel({
                 <p className="hmcts-bgsearch-muted">
                   Requested by {r.requesterUsername} · {formatDateTimeNoSeconds(r.createdAt)}
                 </p>
-                {r.requesterGroups.length > 0 && (
-                  <div className="hmcts-bgsearch-chip-list">
-                    {r.requesterGroups.map((g) => (
-                      <span key={g.id} className="hmcts-bgsearch-chip">
-                        {g.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
 
                 <div className="hmcts-case-divider" />
 

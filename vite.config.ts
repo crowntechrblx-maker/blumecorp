@@ -4389,6 +4389,21 @@ function hmctsChatPlugin(sessions: Map<string, RobloxSession>): Plugin {
           return;
         }
 
+        if (req.method === "DELETE") {
+          if (!isPlatformAdmin(session.userId, session.username)) {
+            res.statusCode = 403;
+            res.end("Only admins can delete messages.");
+            return;
+          }
+          const id = url.searchParams.get("id") || "";
+          const all = loadHmctsMessagesDb();
+          const next2 = all.filter((m) => m.id !== id);
+          saveHmctsMessagesDb(next2);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
+
         res.statusCode = 405;
         res.end("Method not allowed");
       });
@@ -5006,6 +5021,36 @@ function hmctsPublicRecordsRequestsPlugin(sessions: Map<string, RobloxSession>):
 
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(entry));
+          return;
+        }
+
+        if (req.method === "DELETE") {
+          if (!(await isHmctsEditor(session.userId))) {
+            res.statusCode = 403;
+            res.end("Only Ministry of Justice, Crown Prosecution Service, and Home Office can remove requests.");
+            return;
+          }
+          const id = url.searchParams.get("id") || "";
+          const all = loadHmctsPrRequestsDb();
+          const target = all.find((r) => r.id === id);
+          if (!target) {
+            res.statusCode = 404;
+            res.end("Request not found.");
+            return;
+          }
+          for (const attachment of target.replyAttachments || []) {
+            const filename = attachment.url.split("/").pop();
+            if (filename) {
+              try {
+                fs.unlinkSync(path.join(HMCTS_FOI_DIR, filename));
+              } catch {
+              }
+            }
+          }
+          const next = all.filter((r) => r.id !== id);
+          saveHmctsPrRequestsDb(next);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
           return;
         }
 
