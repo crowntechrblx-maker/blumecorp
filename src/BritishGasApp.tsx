@@ -196,9 +196,7 @@ export function BritishGasApp() {
         )}
       </div>
 
-      <div
-        className={`britgas-body${tab === "incidents" || tab === "settings" ? " britgas-body-scroll" : ""}`}
-      >
+      <div className="britgas-body">
         {tab === "home" && (
           <div className="britgas-home">
             <div className="britgas-home-welcome">

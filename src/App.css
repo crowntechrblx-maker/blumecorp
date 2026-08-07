@@ -5725,7 +5725,7 @@
   padding: 10px 8px !important;
   font-size: 13px;
   font-weight: 600;
-  color: #1697ef;
+  color: #1697ef !important;
   cursor: pointer;
   text-align: center;
   margin-left: -1px;
@@ -5738,13 +5738,10 @@
 }
 .britgas-body {
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
   padding: 14px 20px;
   font-size: 14px;
   color: #1c1c1e;
-}
-.britgas-body-scroll {
-  overflow-y: auto;
 }
 .britgas-home {
   display: flex;
