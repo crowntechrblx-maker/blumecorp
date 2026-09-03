@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "node:crypto";
-import { kv } from "../../lib/kv.js";
+import { kv } from "../../../lib/kv.js";
 
 function b64url(buf: Buffer) {
   return buf

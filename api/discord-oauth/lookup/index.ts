@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getDiscordLink } from "../../lib/discord-links.js";
-
+import { getDiscordLink } from "../../../lib/discord-links.js";
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse

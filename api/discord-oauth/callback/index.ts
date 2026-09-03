@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { kv } from "../../lib/kv.js";
-import { saveDiscordLink } from "../../lib/discord-links.js";
+import { kv } from "../../../lib/kv.js";
+import { saveDiscordLink } from "../../../lib/discord-links.js";
 
 export default async function handler(
   req: VercelRequest,
