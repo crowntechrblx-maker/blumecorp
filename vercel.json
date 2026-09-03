@@ -8,9 +8,6 @@
   "functions": {
     "api/blume-content/index.ts": {
       "maxDuration": 30
-    },
-    "api/test/index.ts": {
-      "maxDuration": 10
     }
   }
 }
